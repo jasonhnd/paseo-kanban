@@ -13,7 +13,7 @@ function slots(node: unknown): string[] {
   return node && typeof node === "object" ? Object.values(node).flatMap(slots) : [];
 }
 export const demoProfiles: DispatchProfile[] = [...new Set(slots(base.roles))].map(slot => ({
-  name: `Demo ${slot}`, dispatchId: slot, role: slot.split(".")[0], provider: slot.includes("gpt") ? "codex" : "demo", model: slot.includes("gpt") ? "gpt-6.1-sol" : `demo-${slot}`,
+  name: `Demo ${slot}`, dispatchId: slot, role: slot.split(".")[0], provider: slot.includes("gpt") ? "codex" : "demo", model: slot === "reviewer.gpt-6-sol" ? "gpt-6-sol" : slot.includes("gpt") ? "gpt-6.1-sol" : `demo-${slot}`,
 }));
 export const demoThinking = Object.fromEntries(demoProfiles.map(profile => [profile.name, ["low", "medium", "high", "xhigh", "ultra"]]));
 export const migrationOverrides = {
@@ -33,7 +33,8 @@ test("no overrides reproduce the shipped defaults and do not mutate the input", 
   const { reviewer, ...otherActual } = build().roles;
   assert.deepEqual(otherActual, otherDefaults);
   assert.deepEqual(build({}), build());
-  assert.deepEqual((reviewer as ReviewerModelMatrix).byExecutorModel["gpt-6.1-sol"].L4.map(row => row.profile), ["Demo reviewer.fable", "Demo reviewer.grok"]);
+  assert.deepEqual((reviewer as ReviewerModelMatrix).byExecutorModel["gpt-6.1-sol"].L4.map(row => row.profile), ["Demo reviewer.fable", "Demo reviewer.grok", "Demo reviewer.gpt-6-sol"]);
+  assert.equal((reviewer as ReviewerModelMatrix).byExecutorModel["gpt-6-sol"].L4.some(row => row.profile === "Demo reviewer.gpt-6-sol"), false);
   assert.equal(base.generatedAt, undefined);
   const executor = base.roles.executor as Record<string, Array<{ effort: string }>>;
   assert.deepEqual([executor.L1[0].effort, executor.L2[0].effort, executor.L3[1].effort], ["low", "medium", "high"]);
@@ -159,9 +160,19 @@ test("previous main fixture and migrated defaults produce identical normalized m
   // Snapshot of the elevated defaults in main at 416de178, kept exclusively for migration verification.
   const previous: DispatchMatrix = JSON.parse(readFileSync(new URL("fixtures/previous-main-defaults.json", import.meta.url), "utf8"));
   const expected = applyDispatchMatrix(previous, options);
+  const actual = build(migrationOverrides);
+  const dropNew = (value: unknown): unknown => Array.isArray(value)
+    ? value.filter(row => !(row && typeof row === "object" && (row as { profile?: string }).profile === "Demo reviewer.gpt-6-sol")).map(dropNew)
+    : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([key, row]) => [key, dropNew(row)])) : value;
   const normalize = (value: unknown): unknown => Array.isArray(value) ? value.map(normalize)
     : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== "generatedAt").sort(([a], [b]) => a.localeCompare(b)).map(([key, row]) => [key, normalize(row)])) : value;
-  assert.deepEqual(normalize(build(migrationOverrides)), normalize(expected));
+  assert.deepEqual(normalize(dropNew(actual)), normalize(dropNew(expected)));
+  const reviewer = actual.roles.reviewer as ReviewerModelMatrix;
+  for (const [model, tiers] of Object.entries(reviewer.byExecutorModel)) for (const tier of ["L1", "L2", "L3", "L4"]) {
+    const row = tiers[tier]?.find(entry => entry.profile === "Demo reviewer.gpt-6-sol");
+    if (model === "gpt-6-sol") assert.equal(row, undefined);
+    else assert.equal(row?.effort, "xhigh");
+  }
 });
 
 test("explicit reviewer order survives pool priority without bypassing quota pauses or model boundaries", () => {

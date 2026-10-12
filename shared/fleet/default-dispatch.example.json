@@ -85,6 +85,10 @@
         {
           "profile": "reviewer.grok",
           "effort": "low"
+        },
+        {
+          "profile": "reviewer.gpt-6-sol",
+          "effort": "xhigh"
         }
       ],
       "L2": [
@@ -99,6 +103,10 @@
         {
           "profile": "reviewer.grok",
           "effort": "medium"
+        },
+        {
+          "profile": "reviewer.gpt-6-sol",
+          "effort": "xhigh"
         }
       ],
       "L3": [
@@ -113,6 +121,10 @@
         {
           "profile": "reviewer.grok",
           "effort": "high"
+        },
+        {
+          "profile": "reviewer.gpt-6-sol",
+          "effort": "xhigh"
         }
       ],
       "L4": [
@@ -126,6 +138,10 @@
         },
         {
           "profile": "reviewer.grok",
+          "effort": "xhigh"
+        },
+        {
+          "profile": "reviewer.gpt-6-sol",
           "effort": "xhigh"
         }
       ]

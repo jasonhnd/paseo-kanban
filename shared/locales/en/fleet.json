@@ -660,6 +660,7 @@
   "dispatch.slot.readerGrok": "Reader · Grok (SuperGrok)",
   "dispatch.slot.reviewerFable": "Reviewer · Fable (high risk)",
   "dispatch.slot.reviewerGpt": "Reviewer · GPT-6.1-Sol",
+  "dispatch.slot.reviewerGpt6Sol": "Reviewer · GPT-6-Sol",
   "dispatch.slot.reviewerGrok": "Reviewer · Grok (SuperGrok)",
   "dispatch.roleLine": "{label}: {items}",
   "dispatch.roleLineEmpty": "{label}: no profiles",

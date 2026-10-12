@@ -660,6 +660,7 @@
   "dispatch.slot.readerGrok": "通读 · Grok（SuperGrok）",
   "dispatch.slot.reviewerFable": "审查 · Fable（高风险）",
   "dispatch.slot.reviewerGpt": "审查 · GPT-6.1-Sol",
+  "dispatch.slot.reviewerGpt6Sol": "审查 · GPT-6-Sol",
   "dispatch.slot.reviewerGrok": "审查 · Grok（SuperGrok）",
   "dispatch.roleLine": "{label}：{items}",
   "dispatch.roleLineEmpty": "{label}：没有档案",

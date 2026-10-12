@@ -4,6 +4,7 @@
 // has no ASCII marker (Sonnet vs Opus).
 import type { DispatchProfile } from "./dispatch";
 import { t, type MessageKey } from "./i18n";
+import { actualModel } from "./review-model";
 
 type Slot = {
   label: MessageKey;
@@ -48,6 +49,8 @@ export const PROFILE_SLOTS: Readonly<Record<string, Slot>> = {
   "executor.opus": { label: "dispatch.slot.executorOpus", match: (profile) => serves(profile, "executor") && claudeMarker(profile) === "opus" },
   reviewer: { label: "dispatch.role.reviewer", match: primary("reviewer") },
   "reviewer.gpt-6.1-sol": { label: "dispatch.slot.reviewerGpt", match: (profile) => serves(profile, "reviewer") && /gpt-6\.1/i.test(blob(profile)) },
+  // Exact model equality. A gpt-6 prefix would also select gpt-6.1-sol.
+  "reviewer.gpt-6-sol": { label: "dispatch.slot.reviewerGpt6Sol", match: (profile) => serves(profile, "reviewer") && profile.provider === "codex" && actualModel(profile.model) === "gpt-6-sol" },
   "reviewer.fable": { label: "dispatch.slot.reviewerFable", match: (profile) => serves(profile, "reviewer") && /fable/i.test(blob(profile)) },
   "reviewer.grok": { label: "dispatch.slot.reviewerGrok", match: (profile) => serves(profile, "reviewer") && isSuperGrok(profile) },
   reader: { label: "dispatch.role.reader", match: primary("reader") },

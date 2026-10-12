@@ -17,7 +17,7 @@
 
 角色和供应商、模型分开配置。Paseo 档案使用 role、family；候选还使用 candidateFor。配置明确、非空的实际 model；供应商和 family 元数据不能证明独立审查。Fleet 目前只生成角色预览，不自动写档案；手动配置时保留已有项。
 
-审查比较 trim/lower 后的非空实际 model。同 family 不同 model 允许，同 model 跨 provider/effort/mode 拒绝，缺证据时等待。高风险工作仍须合格的独立审查和 leader 验收。
+审查比较 trim/lower 后的非空实际 model。同 family 不同 model 允许，同 model 跨 provider/effort/mode 拒绝，缺证据时等待。高风险工作仍须合格的独立审查和 leader 验收。默认审查矩阵另有独立 Codex 槽 `reviewer.gpt-6-sol`（模型 `gpt-6-sol`，L1 到 L4 均为 xhigh），只匹配这个精确模型，不占用 GPT-6.1 槽。
 
 L1：清楚的小改；L2：集中常规改动；L3：跨文件或调查；L4：资金、权限、安全、迁移、对外承诺、发布。难度选择已配置的模型与思考选项，不赋予操作授权，也不保证已配高风险审查者。
 

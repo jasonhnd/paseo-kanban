@@ -15,7 +15,7 @@ This workflow is configurable. Repository instructions and the user's authorized
 
 A role is separate from its provider and model. Configure `role` and `family` on Paseo profiles; candidates also identify `candidateFor`. Configure an explicit nonempty actual model; provider and family metadata do not establish independent review. Fleet's role setup currently produces a preview for manual configuration; it does not apply profiles. Preserve existing profiles when editing the list.
 
-Review requires two distinct, nonempty actual models after trim/lower normalization. Models in one family may review each other; one model across providers or settings may not. Missing evidence holds review. High-risk work still requires a qualified independent reviewer and lead acceptance.
+Review requires two distinct, nonempty actual models after trim/lower normalization. Models in one family may review each other; one model across providers or settings may not. Missing evidence holds review. High-risk work still requires a qualified independent reviewer and lead acceptance. The default reviewer matrix lists an independent Codex `gpt-6-sol` slot at `xhigh` on L1 through L4. That slot matches model `gpt-6-sol` exactly and does not use the GPT-6.1 marker.
 
 | Tier | Scope |
 |---|---|
