@@ -4,7 +4,7 @@
 
 [English](../../README.md)
 
-> **实验性 Git 源码。** 公开源码位于 `integration/single-plugin-reviewed`。本文不宣布版本化发布、npm 发布或官方目录收录。干净宿主安装、真实 app/phone 和真实 provider 首卡闭环仍需独立证据。不承诺稳定性或响应时间。
+> **实验性 Git 源码。** 公开源码位于 `integration/single-plugin-reviewed`。本文不宣布版本化发布、npm 发布或官方目录收录。macOS 隔离实测覆盖本地 Git 安装／恢复及 Microsoft Edge 中的官方 0.11.2 Web app；最终公开 commit 的 GitHub 重放、物理手机、原生 app 和已认证 provider 首卡仍未验证。不承诺稳定性或响应时间。
 
 唯一插件 id 为 `paseo-kanban`，只有一个标准侧栏入口。看板与 Fleet 共用 `board` 画面、`/plugin/paseo-kanban/board` 深链与 workspace 项目筛选。包元数据为 `@jasonhnd/paseo-kanban`、版本 `0.1.0`；元数据不代表 npm 包或 Git tag 已发布。
 
@@ -13,7 +13,7 @@
 - Paseo **daemon 和 app** 均在 `>=0.11.0 <0.12.0`，全局插件和本插件开关均启用。本批命令／编译器基线为 **0.11.2**；声明范围不代表每个补丁和客户端都已验证。
 - Node **>=22.13.0** 且 `node:sqlite` 可用；Git、npm 位于 **daemon 宿主的 PATH**。包括 CLI 指向远端时，下载和准备都在该宿主执行。
 - 用户自行安装、登录的本地 provider。自动执行／审查流程要求**两个已确认、非空、不同的实际 model**。发现 provider 不证明登录和额度可用。
-- macOS 有本机源码／CLI／编译证据；Linux、WSL2 仍需分别验证真实流程。首发不支持原生 Windows。见[兼容性](COMPATIBILITY.md)。
+- macOS arm64、Node 24.21.0/npm 12.1.0 有隔离本地 Git、CLI／编译和真实 0.11.2 Web app 证据，不认证其他版本或 provider 闭环。Linux、WSL2 仍需分别验证真实流程。首发不支持原生 Windows。见[兼容性](COMPATIBILITY.md)。
 
 Paseo 插件是**受信任、无沙箱的代码**。server 和准备命令可以使用 daemon 用户的文件、进程、凭证和网络；client 运行在 app 内。本插件持久保存看板／Fleet 状态、操作配置的 workspace 和 agent，并可运行 Git、Node 与配置的 provider 命令。启用的额度适配器可能访问服务或调用本地工具。启用前阅读[访问及数据边界](DATA.md)。
 
@@ -71,7 +71,7 @@ paseo plugin enable paseo-kanban --json
 paseo plugin remove paseo-kanban --json
 ```
 
-停用会停止本插件；启用仍需全局开关。卸载会删除托管 Git checkout，并可能移除宿主插件设置；directory 源码保留。外置数据根独立，卸载不等于清空数据。重装保留同一 id／home／root，并明确恢复设置。**代码回退不恢复数据**；恢复一致备份是另一操作，会丢失备份后的写入。托管更新失败保留旧安装，仍须核 revision／状态；`plugin reload` 失败不会自动恢复旧 bundle。
+停用会停止本插件；启用仍需全局开关。卸载会删除托管 Git checkout，并可能移除宿主插件设置；directory 源码保留。外置数据根独立，卸载不等于清空数据。0.11.2 新装会把单插件 enabled 设为 true，即使刚移除的来源为 disabled；全局开关已开时立即启动。切换前先防止派活，之后明确恢复所需 enabled 状态。重装保留同一 id／home／root，并明确恢复设置。**代码回退不恢复数据**；恢复一致备份是另一操作，会丢失备份后的写入。0.11.2 隔离实测的准备、语法编译、activation 失败保留旧托管 revision／path 与可用 RPC；每次失败仍须核对。`plugin reload` 失败保持 failed，须修复／重载，不自动恢复旧 bundle。
 
 ## 资料
 

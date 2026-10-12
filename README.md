@@ -4,7 +4,7 @@ A [Paseo](https://github.com/getpaseo/paseo) plugin that combines a cross-projec
 
 [Simplified Chinese](docs/zh-CN/README.md)
 
-> **Experimental Git source.** The public source is on `integration/single-plugin-reviewed`. A versioned release, npm publication and official registry listing are not declared here. Clean-host installation, real app/phone behavior and a real provider first-card cycle still need independent evidence. No stability or response-time commitment is made.
+> **Experimental Git source.** The public source is on `integration/single-plugin-reviewed`. A versioned release, npm publication and official registry listing are not declared here. Isolated macOS tests cover local Git installation/recovery and the official 0.11.2 web app in Microsoft Edge. GitHub replay of the final published commit, physical phones, the native app and an authenticated provider first-card cycle remain unverified. No stability or response-time commitment is made.
 
 There is one plugin id, `paseo-kanban`, and one standard sidebar entry. The board and Fleet share the `board` screen, `/plugin/paseo-kanban/board` deep link and workspace project filtering. The package metadata is `@jasonhnd/paseo-kanban` version `0.1.0`; metadata alone is not a published npm package or Git tag.
 
@@ -13,7 +13,7 @@ There is one plugin id, `paseo-kanban`, and one standard sidebar entry. The boar
 - Paseo **daemon and app** in `>=0.11.0 <0.12.0`, with global plugins and this plugin enabled. **0.11.2** is the command/compiler baseline for this work; the declared range does not certify every patch or client.
 - Node **>=22.13.0** with working `node:sqlite`, plus Git and npm on the **daemon host's PATH**. Source acquisition and preparation run there, including when the CLI targets a remote host.
 - User-installed, user-authenticated local providers. Automatic executor/reviewer flow needs **two confirmed, nonempty, different actual models**. Discovery is not proof of login or usable quota.
-- macOS has local source/CLI/compiler evidence. Linux and WSL2 still need separate real workflow validation; native Windows is not supported for the initial release. See [compatibility](docs/COMPATIBILITY.md).
+- macOS arm64 has isolated local Git, CLI/compiler and actual 0.11.2 web-app evidence with Node 24.21.0/npm 12.1.0. This does not certify other versions or a provider cycle. Linux and WSL2 still need separate real workflow validation; native Windows is not supported for the initial release. See [compatibility](docs/COMPATIBILITY.md).
 
 Paseo plugins are **trusted, unsandboxed code**. Server and preparation code can use the daemon user's files, processes, credentials and network; client code runs in the app. This plugin persists board/Fleet state, operates configured workspaces and agents, and can run Git, Node and configured provider commands. Enabled usage adapters may contact services or invoke local tools. Read [access and data boundaries](docs/DATA.md) before enabling it.
 
@@ -71,7 +71,7 @@ paseo plugin enable paseo-kanban --json
 paseo plugin remove paseo-kanban --json
 ```
 
-Disabling stops this plugin; enabling also needs the global switch. Removal deletes a managed Git checkout and may remove host plugin settings, while a directory source checkout is kept. The external data root is separate; removal is not a data reset. Reinstall with the same id/home/root and restore settings deliberately. **Code rollback does not restore data**; restoring a consistent backup is a separate operation that can lose writes made after that backup. A failed managed update retains the prior installation; verify its revision/status. A failed `plugin reload` does not automatically restore the previous bundle.
+Disabling stops this plugin; enabling also needs the global switch. Removal deletes a managed Git checkout and may remove host plugin settings, while a directory source checkout is kept. The external data root is separate; removal is not a data reset. In 0.11.2 a new installation sets its individual enabled state to true, even after removing a disabled source; with the global switch on it starts immediately. Prevent scheduling before a source switch, then restore the intended enabled state explicitly. Reinstall with the same id/home/root and restore settings deliberately. **Code rollback does not restore data**; restoring a consistent backup is a separate operation that can lose writes made after that backup. Isolated 0.11.2 prepare, syntax-compile and activation failures retained the previous managed revision/path and working RPC; verify these after any failure. A failed `plugin reload` stays failed until repaired/reloaded and does not automatically restore the previous bundle.
 
 ## Documentation
 

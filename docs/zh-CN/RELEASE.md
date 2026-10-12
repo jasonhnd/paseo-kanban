@@ -1,6 +1,6 @@
 # Git 发布与恢复清单
 
-本批**只通过 Git 分发**。公开仓库为 `https://github.com/jasonhnd/paseo-kanban`，分支 `integration/single-plugin-reviewed`。包版本 `0.1.0` 是实验元数据，不证明 npm、tag 或官方目录已发布。本文列待做检查，不宣称发布、生产切换或外部提交完成，也不授权这些操作。
+本批**只通过 Git 分发**。公开仓库为 `https://github.com/jasonhnd/paseo-kanban`，分支 `integration/single-plugin-reviewed`。包版本 `0.1.0` 是实验元数据，不证明 npm、tag 或官方目录已发布。每个候选须重跑本清单；下表记录本机已测范围及外部待做项，不宣称发布、生产切换或外部提交完成，也不授权这些操作。
 
 ## 版本及证据规则
 
@@ -42,28 +42,30 @@ Git 分支可变，是否有 tag 都要保存完整审过的公开 commit。该�
 
 ## 命令重放清单
 
-语法按公开 **Paseo CLI 0.11.2 help 和固定文档**核对，未把安装命令运行于真实产品。隔离验证及最终整合主责须填精确候选／宿主、命令、退出码、前后结果；发布主责在最终 ref 公开后从 GitHub 再重放适用项。日志私密，摘要匿名。
+语法按公开 **Paseo CLI 0.11.2 help 和固定文档**核对，再于 macOS arm64、Node 24.21.0/npm 12.1.0 的真实隔离本地 Git 安装及官方 0.11.2 Web app 重放。隔离验证及最终整合主责须填精确候选／宿主、命令、退出码、前后结果；发布主责在最终 ref 公开后从 GitHub 再重放适用项。日志私密，摘要匿名。
 
 child env 使用新测试 home，每条连接命令明确 CLI endpoint，例如 `paseo --host "$PASEO_TEST_HOST" plugin ...`，endpoint 为 `tcp://host:port`。本地 daemon 启动用 `--home "$PASEO_TEST_HOME"`；**不能同时传 --home 与 --host**，0.11.2 target guard 会拒绝。插件／SDK 的 `PASEO_URL` 另用带 `/ws` 的 WebSocket URL，不等于 CLI --host。白名单 env，不继承 agent 身份／token，relay/provider 禁用，可选适配器明确 false；真 provider 只用用户自己建立的隔离登录，不拷生产认证。
 
 | 重放项 | 要求与本文当前状态 |
 |---|---|
-| `paseo --version`、顶层/plugin/install/update help | 留版本与参数；仅 help 核对，无 daemon 验证。 |
-| `install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed --json` | 真远端 revision/path、完成准备的产品；待隔离／发布后重放。 |
-| 最终公开 SHA 安装；先本地 `file://` 精确 SHA | 精确内容、锁准备、八个 bundle、fresh cache/production 环境 CLI；待做。 |
-| `ls paseo-kanban --json`、`logs paseo-kanban --json` | 来源/revision/path/enabled/错误、脱敏输出；待真实安装检查。 |
-| 重复同 id／不存在 ref | 拒绝且旧路径／revision/enabled/data 不变；待做。 |
-| `update paseo-kanban --check --ref "$REVIEWED_COMMIT" --json` | 只预览，revision/path/state 不变；待做。 |
-| `update paseo-kanban --ref "$REVIEWED_COMMIT" --json` | 精确新版、CLI/RPC/UI 工作、根不变；待做。 |
-| `--ref "$PREVIOUS_COMMIT"` 预览／降级／再升级 | 只改代码，数据 sentinel 保留；待做。 |
-| 本地 bad prepare/compile/activation refs | 拒绝更新，旧安装／路径／enabled/data 和功能保留；待做。 |
-| `disable`／`enable`／`remove`／同 id 重装 | 生命周期、设置、外置根核对；待做。 |
-| 开发 directory install/edit/typecheck/reload | directory update 跳过／拒绝；reload 失败不自动回退；待做。 |
-| directory 转 Git 及反向 | 默认／显式根、settings/enabled、CLI/exports、scheduler 连续性；待做。 |
-| 匿名一致备份与数据恢复 | 与代码降级分开，证明后写入与恢复后果；待做。 |
-| 已安装 `paseo-kanban.mjs --help`／`list --json`、`roles.mjs ls`、doctor | Node 独立命令、当前路径、同根、无生产访问；待真实安装重放。 |
-| 真 desktop/compact/phone | 真 host/app 版本、匿名截图、导航/RPC/错误/清理；各项独立待做。 |
-| 真 provider 首卡 | commit -> 交活 -> 异 model 审查 -> leader 验收 -> 完成／清理；待做。 |
+| `paseo --version`、顶层/plugin/install/update help | 已记录 0.11.2 CLI 与真实隔离 daemon，help 已核。 |
+| `install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed --json` | 发布主责须重放最终公开 GitHub revision/path/准备；本地 file:// 证据不算此项通过。 |
+| 最终公开 SHA 安装；先本地 `file://` 精确 SHA | fresh cache、NODE_ENV=production 的隔离完整 SHA Git 准备与八 bundle 已测；审过 SHA 公开后再从 GitHub 重放。 |
+| `ls paseo-kanban --json`、`logs paseo-kanban --json` | 本机已核真实安装来源/revision/path/enabled/加载状态及脱敏日志。 |
+| 重复同 id／不存在 ref | 本地拒绝后旧 path/revision/enabled/data 及 RPC 保留。 |
+| `update paseo-kanban --check --ref "$REVIEWED_COMMIT" --json` | 本地预览未改 revision/path/state。 |
+| `update paseo-kanban --ref "$REVIEWED_COMMIT" --json` | 已核本地精确新版、已安装 CLI/RPC/UI 及稳定数据根。 |
+| `--ref "$PREVIOUS_COMMIT"` 预览／降级／再升级 | 本地降级／再升级保留数据；代码降级不撤回后写入。 |
+| 本地 bad prepare/compile/activation refs | 真实准备失败、语法编译失败和 activation 异常后旧 revision/path/enabled/running 与 RPC 保留；仅类型错误不算 transpiler 失败用例。 |
+| `disable`／`enable`／`remove`／同 id 重装 | 本地生命周期／外置根已核；新装 enabled=true，旧 disabled 须明确恢复。 |
+| 开发 directory install/edit/typecheck/reload | directory 明确 ref 更新报 `Plugin is a local directory: paseo-kanban`；独立坏 directory reload 保持 failed，修复／重载后恢复，不自动回退。 |
+| directory 转 Git 及反向 | 默认／显式匿名根、设置／语言、CLI/exports、enabled 恢复已核；真实 provider/scheduler 连续性未验证。 |
+| 匿名一致备份与数据恢复 | 停写且 SQLite checkpoint busy=0；代码降级保留后写入，另行恢复兼容备份才撤回。未执行生产恢复。 |
+| 已安装 `paseo-kanban.mjs --help`／`list --json`、`roles.mjs ls`、doctor | 已核 Node 命令与同根；无 profiles/providers 时 doctor red／exit 2 为预期，不表示认证设置成功。 |
+| 真 desktop/compact/phone | 本机 Edge 中官方 0.11.2 Web app 的桌面／compact 已测，compact 关闭侧栏后核正文／操作；物理手机、原生 Electron 未验证。 |
+| 真 provider 首卡 | 用户自建隔离登录及真实执行／审查／leader 闭环仍未验证；匿名连续性卡、无 agent workspace 不替代。 |
+
+本机证据区分成功 RPC、预期 stale-save conflict 与非预期错误；只有响应数不能称零 RPC 错误。整套单命令 lab bootstrap 仅做 syntax 检查，组件命令及最终候选关键重放分别真实执行。发布记录保留受测 SHA/tree、安装 revision、版本化日志和原图，每个最终候选重跑所需门。生产切换、GitHub 发布／重放与 registry 提交仍为独立操作。
 
 `REVIEWED_COMMIT`／`PREVIOUS_COMMIT` 取发布记录完整公开 SHA；未公开候选用本地 `file://`，不虚构远端。分支可能在预览／应用间前进；受控发布用预览精确 SHA。坏失败测试 ref 绝不 push。
 
@@ -88,7 +90,7 @@ Git 代码回退在 `update --check --ref`／`update --ref` 指已验证旧公�
 **仅准备，未执行生产迁移。** 使用侧操作者需要实际来源／运行方式切换授权、最终审过的远端 SHA 和已通过的隔离转换／恢复证据。本文不授权 agent 读生产配置、数据库或凭证。
 
 1. 确认目标 host、同 id `paseo-kanban`、旧 directory 路径／source/enabled、实际统一根；保持 `PASEO_HOME` 和 `KANBAN_DATA_DIR`。另存宿主设置／语言／enabled、一致私密根备份，保留旧源码原样。转换不顺便导入旧 Fleet。
-2. 停派活、定时 helper 和全部写者。先演练安装期间持续有效的暂停机制：新装可能立即 enabled，恢复设置前循环已启动。无法控制时不做生产转换；中断时间取隔离演练，本文没有实测时长。
+2. 停派活、定时 helper 和全部写者。先演练安装期间持续有效的暂停机制：0.11.2 新装设 enabled=true，即使刚移除的来源为 disabled；全局开关已开时立即启动。无法控制时不做生产转换；一次 warmed-cache 隔离 directory 转 Git 演练以 100 ms 采样测到成功 board RPC 之间 19.67 秒中断，仅供规划参考，不保证生产时长或可用率；目标环境另测。
 3. 同一 host 先 disable/remove directory；源目录保留，但宿主设置可能删除。directory 不能普通 update 转 Git，同 id install 须先 remove。
 
    ```sh

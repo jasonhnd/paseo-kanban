@@ -14,16 +14,16 @@ The manifest declares Paseo **daemon and app** `>=0.11.0 <0.12.0`. A compatible 
 
 | Platform or check | Current evidence boundary |
 |---|---|
-| macOS | Local source/CLI/compiler evidence exists in import/toolchain documents. That is not full clean-host app/first-card certification. |
+| macOS | Isolated arm64, Node 24.21.0/npm 12.1.0: local Git preparation, CLI/compiler, lifecycle/failure recovery and official 0.11.2 web app in Edge. This does not certify all macOS/tool versions or an authenticated first card. |
 | Linux | Initial target; a complete native workflow has not been certified here. Keychain/screen features are unavailable. |
 | WSL2 | Requires its own Linux-environment record. |
 | Native Windows | Not initially supported; Node launchers alone do not validate Git/worktree/shell workflows. |
-| Desktop and compact viewport | Source and anonymous mounting checks are distinct from a real installed app/daemon check. |
+| Desktop and compact viewport | Actual official 0.11.2 web app/daemon in local Microsoft Edge: sidebar, Board/Fleet, language/theme, RPC and agent-free workspace filtering tested. Compact content/actions must be checked after closing the sidebar. Native Electron remains unverified. |
 | Physical phone | Requires a real device/app connected to the tested host; a narrow viewport is insufficient. |
 | Real provider first card | Requires user-controlled test login, actual different executor/reviewer models, completion/review/acceptance and cleanup. Mocks do not pass it. |
-| Official CLI commands | 0.11.2 public help/docs establishes syntax only; installation, upgrade/failure/source-switch commands need isolated and post-publication replays. |
+| Official CLI commands | Isolated 0.11.2 local Git installation, explicit-ref check/update/downgrade, failure retention, source conversion and anonymous data recovery tested. Final published GitHub replay remains required. |
 
-No platform or completed production switch is certified by these documentation changes. Record exact commit/source/revision, OS, Node/npm, daemon/app/CLI, provider/model and each tested surface in the [release record](RELEASE.md). Optional macOS probes are not requirements for the core board workflow.
+These isolated observations do not certify a production switch or other platforms. Record exact commit/source/revision, OS, Node/npm, daemon/app/CLI, provider/model and each tested surface in the [release record](RELEASE.md). Optional macOS probes are not requirements for the core board workflow.
 
 ## Troubleshooting
 

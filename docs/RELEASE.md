@@ -1,6 +1,6 @@
 # Git release and recovery checklist
 
-This batch distributes the single plugin through **Git only**. The public repository is `https://github.com/jasonhnd/paseo-kanban`, branch `integration/single-plugin-reviewed`. Package version `0.1.0` is experimental metadata, not evidence of an npm release, published tag or official registry listing. This checklist records work to do; it does not declare publication, production switching or external submission complete, and does not authorize those operations.
+This batch distributes the single plugin through **Git only**. The public repository is `https://github.com/jasonhnd/paseo-kanban`, branch `integration/single-plugin-reviewed`. Package version `0.1.0` is experimental metadata, not evidence of an npm release, published tag or official registry listing. Repeat this checklist for each candidate; the table below records measured local scope and it does not declare publication, production switching or external submission complete, and does not authorize those operations.
 
 ## Version and evidence policy
 
@@ -44,28 +44,30 @@ Fill the draft with actual evidence before claiming publication:
 
 ## Command replay checklist
 
-Syntax was checked against public **Paseo CLI 0.11.2 help and fixed docs**, not a running product install. The isolated-validation and final-integration owners must fill this table with exact candidate/host, command, exit and before/after observations; the publishing owner repeats applicable rows from GitHub after the final ref is public. Keep logs private and summaries anonymous.
+Syntax was checked against public **Paseo CLI 0.11.2 help and fixed docs**, then exercised with actual isolated local Git installations and the official 0.11.2 web app on macOS arm64, Node 24.21.0/npm 12.1.0. The isolated-validation and final-integration owners must fill this table with exact candidate/host, command, exit and before/after observations; the publishing owner repeats applicable rows from GitHub after the final ref is public. Keep logs private and summaries anonymous.
 
 Use a new test home in the child environment and an explicit CLI endpoint on **every** connection command, for example `paseo --host "$PASEO_TEST_HOST" plugin ...`, where the endpoint is `tcp://host:port`. Use `--home "$PASEO_TEST_HOME"` for local daemon startup; **never combine `--home` and `--host`**. The 0.11.2 target guard rejects that combination. Plugin/SDK `PASEO_URL` is a separate WebSocket URL with `/ws`, not the CLI `--host` value. Use a whitelist environment, no inherited agent identity/tokens, disabled relay/providers and explicit `false` optional adapters. A real provider test uses only a user-established isolated login, not copied production authentication.
 
 | Replay | Required result; current document status |
 |---|---|
-| `paseo --version`, top-level/plugin/install/update help | Version and options recorded; help-only checked, no daemon validation. |
-| `install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed --json` | Actual full remote revision/path and prepared product; pending isolated and post-publication replay. |
-| Install full final public SHA; local `file://` full SHA first | Exact content, locked preparation, eight bundles and working CLI under fresh cache/production environment; pending. |
-| `ls paseo-kanban --json`, `logs paseo-kanban --json` | Source/revision/path/enabled/load error and sanitized output; pending installed-product checks. |
-| Repeat same-id install; nonexistent ref | Refused without changing existing path/revision/enabled state/data; pending. |
-| `update paseo-kanban --check --ref "$REVIEWED_COMMIT" --json` | Preview only; revision/path/state unchanged; pending. |
-| `update paseo-kanban --ref "$REVIEWED_COMMIT" --json` | Exact new revision, working CLI/RPC/UI and stable data root; pending. |
-| Explicit `--ref "$PREVIOUS_COMMIT"` check/downgrade/re-upgrade | Code changes only, data sentinel remains; pending. |
-| Local-only bad prepare/compile/activation refs | Update refused, previous install/path/enabled/data and working action retained; pending. |
-| `disable`, `enable`, `remove`, reinstall same id | Lifecycle state, settings and external-root behavior verified; pending. |
-| Developer directory `install`/edit/typecheck/`reload` | Directory update is skipped/rejected; reload failure does not imply rollback; pending. |
-| Directory-to-Git and reverse conversion | Default and explicit roots, settings/enabled, CLI/exports and scheduler continuity; pending. |
-| Consistent anonymous backup and data restore | Separate from code downgrade; later writes and restore consequences demonstrated; pending. |
-| Installed `bin/paseo-kanban.mjs --help` / `list --json`; `roles.mjs ls`; doctors | Node-only commands, current paths and same root, no production access; pending installed-product replay. |
-| Real desktop/compact and physical phone | Actual host/app versions, anonymous screenshots, navigation/RPC/error/cleanup; each pending independently. |
-| Real provider first card | Executor commit -> handoff -> different-model review -> leader acceptance -> finished/cleaned; pending. |
+| `paseo --version`, top-level/plugin/install/update help | 0.11.2 CLI and live isolated daemon recorded; help checked. |
+| `install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed --json` | Final published GitHub revision/path/preparation must be replayed by the publication owner; local `file://` evidence does not pass this row. |
+| Install full final public SHA; local `file://` full SHA first | Isolated full-SHA local Git preparation passed with fresh cache, NODE_ENV=production and eight working bundles; repeat from GitHub once the reviewed SHA is public. |
+| `ls paseo-kanban --json`, `logs paseo-kanban --json` | Installed source/revision/path/enabled/load state and sanitized logs checked locally. |
+| Repeat same-id install; nonexistent ref | Local refusals retained old path/revision/enabled/data and working RPC. |
+| `update paseo-kanban --check --ref "$REVIEWED_COMMIT" --json` | Local preview left revision/path/state unchanged. |
+| `update paseo-kanban --ref "$REVIEWED_COMMIT" --json` | Exact local revision, installed CLI/RPC/UI and stable data root checked. |
+| Explicit `--ref "$PREVIOUS_COMMIT"` check/downgrade/re-upgrade | Local code downgrade and re-upgrade retained data; later writes survived code downgrade. |
+| Local-only bad prepare/compile/activation refs | Real preparation failure, syntax compilation failure and activation exception retained old revision/path/enabled/running and RPC. Type-only errors do not exercise the host transpiler's failure path. |
+| `disable`, `enable`, `remove`, reinstall same id | Local lifecycle and external-root retention checked. New install sets enabled=true; restore a previously disabled state explicitly. |
+| Developer directory `install`/edit/typecheck/`reload` | Explicit-ref directory update returned `Plugin is a local directory: paseo-kanban`. An independent broken-directory reload stayed failed; repairing/reloading restored it, without a rollback. |
+| Directory-to-Git and reverse conversion | Default/explicit anonymous roots, settings/language, CLI/exports and enabled restoration checked. Real provider/scheduler continuity remains unverified. |
+| Consistent anonymous backup and data restore | Writers stopped and SQLite checkpoint busy=0; code downgrade retained later writes, separate compatible backup restore removed them. No production restore executed. |
+| Installed `bin/paseo-kanban.mjs --help` / `list --json`; `roles.mjs ls`; doctors | Installed Node commands and matching roots checked. Doctor red/exit 2 with absent profiles/providers is expected; it is not authenticated setup success. |
+| Real desktop/compact and physical phone | Official 0.11.2 web app in local Edge tested at desktop and compact sizes, with sidebar closed before compact content/actions. Physical phone and native Electron remain unverified. |
+| Real provider first card | User-established isolated login and actual executor/reviewer/leader cycle remain unverified; anonymous continuity cards and agent-free workspaces do not pass this row. |
+
+The local evidence distinguishes successful RPC outputs, the expected stale-save conflict and unexpected errors. A response count alone does not establish zero RPC errors. The assembled one-command lab bootstrap was syntax checked only; component commands and final-candidate key replays were executed separately. Keep the exact tested source SHA/tree, installed revision, versioned logs and images in the release record; rerun required gates on each final candidate. Production switching, GitHub publication/replay and registry submission are still separate operations.
 
 `REVIEWED_COMMIT` and `PREVIOUS_COMMIT` are full public SHAs from the release record. An unpublished candidate uses a local `file://` source, never an invented remote SHA. Branch refs can move between separate preview/apply operations; use the exact preview SHA for a controlled rollout. Never push deliberately broken failure-test refs.
 
@@ -90,7 +92,7 @@ Git code rollback uses the recorded previously verified public SHA on `update --
 **Prepared procedure, not executed production migration.** A usage-side operator needs authorization for the actual source/operating-mode switch, reviewed final remote SHA and successful isolated conversion/recovery evidence. This document does not give an agent permission to read production configuration, databases or credentials.
 
 1. Identify the intended host, same runtime id `paseo-kanban`, current directory path/source/enabled state, and actual canonical data root. Keep `PASEO_HOME` and `KANBAN_DATA_DIR` unchanged. Save host plugin settings/language/enabled separately and a consistent private root backup; retain the unchanged old source directory. Do not import old Fleet data as part of this conversion.
-2. Pause dispatch, scheduled helpers and every writer. Rehearse a pause mechanism that remains effective during install: a new installation may enable immediately and start loops before settings are restored. Do not perform a live switch until that behavior is controlled. Estimate interruption from the isolated rehearsal; no measured duration is supplied here.
+2. Pause dispatch, scheduled helpers and every writer. Rehearse a pause mechanism that remains effective during install: 0.11.2 sets a new installation enabled=true, even after removing a disabled source, and starts it immediately when the global switch is on. Do not perform a live switch until that behavior is controlled. One warmed-cache isolated directory-to-Git rehearsal measured a 19.67-second gap between successful board RPC responses with 100 ms sampling. This is a planning observation, not a production duration or uptime promise; measure the intended environment separately.
 3. On that same host, disable and remove the directory installation. Removal keeps the source directory, but may delete host plugin settings. A directory source cannot be converted by ordinary update, and same-id Git install is rejected until removal.
 
    ```sh

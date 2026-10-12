@@ -1,6 +1,6 @@
 # Git installation and updates
 
-[README](../README.md) is the user quickstart. This guide separates managed Git installation from a developer's directory source. Command syntax is based on the public Paseo **0.11.2** CLI help and [fixed reference](https://github.com/getpaseo/paseo/blob/75953250959979b8f088bbca8dbd6ee61d0151b1/public-docs/plugins/reference.md#cli-reference). Help checks are not proof of an installed product, UI or provider cycle; use the [replay checklist](RELEASE.md#command-replay-checklist).
+[README](../README.md) is the user quickstart. This guide separates managed Git installation from a developer's directory source. Command syntax is based on the public Paseo **0.11.2** CLI help and [fixed reference](https://github.com/getpaseo/paseo/blob/75953250959979b8f088bbca8dbd6ee61d0151b1/public-docs/plugins/reference.md#cli-reference). Local Git lifecycle and official web-app checks also ran on an isolated macOS host; their scope and remaining GitHub/provider/device checks are in the [replay checklist](RELEASE.md#command-replay-checklist). Help alone does not prove runtime behavior.
 
 ## Select the host and source
 
@@ -80,7 +80,7 @@ paseo plugin enable paseo-kanban --json
 paseo plugin remove paseo-kanban --json
 ```
 
-Removal deletes managed Git files, keeps a directory source checkout, and may remove host plugin settings. The external data root is separate. Reinstallation can enable the plugin immediately; rehearse source switching before doing it on a live scheduler. Same-id `install` is rejected while the old installation exists.
+Removal deletes managed Git files, keeps a directory source checkout, and may remove host plugin settings. The external data root is separate. In isolated 0.11.2 tests, installing after removing a disabled source set enabled=true and started immediately with the global switch on. Prevent scheduling separately before switching and restore the intended enabled state explicitly. Same-id `install` is rejected while the old installation exists. An explicit-ref update of a directory source is refused with `Plugin is a local directory: paseo-kanban`; a generic nonzero exit is not proof of that boundary.
 
 For a Git code downgrade, preserve current data and use a full **previously verified** public commit:
 
@@ -94,7 +94,7 @@ Set `PREVIOUS_COMMIT` from the saved release record, not from package version al
 
 ## Git preparation and local development
 
-The manifest's `build` argv runs `node server/prepare.mjs` before compilation. Git preparation uses the committed lockfile with `npm ci --include=dev --ignore-scripts --no-audit --no-fund`, including under `NODE_ENV=production`, then builds all eight standalone command bundles. Compiler/type inputs are intentionally included. A missing bundle or failed command refuses the candidate. This behavior needs exact-candidate clean-host validation; it is not certified merely by reading this script.
+The manifest's `build` argv runs `node server/prepare.mjs` before compilation. Git preparation uses the committed lockfile with `npm ci --include=dev --ignore-scripts --no-audit --no-fund`, including under `NODE_ENV=production`, then builds all eight standalone command bundles. Compiler/type inputs are intentionally included. A missing bundle or failed command refuses the candidate. Fresh-cache isolated 0.11.2 local Git installs exercised this production preparation and installed commands. Repeat it for each final candidate and for its published GitHub source.
 
 For a developer source directory only:
 

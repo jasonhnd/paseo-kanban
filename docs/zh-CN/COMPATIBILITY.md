@@ -14,16 +14,16 @@ manifest 声明 Paseo **daemon 和 app** `>=0.11.0 <0.12.0`。daemon 兼容不�
 
 | 平台／检查 | 当前证据边界 |
 |---|---|
-| macOS | 导入／工具链文档有本机源码、CLI、编译证据，不等于干净宿主 app／首卡完整认证。 |
+| macOS | 隔离 arm64、Node 24.21.0/npm 12.1.0：本地 Git 准备、CLI／编译、生命周期／失败恢复及 Edge 中官方 0.11.2 Web app 已测。不认证所有 macOS／工具版本或已认证首卡。 |
 | Linux | 首发目标，本文未认证完整原生流程；keychain/screen 不可用。 |
 | WSL2 | 须单独记录 Linux 环境验证。 |
 | 原生 Windows | 首发不支持；Node 命令不证明 Git/worktree/shell 整体流程。 |
-| 桌面／窄视口 | 源码与匿名挂载检查不同于真实已安装 app/daemon。 |
+| 桌面／窄视口 | 本机 Edge 中真实官方 0.11.2 Web app/daemon 的侧栏、Board/Fleet、语言／主题、RPC 和无 agent workspace 筛选已测；compact 须关闭侧栏后核正文／操作。原生 Electron 仍未验证。 |
 | 真实手机 | 须真实设备/app 接入受测宿主；窄视口不足。 |
 | 真实 provider 首卡 | 用户掌握测试登录、执行与审查实际 model 不同，完成／审查／验收／清理均核对；mock 不算通过。 |
-| 官方 CLI 命令 | 0.11.2 公开 help/docs 只确认语法；安装／升级／失败／换来源仍须隔离和发布后重放。 |
+| 官方 CLI 命令 | 0.11.2 隔离本地 Git 安装、明确 ref 预览／更新／降级、失败保留、换来源和匿名数据恢复已测；最终公开 GitHub 重放仍需完成。 |
 
-本文档修改不认证任何平台或已完成生产切换。[发布记录](RELEASE.md)须写精确 commit/source/revision、OS、Node/npm、daemon/app/CLI、provider/model 和逐项画面。可选 macOS 探针不是核心看板前置。
+隔离观察不认证生产切换或其他平台。[发布记录](RELEASE.md)须写精确 commit/source/revision、OS、Node/npm、daemon/app/CLI、provider/model 和逐项画面。可选 macOS 探针不是核心看板前置。
 
 ## 排错
 
