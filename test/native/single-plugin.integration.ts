@@ -147,7 +147,7 @@ test("actual compiled client mounts board/workspace and Fleet tabs, shares setti
       const modules={'react':React,'react/jsx-runtime':jsx,'react-native':RN,'@getpaseo/plugin/client/react-native':RN,'@tanstack/react-query':query,'@getpaseo/plugin':sdk,'@getpaseo/plugin/client':host,'@getpaseo/plugin/client/ui':clientUi,'zod':zod};
       const exports=(0,eval)(globalThis.__compiledClient)(name=>{if(!(name in modules))throw new Error('Unexpected client dependency '+name);return modules[name];});
       const surfaces=new Map(),events=[];const add=kind=>row=>{const key=kind+':'+row.id;if(surfaces.has(key))throw new Error('duplicate surface '+key);surfaces.set(key,row);events.push(['add',key]);return()=>{surfaces.delete(key);events.push(['remove',key]);};};
-      const dispose=exports.default({addScreen:add('screen'),addSidebarHeaderItem:add('sidebar'),addWorkspacePanel:add('workspace'),addSettingsScreen:add('settings')});
+      const dispose=exports.default({addScreen:add('screen'),addSidebarItem:add('sidebar'),addWorkspacePanel:add('workspace'),addSettingsScreen:add('settings')});
       export {surfaces,events,dispose};
       export function mount(kind,theme){const container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container);const client=new query.QueryClient({defaultOptions:{queries:{retry:false,gcTime:Infinity}}});
         const Component=surfaces.get(kind+':board').Component;const props={theme,layout:{compact:false,platform:'web'},workspaceId:'anonymous-workspace',host:{id:'anonymous-local-host',label:'Anonymous'},navigation:{openAgent(){},openWorkspace(){}}};

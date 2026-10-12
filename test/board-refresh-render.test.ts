@@ -290,6 +290,9 @@ describe("first paint", () => {
     const { readFileSync } = await import("node:fs");
     const entry = readFileSync(new URL("../index.client.tsx", import.meta.url), "utf8");
     assert.equal((entry.match(/addScreen\(/g) ?? []).length, 1, "one screen");
+    assert.equal((entry.match(/addSidebarItem\(/g) ?? []).length, 1, "one standard sidebar item");
+    assert.equal((entry.match(/addSidebarHeaderItem\(/g) ?? []).length, 0, "no custom header item");
+    assert.equal((entry.match(/addSurface\(/g) ?? []).length, 0, "the screen keeps its title through addScreen");
     // The panel goes through client/panel-title.ts, which can register it again when the language changes.
     assert.equal((entry.match(/registerBoardPanel\(/g) ?? []).length, 1, "one panel");
     const board = readFileSync(new URL("../client/board.tsx", import.meta.url), "utf8");

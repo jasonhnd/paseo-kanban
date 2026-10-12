@@ -1,9 +1,7 @@
-import type { PluginClientContext, PluginSidebarItemProps, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
+import type { PluginClientContext, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
 import { useWorkspace } from "@getpaseo/plugin/client";
-import { SidebarRow } from "@getpaseo/plugin/client/ui";
 import { Application, ApplicationSettings } from "./client/application";
 import { languageChosen, resolveLanguage, setLanguage, t } from "./shared/i18n";
-import { LanguageProbe } from "./client/i18n";
 import { registerBoardPanel, rememberedLanguage, resetBoardPanel } from "./client/panel-title";
 
 /** Screen and sidebar item share this id, so saved `/plugin/paseo-kanban/board` links keep opening the board. */
@@ -19,21 +17,19 @@ function WorkspaceBoard(props: PluginWorkspacePanelProps) {
   return <Application {...props} lockedProject={name} />;
 }
 
-function BoardSidebarItem({ currentScreen, openScreen }: PluginSidebarItemProps) {
-  return (
-    <>
-      <SidebarRow icon="SquareKanban" active={currentScreen?.screenId === BOARD} onPress={() => openScreen({ screenId: BOARD })} />
-      <LanguageProbe />
-    </>
-  );
-}
-
 export default function contribute(client: PluginClientContext) {
   // Until kanban.config.read answers (client/i18n.tsx), use the language read last time on this client,
   // else the runtime's locale. The panel is registered again if the setting turns out to differ.
   if (!languageChosen()) setLanguage(rememberedLanguage() ?? resolveLanguage("system"));
   const removeScreen = client.addScreen({ id: BOARD, title: "Paseo Kanban", Component: Application });
-  const removeSidebar = client.addSidebarHeaderItem({ id: BOARD, title: "Paseo Kanban", Component: BoardSidebarItem });
+  // One standard item. The installed host paints it in both the desktop and compact sidebars.
+  // A custom header component is omitted when that host has no runtime client.
+  const removeSidebar = client.addSidebarItem({
+    id: BOARD,
+    title: "Paseo Kanban",
+    icon: "SquareKanban",
+    surface: BOARD,
+  });
   registerBoardPanel(client, () => ({
     id: BOARD,
     title: t("client.panel.title"),

@@ -48,8 +48,9 @@ class Quiet extends Component<{ children: ReactNode }, { failed: boolean }> {
 }
 
 /**
- * Reads the language setting from an always-visible surface (the sidebar item), so the workspace panel's
- * title is corrected soon after the app starts, not only when the board is first opened.
+ * Reads the saved language from a mounted surface that has plugin RPC.
+ * The standard sidebar row has no component slot, so it cannot host this probe.
+ * The board, workspace and settings surfaces call useI18n themselves. The client entry does not mount this.
  */
 export function LanguageProbe(): ReactNode {
   return (
