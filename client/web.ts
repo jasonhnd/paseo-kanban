@@ -8,6 +8,29 @@ declare const document: {
   removeEventListener(type: "visibilitychange", listener: () => void): void;
 };
 
+type WebStorage = { getItem(key: string): string | null; setItem(key: string, value: string): void };
+
+/** Best-effort browser persistence. Native must not even read the storage getter. */
+export function readWebStorage(key: string): string | null {
+  if (Platform.OS !== "web") return null;
+  try {
+    const storage = (globalThis as { localStorage?: WebStorage }).localStorage;
+    return storage?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** A blocked getter or a failed write must not prevent an in-memory language update. */
+export function writeWebStorage(key: string, value: string): void {
+  if (Platform.OS !== "web") return;
+  try {
+    (globalThis as { localStorage?: WebStorage }).localStorage?.setItem(key, value);
+  } catch {
+    // Storage can be disabled or full; the server setting remains the source of truth.
+  }
+}
+
 /**
  * Calls `listener` each time the browser page becomes visible again. No-op on native, where the
  * caller listens to AppState instead. Returns the unsubscribe function.

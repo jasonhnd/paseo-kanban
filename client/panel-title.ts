@@ -1,5 +1,6 @@
 import type { PluginClientContext, PluginWorkspacePanelContribution } from "@getpaseo/plugin/client";
 import { getLanguage, isLanguage, type Language } from "../shared/i18n";
+import { readWebStorage, writeWebStorage } from "./web";
 
 // The workspace panel's title is fixed when it is registered, before the board's language setting can be
 // read. So the client remembers the language it last read, registers with that, and registers the panel
@@ -16,33 +17,14 @@ interface Registration {
 
 let registration: Registration | null = null;
 
-function storage(): { getItem(key: string): string | null; setItem(key: string, value: string): void } | null {
-  try {
-    const candidate = (globalThis as { localStorage?: unknown }).localStorage as
-      | { getItem(key: string): string | null; setItem(key: string, value: string): void }
-      | undefined;
-    return candidate && typeof candidate.getItem === "function" ? candidate : null;
-  } catch {
-    return null; // storage disabled
-  }
-}
-
 /** The language the board's setting resolved to last time on this client, where the client can store it. */
 export function rememberedLanguage(): Language | null {
-  try {
-    const value = storage()?.getItem(STORAGE_KEY);
-    return isLanguage(value) ? value : null;
-  } catch {
-    return null;
-  }
+  const value = readWebStorage(STORAGE_KEY);
+  return isLanguage(value) ? value : null;
 }
 
 function remember(language: Language): void {
-  try {
-    storage()?.setItem(STORAGE_KEY, language);
-  } catch {
-    // not storable here; the next load guesses again
-  }
+  writeWebStorage(STORAGE_KEY, language);
 }
 
 /** Register the workspace panel; `build` makes the contribution in the current language. */
