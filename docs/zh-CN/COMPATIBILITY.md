@@ -1,50 +1,79 @@
-> 单插件只登记 Paseo Kanban（实际 id 为 `paseo-kanban`）。审查比较非空实际 model：同 family 不同 model 允许，缺证据时拒绝。真实 Linux/app/phone 和 provider 首卡仍待独立验收。
-
 # 兼容性与排错
 
-单 manifest 声明 Paseo >=0.11.0 <0.12.0。同时核对 daemon 和桌面 app；daemon 兼容不证明 app 兼容。放宽未来 host 范围前须跑编译、集成和桌面验证。
+manifest 声明 Paseo **daemon 和 app** `>=0.11.0 <0.12.0`。daemon 兼容不证明 app 兼容。固定官方命令／编译器基线为 **0.11.2**，commit `75953250959979b8f088bbca8dbd6ee61d0151b1`；声明范围不证明所有 0.11 patch 或客户端都已测。放宽前须重跑编译和真实集成。
 
-## 要求与证据边界
+## 要求与证据
 
-| 项目 | 要求 |
+| 项目 | 要求或证据边界 |
 |---|---|
-| Paseo | daemon/app 均在范围内，全局和单插件开关启用。 |
-| Node | 单插件要求 >=22.13.0 且 node:sqlite 可用。须核对 daemon 的 Node 环境。 |
-| npm / Git | npm 用于源码开发和本插件的 Git preparation，须在 daemon PATH；Git 用于代码卡、临时 workspace、Git 安装。 |
-| Provider | 用户自己安装和登录；发现模型不证明登录、请求或额度成功。 |
-| 审查 | 明确、非空的两个实际 model；同 family 不同 model 可审。 |
+| Paseo | daemon/app 均匹配范围，全局及单插件开关启用；CLI `--version` 只报告 CLI。 |
+| Node | daemon 实际 Node >=22.13.0 且 `node:sqlite` 可用。 |
+| npm／Git | 位于 daemon PATH，用于 Git 下载／准备；代码卡及 workspace 也需要 Git。客户端可用不证明远端宿主就绪。 |
+| Provider | 用户自行安装、认证；发现不证明登录、额度或请求成功。 |
+| 审查 | 两个明确非空实际 model，trim/lower 后比较。同 family 不同 model 可审；同 model 跨 provider/mode/effort 仍拒绝。 |
 
-macOS 有导入/工具链文档里的本机源码、CLI、编译证据，完整干净环境桌面和首卡验证仍为发版闸。Linux 是首发目标，尚无完整原生流程认证记录。WSL2 单独验证；首发不支持原生 Windows，Node 启动器不证明整个流程或 shell helper 可用。本文修改不认证任何平台。发版记录须写 OS、Node、daemon/app、provider/model、来源和伴随提交/tag；可选 macOS 探针不作为核心前置。
+| 平台／检查 | 当前证据边界 |
+|---|---|
+| macOS | 导入／工具链文档有本机源码、CLI、编译证据，不等于干净宿主 app／首卡完整认证。 |
+| Linux | 首发目标，本文未认证完整原生流程；keychain/screen 不可用。 |
+| WSL2 | 须单独记录 Linux 环境验证。 |
+| 原生 Windows | 首发不支持；Node 命令不证明 Git/worktree/shell 整体流程。 |
+| 桌面／窄视口 | 源码与匿名挂载检查不同于真实已安装 app/daemon。 |
+| 真实手机 | 须真实设备/app 接入受测宿主；窄视口不足。 |
+| 真实 provider 首卡 | 用户掌握测试登录、执行与审查实际 model 不同，完成／审查／验收／清理均核对；mock 不算通过。 |
+| 官方 CLI 命令 | 0.11.2 公开 help/docs 只确认语法；安装／升级／失败／换来源仍须隔离和发布后重放。 |
+
+本文档修改不认证任何平台或已完成生产切换。[发布记录](RELEASE.md)须写精确 commit/source/revision、OS、Node/npm、daemon/app/CLI、provider/model 和逐项画面。可选 macOS 探针不是核心看板前置。
 
 ## 排错
 
+先查目标宿主状态和日志：
+
+```sh
+paseo plugin ls paseo-kanban --json
+paseo plugin logs paseo-kanban --json
+```
+
+其他 daemon 在每条命令 `plugin` 前加全局 `--host "$PASEO_TARGET"`。
+
 | 症状 | 检查 |
 |---|---|
-| 无 provider/模型 | 在 Paseo 安装启用并自行登录，再发现；不要向 issue 发认证文件。 |
-| 发现了但请求失败 | 看 provider 自身状态；目录发现不证明认证和额度。 |
-| 无角色档案 | Fleet Settings 只预览，手动在 Paseo 建档并保留旧项，确认 role、明确的实际 model 和 pool 策略。 |
-| leader 不能建卡/验收 | 分别检查协议和自登记；用启动面板及 kanban_supervise 或 CLI supervise。活着的旧登记须交接。 |
-| 协议缺失 | 用面板恢复控制；普通档案选择不注入协议，消息恢复有明确标签。 |
-| 额度空/未知 | 只配自己的池，刷新或填有时间的读数；未知不是 0，无保护设置不提供额度护栏。 |
-| 新装单插件 | 配置统一 Fleet 策略和自己的 pool；策略缺失或无效时拒绝派活。 |
-| 启用但无面板 | 查 Plugins、日志、真实桌面入口；running 或编译绿不证明挂载。 |
-| host 拒载/离线 | 核对支持范围和 daemon/app 组合；无法获得结果是未知，不是通过。 |
-| 缺命令 bundle | 源码先构建或使用已安装发版产物；每次 Git update 后核对安装路径。 |
+| Git source/tag/ref 不存在 | 用 `github:jasonhnd/paseo-kanban` 和真实 integration 分支或完整公开审过的 SHA。未公开本地 SHA、虚构 tag、裸 registry id、假定 npm 发布不是该来源。 |
+| 相同 id 已安装 | `ls` 看来源。托管 Git 明确 ref 更新；directory 用已准备 remove/install 预案。重复 install 不覆盖。 |
+| 依赖／准备／编译报错 | 核 daemon Node/npm/Git、`node:sqlite`、registry/网络和输出。托管更新失败保留旧版，仍核 revision 和功能；不要在托管目录构建。 |
+| disabled | 全局 Enable plugins 和单插件各自检查，均须 on；全局开关也可能启动其他插件。 |
+| running 但无入口／页面 | 查选中宿主、Settings -> Sidebar 可见性、app 版本、client 错误。打开真实入口；running 只证明 server。 |
+| RPC 或页面错误 | 查日志和选中宿主连接，可能为请求验证或 server handler 错误；成功请求及错误态都测。 |
+| host 拒绝版本 | daemon 和 app 都核范围；离线／未知不算通过。 |
+| 无 provider/model | 在 Paseo 启用／安装并自行登录，再发现；不把认证文件发 issue。 |
+| 发现了但请求失败 | 查 provider 状态、登录、额度；目录发现不证明这些。 |
+| 无角色 | Fleet Settings 只预览；手动配置档案，保留旧项及明确 role/pool/实际 model。 |
+| leader 不能建卡／验收 | 分别核协议、自登记；用 leader 面板和 `kanban_supervise` 或 CLI `supervise`，活旧登记须交接。 |
+| 协议缺失 | 用面板恢复控制；普通档案选择不注入看板协议。 |
+| 额度未知／空或策略无效 | 配自己的 pool、来源时间、策略；未知不是 0。受保护未知／无效不可变策略拒绝派活；关闭保护会去掉该额度护栏。 |
+| 旧存储变量报错 | 取消 `AFC_DATA_DIR`、`ROLES_STATE_DIR`、`AFC_LEGACY_DATA_DIR`，用统一根，不自动读／导入旧资料。 |
+| 更新后 CLI／数据根不同 | 保留 id/home/root，`ls` 刷新 `BOARD_INSTALL`，去除废弃 checkout 引用。不能跟代码路径一起换数据根。 |
+| 缺命令 bundle | Git 安装应准备全部八个；保留错误，核精确候选。只有开发源码用 `npm run build`。 |
+| 可选适配器意外运行 | `fleet/afc.config.json` 显式 `false`；旧 Cursor/keychain marker 能继承未设开关。Antigravity 必须明确 true 且匹配 plan。 |
+| directory update 跳过／拒绝 | directory 改源码、typecheck、`plugin reload`；转 Git 是 remove/install，不是普通 update。 |
+| reload 失败 | 查 ls/logs，修开发源码、typecheck、重新 reload；不自动恢复旧 bundle，无需为了源码 reload 重启 daemon。 |
+
+`BOARD_INSTALL` 取当前安装路径，CLI 保持相同 home/root，私下运行诊断：
 
 ```sh
 node "$BOARD_INSTALL/bin/afc.mjs" doctor --json
 node "$BOARD_INSTALL/bin/paseo-kanban.mjs" doctor
 ```
 
-输出可能含私有路径、项目，只分享手动脱敏片段。离线构建/类型/测试不证明认证、活 daemon、迁移或桌面。
+输出可能含私有路径、项目和状态，只分享手动脱敏片段。离线类型／构建／测试不证明活认证、迁移或 client 挂载。
 
 ## 换版
 
-先读 CHANGELOG Notes 的 host 范围、契约、伴随最低版本、顺序、迁移和回退限制。每次 Git update 显式指定已发布 tag：
+先读 CHANGELOG Notes 的 host、契约/schema、顺序和恢复限制。**每次**指定分支或完整公开审过的 SHA：
 
 ```sh
-paseo plugin update paseo-kanban --check --ref vX.Y.Z
-paseo plugin update paseo-kanban --ref vX.Y.Z
+paseo plugin update paseo-kanban --check --ref integration/single-plugin-reviewed --json
+paseo plugin update paseo-kanban --ref integration/single-plugin-reviewed --json
 ```
 
-合并包只注册 paseo-kanban；manifest 准备流程构建统一命令。真实 Linux 宿主、桌面/phone 和真实 provider 首卡仍需独立发版验收。本机 Darwin 编译、匿名 DOM 挂载，以及已安装宿主上的标准侧栏注册，都不能证明真实手机。切来源前备份数据和设置，代码回退不撤销数据写入。见 [RELEASE](RELEASE.md)。
+`--ref` 不永久锁定未来普通更新；需要可复现升级／降级时，两条均改成记录的完整 SHA。先备份[一致数据和宿主设置](DATA.md#备份和数据恢复)。代码回退不撤销写入，托管更新保留旧版与失败 reload 不同。见 [Git 安装](../GIT-INSTALL.md)和[发布与恢复](RELEASE.md)。

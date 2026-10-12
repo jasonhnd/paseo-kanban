@@ -1,58 +1,79 @@
 # Compatibility and troubleshooting
 
-The single manifest declares Paseo `>=0.11.0 <0.12.0`. Check **both daemon and desktop app** versions; a compatible daemon does not prove a compatible app. A future host version needs compilation, integration and desktop checks before widening this range.
+The manifest declares Paseo **daemon and app** `>=0.11.0 <0.12.0`. A compatible daemon does not prove a compatible app. The fixed official command/compiler baseline is **0.11.2**, commit `75953250959979b8f088bbca8dbd6ee61d0151b1`. This declaration is not evidence that every 0.11 patch or client has been tested. Recompile and verify actual integrations before widening the range.
 
 ## Requirements and evidence
 
 | Component | Requirement or evidence boundary |
 |---|---|
-| Paseo | Daemon and app in the manifest range; global plugins switch and individual plugins enabled. |
-| Node | The combined package requires >=22.13.0 with usable `node:sqlite`. Test SQLite availability in the daemon's Node environment. |
-| npm | Needed for source development and the plugin's Git preparation on the daemon's PATH. |
-| Git | Needed for coding cards, temporary workspaces and Git-source installations. |
-| Providers | User-installed and user-authenticated local providers. Discovery is not proof of login, quota or a successful request. |
-| Review | Two confirmed nonempty actual models; one family with different models is allowed. |
+| Paseo | Daemon and app in the declared range; global and individual plugin switches on. CLI `--version` reports only the CLI. |
+| Node | >=22.13.0 with usable `node:sqlite` in the daemon host's actual Node environment. |
+| npm / Git | Available on the daemon PATH for Git acquisition/preparation; Git is also needed for code cards/workspaces. Client-machine availability does not prove remote host readiness. |
+| Providers | User-installed/authenticated local providers. Discovery is not proof of login, quota or a successful request. |
+| Review | Two confirmed nonempty actual models, compared after trim/lower normalization. Different models in one family are allowed; identical models across provider/mode/effort are refused. |
 
-| Platform | Current statement |
+| Platform or check | Current evidence boundary |
 |---|---|
-| macOS | Local source/CLI/compiler checks are recorded in the import/toolchain documents. Full clean-host desktop and first-card certification remains a release gate. |
-| Linux | Release target; full native workflow verification has not been recorded here. Do not treat compilation as platform certification. |
-| WSL2 | Requires a separate Linux-environment validation record. |
-| Native Windows | Not supported for the initial release; Node-only commands do not prove the entire workflow or optional shell helpers work. |
+| macOS | Local source/CLI/compiler evidence exists in import/toolchain documents. That is not full clean-host app/first-card certification. |
+| Linux | Initial target; a complete native workflow has not been certified here. Keychain/screen features are unavailable. |
+| WSL2 | Requires its own Linux-environment record. |
+| Native Windows | Not initially supported; Node launchers alone do not validate Git/worktree/shell workflows. |
+| Desktop and compact viewport | Source and anonymous mounting checks are distinct from a real installed app/daemon check. |
+| Physical phone | Requires a real device/app connected to the tested host; a narrow viewport is insufficient. |
+| Real provider first card | Requires user-controlled test login, actual different executor/reviewer models, completion/review/acceptance and cleanup. Mocks do not pass it. |
+| Official CLI commands | 0.11.2 public help/docs establishes syntax only; installation, upgrade/failure/source-switch commands need isolated and post-publication replays. |
 
-No platform is certified by this documentation change. Before release, record the exact OS, Node, daemon and app versions, provider/model, install source and tested single-plugin commit/tag. Optional macOS probes are not requirements for the core workflow.
+No platform or completed production switch is certified by these documentation changes. Record exact commit/source/revision, OS, Node/npm, daemon/app/CLI, provider/model and each tested surface in the [release record](RELEASE.md). Optional macOS probes are not requirements for the core board workflow.
 
 ## Troubleshooting
 
+Start with the intended host's status and logs:
+
+```sh
+paseo plugin ls paseo-kanban --json
+paseo plugin logs paseo-kanban --json
+```
+
+For a different daemon, add the global `--host "$PASEO_TARGET"` before `plugin` on every command.
+
 | Symptom | Next check |
 |---|---|
-| No provider or no selectable model | Install/enable a local provider in Paseo, complete its login yourself, then rediscover. Never send authentication files to an issue. |
-| Provider discovered but request fails | Check the provider's own status; discovery alone does not establish authentication or remaining quota. |
-| No role profiles | Fleet Settings can preview profiles; manually create/configure them in Paseo, keeping existing entries. Confirm explicit actual models, role fields and pool policy. |
-| Leader created but cannot create/accept cards | Check protocol delivery and self-registration separately. Use the leader launch panel and `kanban_supervise` or CLI `supervise`; hand over a live prior registration. |
-| Protocol missing | Use the panel's recovery controls. A normal profile selection does not inject the board protocol; message recovery remains visibly labelled. |
-| Empty or unknown quota | Configure only your pools. Refresh or enter a dated manual value; unknown is not zero. A pool with protection disabled has no quota guard. |
-| Fresh single-plugin install | Configure the integrated Fleet policy and your own pools. Invalid policy keeps dispatch closed. |
-| Plugin enabled but no panel | Check Settings -> Plugins, plugin logs and the actual desktop entry. `running` and compiler success do not prove client mounting. |
-| Host rejects the version | Read the supported range and obtain a compatible app/daemon pair. An unavailable or offline compatibility result is unknown, not a pass. |
-| Command bundle missing | Build in the source checkout, or use the installed release artifacts. Check the current installation path after every Git update. |
+| Git source/tag/ref not found | Use `github:jasonhnd/paseo-kanban` with the real integration branch or full public reviewed SHA. A local unpublished SHA, invented tag, bare registry id or assumed npm release is not that source. |
+| Same id already installed | Read source kind from `ls`. Update a managed Git source with explicit ref; a directory source needs the prepared remove/install switch. Repeated install does not replace it. |
+| Dependency/preparation/compiler error | Check daemon-host Node/npm/Git and `node:sqlite`, registry/network access and preparation output. A managed update failure retains the prior install; verify its revision and action. Do not build in its managed checkout. |
+| `disabled` | Check the global Enable plugins switch and the individual switch separately. Both must be on; global enable may start other plugins. |
+| Enabled/running but no sidebar/page | Check selected host, Settings -> Sidebar visibility, app version and client errors. Open the actual entry; `running` is only server evidence. |
+| RPC rejects or page error | Check logs and connection to the selected host; request validation or a server handler may fail. Test an error state as well as a successful request. |
+| Host rejects the version | Compare both daemon and app to the manifest range. An offline/unknown result is not a pass. |
+| No provider or model | Enable/install a local provider in Paseo and complete login yourself, then rediscover. Never send authentication files to an issue. |
+| Provider discovered but requests fail | Check provider status/login/quota; catalog discovery does not prove these. |
+| No roles | Fleet Settings previews only; manually configure Paseo profiles, preserving existing entries and explicit role/pool/actual model. |
+| Leader cannot create/accept | Check protocol delivery and self-registration separately. Use the leader launch panel and `kanban_supervise` or CLI `supervise`; hand over a live prior registration. |
+| Protocol missing | Use panel recovery controls; ordinary profile selection does not inject board protocol. |
+| Empty/unknown quota or invalid policy | Configure your own pools, source timestamps and policy. Unknown is not zero; protected unknown or invalid immutable policy holds dispatch. Turning protection off removes that quota guard. |
+| Retired storage override | Unset `AFC_DATA_DIR`, `ROLES_STATE_DIR`, `AFC_LEGACY_DATA_DIR`; use the canonical root. No legacy data is automatically read or imported. |
+| Data/CLI root differs after update | Keep the same id/home/root, refresh `BOARD_INSTALL` from `ls` and remove references to discarded checkouts. Do not change the data root to match a new code path. |
+| Missing command bundle | A Git install should prepare all eight bundles. Preserve errors and verify the exact candidate; only a developer source checkout uses `npm run build`. |
+| Optional adapter runs unexpectedly | In `fleet/afc.config.json`, set explicit `false`; old Cursor/keychain markers can keep an unset switch on. Antigravity requires explicit `true` and a matching plan. |
+| Directory source refuses/skips update | Directory sources use source edits, typecheck and `plugin reload`; switching to Git is remove/install, not an ordinary update. |
+| Reload failed | Read `ls`/logs, fix the development source, typecheck and reload again. Reload failure does not restore the previous bundle. No daemon restart is needed for source reload. |
 
-Run the installed commands with Node:
+Set `BOARD_INSTALL` to the current installed path, use the same home/root as the plugin, and run diagnostics privately:
 
 ```sh
 node "$BOARD_INSTALL/bin/afc.mjs" doctor --json
 node "$BOARD_INSTALL/bin/paseo-kanban.mjs" doctor
 ```
 
-Doctor reports can contain private paths and project information. Share only manually redacted excerpts. Offline build/type/test checks do not prove authentication, live daemon behavior, data migration or desktop mounting.
+Doctor output may contain private paths, projects and state. Share manually redacted excerpts only. Offline types/build/tests do not prove live authentication, migration or client mounting.
 
 ## Version changes
 
-Read the target CHANGELOG Notes for host range, contract changes, companion minimum version, upgrade order, migration and rollback limits. Use an explicit tag for **every** Git update:
+Read CHANGELOG Notes for host range, contract/schema changes, upgrade order and recovery limits. Preview and update using an explicit branch or reviewed full public SHA **every time**:
 
 ```sh
-paseo plugin update paseo-kanban --check --ref vX.Y.Z
-paseo plugin update paseo-kanban --ref vX.Y.Z
+paseo plugin update paseo-kanban --check --ref integration/single-plugin-reviewed --json
+paseo plugin update paseo-kanban --ref integration/single-plugin-reviewed --json
 ```
 
-Only `paseo-kanban` is registered by the integrated package. Manifest preparation builds its combined CLI entries. Real Linux host, app/phone and provider first-card acceptance remain separate release prerequisites; local Darwin compilation, anonymous DOM mounting and installed-host registration of the standard sidebar item do not prove a physical phone. Back up data and plugin settings before changing sources. Code downgrade does not undo data writes. See [RELEASE](RELEASE.md).
+`--ref` does not permanently pin future ordinary updates. For repeatable rollout or code downgrade, replace the branch with the recorded full SHA on both commands. Back up [consistent data and host settings](DATA.md#backup-and-data-restore) first. Code rollback does not undo data writes; managed update recovery differs from failed reload. See [Git installation](GIT-INSTALL.md) and [release/recovery](RELEASE.md).
