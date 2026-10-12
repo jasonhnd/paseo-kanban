@@ -34,10 +34,11 @@ paseo plugin ls paseo-kanban --json
 paseo plugin logs paseo-kanban --json
 ```
 
-其他 daemon 在每条命令 `plugin` 前加全局 `--host "$PASEO_TARGET"`。
+其他 daemon 每条命令 `plugin` 前加 `--host "$PASEO_TARGET"`，值为 `tcp://host:port` 等 CLI endpoint。与本地 `--home` 二选一，不同用；插件／SDK 的 `PASEO_URL` 则用带 `/ws` 的 WebSocket URL。
 
 | 症状 | 检查 |
 |---|---|
+| TARGET_AMBIGUOUS／连接 URL 畸形 | --home 与 --host 不同用。CLI 用 tcp://host:port 或 host:port，不能把 ws://host:port/ws 传给 CLI --host。 |
 | Git source/tag/ref 不存在 | 用 `github:jasonhnd/paseo-kanban` 和真实 integration 分支或完整公开审过的 SHA。未公开本地 SHA、虚构 tag、裸 registry id、假定 npm 发布不是该来源。 |
 | 相同 id 已安装 | `ls` 看来源。托管 Git 明确 ref 更新；directory 用已准备 remove/install 预案。重复 install 不覆盖。 |
 | 依赖／准备／编译报错 | 核 daemon Node/npm/Git、`node:sqlite`、registry/网络和输出。托管更新失败保留旧版，仍核 revision 和功能；不要在托管目录构建。 |

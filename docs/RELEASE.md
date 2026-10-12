@@ -46,7 +46,7 @@ Fill the draft with actual evidence before claiming publication:
 
 Syntax was checked against public **Paseo CLI 0.11.2 help and fixed docs**, not a running product install. The isolated-validation and final-integration owners must fill this table with exact candidate/host, command, exit and before/after observations; the publishing owner repeats applicable rows from GitHub after the final ref is public. Keep logs private and summaries anonymous.
 
-Use a new test home and explicit test endpoint on **every** lifecycle command, for example `paseo --home "$PASEO_TEST_HOME" --host "$PASEO_TEST_HOST" plugin ...`. Use a whitelist environment, no inherited agent identity/tokens, disabled relay/providers and explicit `false` optional adapters. A real provider test uses only a user-established isolated login, not copied production authentication.
+Use a new test home in the child environment and an explicit CLI endpoint on **every** connection command, for example `paseo --host "$PASEO_TEST_HOST" plugin ...`, where the endpoint is `tcp://host:port`. Use `--home "$PASEO_TEST_HOME"` for local daemon startup; **never combine `--home` and `--host`**. The 0.11.2 target guard rejects that combination. Plugin/SDK `PASEO_URL` is a separate WebSocket URL with `/ws`, not the CLI `--host` value. Use a whitelist environment, no inherited agent identity/tokens, disabled relay/providers and explicit `false` optional adapters. A real provider test uses only a user-established isolated login, not copied production authentication.
 
 | Replay | Required result; current document status |
 |---|---|
@@ -100,7 +100,7 @@ Git code rollback uses the recorded previously verified public SHA on `update --
    paseo plugin ls paseo-kanban --json
    ```
 
-   Prefix every command with the intended `--home`/`--host` selection when nondefault. Do not hand-edit source entries or use config reload as a substitute for lifecycle commands.
+   Prefix every command with the intended `--host` endpoint or local `--home` selection when nondefault, never both. Do not hand-edit source entries or use config reload as a substitute for lifecycle commands.
 4. Confirm Git source/full revision/new path, same external data root across server/board/Fleet/CLI/exports, and no discarded `KANBAN_HOME` reference. Restore saved settings and intended enabled state; refresh CLI launchers/exports. Confirm policy/matrix, roles, counts, running/error/tick state, actual desktop/phone surfaces and a permitted demo cycle before resuming dispatch. Leave missing phone/provider evidence explicitly unresolved.
 5. On failure, keep writers paused and the old directory intact. If a Git entry exists, disable/remove it. Reinstall the unchanged directory with `paseo plugin install "$PREVIOUS_DIRECTORY" --json`, then restore saved host settings/enabled state and verify the same root/CLI/UI. `PREVIOUS_DIRECTORY` is the previously recorded absolute local source path. This code/source recovery is not data restore.
 

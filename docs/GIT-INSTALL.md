@@ -30,7 +30,7 @@ paseo --host "$PASEO_TARGET" plugin install github:jasonhnd/paseo-kanban --ref i
 paseo --host "$PASEO_TARGET" plugin ls paseo-kanban --json
 ```
 
-`PASEO_TARGET` is your intended endpoint, not an agent identity or credential. A nondefault local home uses the global `--home "$PASEO_TEST_HOME"` option. Acquisition, npm preparation and execution happen on that daemon host; the client device does not install dependencies. Do not infer remote Node/Git/npm availability from versions on the client machine. CLI `--version` does not certify the daemon/app version pair.
+`PASEO_TARGET` is a CLI endpoint such as `tcp://host:port` (or `host:port`), not an agent identity or credential. Do not pass the SDK WebSocket URL to CLI `--host`. A nondefault local home instead uses `--home "$PASEO_TEST_HOME"`. **Choose either `--home` or `--host`, never both in one command**; 0.11.2 rejects both with `TARGET_AMBIGUOUS`. In isolated tests, keep child `HOME`/`PASEO_HOME` on the test home, use only `--host` on connection commands, and set plugin/SDK `PASEO_URL` to `ws://host:port/ws` (or the corresponding TLS URL). Acquisition, npm preparation and execution happen on that daemon host; the client device does not install dependencies. Do not infer remote Node/Git/npm availability from versions on the client machine. CLI `--version` does not certify the daemon/app version pair.
 
 Paseo plugins are trusted, unsandboxed code. Inspect the selected source and [access description](DATA.md). The manifest declares `>=0.11.0 <0.12.0`; daemon and app must both match. Node >=22.13.0 with working `node:sqlite`, Git and npm are needed on the daemon PATH. Platform evidence and remaining experimental limits are in [COMPATIBILITY](COMPATIBILITY.md).
 

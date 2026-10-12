@@ -32,7 +32,7 @@ paseo plugin ls paseo-kanban --json
 
 1. 在目标宿主 **Settings -> Plugins** 打开 **Enable plugins** 和单独的 `paseo-kanban` 开关。全局开关也会启动其他单独启用的插件。全局开关开启后可运行 `paseo plugin enable paseo-kanban --json` 启用本插件。
 2. 再运行 `paseo plugin ls paseo-kanban --json`，确认 `running` 且无加载错误。从该宿主的侧栏打开 **Paseo Kanban**；看板、Fleet、Settings 应共用这一个入口。必须打开真实页面；只有 `running` 不证明 client 挂载成功。窄视口不证明真实手机。
-3. 只有 CLI 默认 daemon 正是目标时才用默认值。管理其他 daemon 时，每条命令均在 `plugin` 前加 `--host "$PASEO_TARGET"`。[Git 安装](../GIT-INSTALL.md)详述宿主选择、版本确认和开发者 directory 安装。
+3. 只有 CLI 默认 daemon 正是目标时才用默认值。管理其他 daemon 时，每条命令均在 `plugin` 前加 `--host "$PASEO_TARGET"`，值为 `tcp://host:port` 等 CLI endpoint。非默认本地 home 另用 `--home`；与 `--host` 二选一，不能同用。[Git 安装](../GIT-INSTALL.md)详述宿主选择、版本确认和开发者 directory 安装。
 
 安装会按锁文件准备依赖并生成命令 bundle。使用者无需开发 checkout 或另跑 `npm run build`。相同 id 已安装时，重复 `install` 会失败；Git 来源使用[更新](#更新停用和卸载)，directory 来源使用[来源切换 runbook](RELEASE.md#directory-转-git-操作预案)。
 

@@ -44,7 +44,7 @@ Git 分支可变，是否有 tag 都要保存完整审过的公开 commit。该�
 
 语法按公开 **Paseo CLI 0.11.2 help 和固定文档**核对，未把安装命令运行于真实产品。隔离验证及最终整合主责须填精确候选／宿主、命令、退出码、前后结果；发布主责在最终 ref 公开后从 GitHub 再重放适用项。日志私密，摘要匿名。
 
-所有生命周期命令均用新 home 和明确 endpoint，例如 `paseo --home "$PASEO_TEST_HOME" --host "$PASEO_TEST_HOST" plugin ...`。白名单 env，不继承 agent 身份／token，relay/provider 禁用，可选适配器明确 false；真 provider 只用用户自己建立的隔离登录，不拷生产认证。
+child env 使用新测试 home，每条连接命令明确 CLI endpoint，例如 `paseo --host "$PASEO_TEST_HOST" plugin ...`，endpoint 为 `tcp://host:port`。本地 daemon 启动用 `--home "$PASEO_TEST_HOME"`；**不能同时传 --home 与 --host**，0.11.2 target guard 会拒绝。插件／SDK 的 `PASEO_URL` 另用带 `/ws` 的 WebSocket URL，不等于 CLI --host。白名单 env，不继承 agent 身份／token，relay/provider 禁用，可选适配器明确 false；真 provider 只用用户自己建立的隔离登录，不拷生产认证。
 
 | 重放项 | 要求与本文当前状态 |
 |---|---|
@@ -98,7 +98,7 @@ Git 代码回退在 `update --check --ref`／`update --ref` 指已验证旧公�
    paseo plugin ls paseo-kanban --json
    ```
 
-   非默认目标每条都加对应 `--home`／`--host`。不手改 source entries、不以 config reload 冒充生命周期切换。
+   非默认目标每条选择对应 `--host` endpoint 或本地 `--home`，绝不能同用。不手改 source entries、不以 config reload 冒充生命周期切换。
 4. 确认 Git 来源／完整 revision／新 path，server/board/Fleet/CLI/exports 同根，`KANBAN_HOME` 不绑废弃位置。恢复 settings／意图 enabled，刷新 CLI／导出；核策略／矩阵、roles、卡数、running/error/tick、真 desktop/phone 和允许的 demo 后才恢复派活。手机／provider 缺证据仍列未验证。
 5. 失败保持停写、旧 directory 不变。有 Git entry 才 disable/remove，然后 `paseo plugin install "$PREVIOUS_DIRECTORY" --json` 重装原 directory，恢复 settings/enabled，核同根/CLI/UI。变量为先记录的旧源码绝对路径；这是代码／来源恢复，不是数据恢复。
 

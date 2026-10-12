@@ -32,7 +32,7 @@ This uses the official Paseo CLI's GitHub acquisition path. The branch is a real
 
 1. In the intended host's **Settings -> Plugins**, turn on **Enable plugins** and the individual `paseo-kanban` switch. The global switch starts other individually enabled plugins too. You can enable this plugin with `paseo plugin enable paseo-kanban --json` once the global switch is on.
 2. Repeat `paseo plugin ls paseo-kanban --json`; require `running` without a load error. Open **Paseo Kanban** from that host's sidebar. Board, Fleet and Settings should share that entry. Check the actual page; `running` alone does not prove client mounting. A compact viewport does not prove a physical phone.
-3. Use the CLI's default daemon only if it is the intended one. For a different daemon, put `--host "$PASEO_TARGET"` before every `plugin` command. [Git installation](docs/GIT-INSTALL.md) explains host selection, version confirmation and developer directory installs.
+3. Use the CLI's default daemon only if it is the intended one. For a different daemon, put `--host "$PASEO_TARGET"` before every `plugin` command, using a CLI endpoint such as `tcp://host:port`. Use either `--host` or a nondefault local `--home`, never both. [Git installation](docs/GIT-INSTALL.md) explains host selection, version confirmation and developer directory installs.
 
 Installation performs locked dependency preparation and generates the command bundles. End users do not need a development checkout or a separate `npm run build`. An existing plugin with the same id makes `install` fail; use [update](#update-disable-or-remove) for a Git source, or the [source-switch runbook](docs/RELEASE.md#directory-to-git-switch-runbook) for a directory source.
 

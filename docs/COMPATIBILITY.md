@@ -34,10 +34,11 @@ paseo plugin ls paseo-kanban --json
 paseo plugin logs paseo-kanban --json
 ```
 
-For a different daemon, add the global `--host "$PASEO_TARGET"` before `plugin` on every command.
+For a different daemon, add `--host "$PASEO_TARGET"` before `plugin` on every command; use a CLI endpoint such as `tcp://host:port`. Choose `--home` or `--host`, never both. Plugin/SDK `PASEO_URL` instead uses the WebSocket URL with `/ws`.
 
 | Symptom | Next check |
 |---|---|
+| `TARGET_AMBIGUOUS` or malformed connection URL | Do not combine `--home` and `--host`. CLI endpoints use `tcp://host:port` or `host:port`; do not pass `ws://host:port/ws` as CLI `--host`. |
 | Git source/tag/ref not found | Use `github:jasonhnd/paseo-kanban` with the real integration branch or full public reviewed SHA. A local unpublished SHA, invented tag, bare registry id or assumed npm release is not that source. |
 | Same id already installed | Read source kind from `ls`. Update a managed Git source with explicit ref; a directory source needs the prepared remove/install switch. Repeated install does not replace it. |
 | Dependency/preparation/compiler error | Check daemon-host Node/npm/Git and `node:sqlite`, registry/network access and preparation output. A managed update failure retains the prior install; verify its revision and action. Do not build in its managed checkout. |
