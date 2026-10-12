@@ -1,0 +1,218 @@
+{
+  "version": 1,
+  "defaultTier": "L2",
+  "roles": {
+    "executor": {
+      "L1": [
+        {
+          "profile": "executor.gpt-6.1-sol",
+          "effort": "low"
+        },
+        {
+          "profile": "executor.sonnet",
+          "effort": "low"
+        },
+        {
+          "profile": "executor",
+          "effort": "low"
+        },
+        {
+          "profile": "batch",
+          "effort": null
+        }
+      ],
+      "L2": [
+        {
+          "profile": "executor.gpt-6.1-sol",
+          "effort": "medium"
+        },
+        {
+          "profile": "executor.sonnet",
+          "effort": "medium"
+        },
+        {
+          "profile": "executor",
+          "effort": "medium"
+        }
+      ],
+      "L3": [
+        {
+          "profile": "executor.sonnet",
+          "effort": "high"
+        },
+        {
+          "profile": "executor.gpt-6.1-sol",
+          "effort": "high"
+        },
+        {
+          "profile": "executor.opus",
+          "effort": "high"
+        },
+        {
+          "profile": "executor",
+          "effort": "high"
+        }
+      ],
+      "L4": [
+        {
+          "profile": "executor.opus",
+          "effort": "xhigh"
+        },
+        {
+          "profile": "executor.gpt-6.1-sol",
+          "effort": "xhigh"
+        },
+        {
+          "profile": "executor.sonnet",
+          "effort": "xhigh"
+        },
+        {
+          "profile": "executor",
+          "effort": "xhigh"
+        }
+      ]
+    },
+    "reviewer": {
+      "L1": [
+        {
+          "profile": "reviewer",
+          "effort": "low"
+        },
+        {
+          "profile": "reviewer.gpt-6.1-sol",
+          "effort": "medium"
+        },
+        {
+          "profile": "reviewer.grok",
+          "effort": "low"
+        }
+      ],
+      "L2": [
+        {
+          "profile": "reviewer",
+          "effort": "medium"
+        },
+        {
+          "profile": "reviewer.gpt-6.1-sol",
+          "effort": "high"
+        },
+        {
+          "profile": "reviewer.grok",
+          "effort": "medium"
+        }
+      ],
+      "L3": [
+        {
+          "profile": "reviewer",
+          "effort": "high"
+        },
+        {
+          "profile": "reviewer.gpt-6.1-sol",
+          "effort": "xhigh"
+        },
+        {
+          "profile": "reviewer.grok",
+          "effort": "high"
+        }
+      ],
+      "L4": [
+        {
+          "profile": "reviewer.fable",
+          "effort": "xhigh"
+        },
+        {
+          "profile": "reviewer.gpt-6.1-sol",
+          "effort": "xhigh"
+        },
+        {
+          "profile": "reviewer.grok",
+          "effort": "xhigh"
+        }
+      ]
+    },
+    "reader": {
+      "*": [
+        {
+          "profile": "reader",
+          "effort": "medium"
+        },
+        {
+          "profile": "reader.gpt-6.1-sol",
+          "effort": "high"
+        },
+        {
+          "profile": "reader.grok",
+          "effort": "high"
+        }
+      ]
+    },
+    "decision": {
+      "*": [
+        {
+          "profile": "decision",
+          "effort": "xhigh"
+        },
+        {
+          "profile": "decision.gpt-6.1-sol",
+          "effort": "xhigh"
+        },
+        {
+          "profile": "decision.grok",
+          "effort": "xhigh"
+        }
+      ]
+    },
+    "batch": {
+      "*": [
+        {
+          "profile": "batch",
+          "effort": null
+        },
+        {
+          "profile": "batch.gpt-6.1-sol",
+          "effort": "medium"
+        },
+        {
+          "profile": "batch.grok",
+          "effort": "low"
+        }
+      ]
+    },
+    "ops_vercel": {
+      "*": [
+        {
+          "profile": "ops.vercel",
+          "effort": "medium"
+        }
+      ]
+    },
+    "ops_cloudflare": {
+      "*": [
+        {
+          "profile": "ops.cloudflare",
+          "effort": "medium"
+        }
+      ]
+    },
+    "ops_github": {
+      "*": [
+        {
+          "profile": "ops.github",
+          "effort": "medium"
+        }
+      ]
+    },
+    "ops_notion": {
+      "*": [
+        {
+          "profile": "ops.notion",
+          "effort": "medium"
+        }
+      ]
+    }
+  },
+  "downgradeWhenTight": [
+    "L1",
+    "L2"
+  ]
+}

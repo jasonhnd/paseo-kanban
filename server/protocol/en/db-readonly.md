@@ -1,0 +1,1 @@
+Always open the board's production database in place with sqlite3 'file:<path>?mode=ro&immutable=1' (in code, use the readonly option); never copy the whole database. If you really need a writable copy, copy only the kanban.db file into /tmp/<card number>/.

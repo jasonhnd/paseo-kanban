@@ -1,0 +1,15 @@
+{
+  "opsProject": "paseo-fleet",
+  "language": "system",
+  "hiddenPlans": [],
+  "bannedProviders": [],
+  "adapters": {
+    "cursor-api": false,
+    "keychain": false,
+    "antigravity-cli": false
+  },
+  "leaderUsage": {
+    "reminderTokens": 500000,
+    "warningTokens": 750000
+  }
+}

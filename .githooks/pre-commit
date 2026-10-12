@@ -1,0 +1,15 @@
+#!/bin/sh
+# Refuse to commit anything personal. Run from the repository root.
+set -e
+cd "$(git rev-parse --show-toplevel)"
+node scripts/check-private.mjs            # staged files, generic rules + private denylist (required locally)
+node scripts/check-identity.mjs           # author/committer identity must be a placeholder or GitHub noreply
+if command -v gitleaks >/dev/null 2>&1; then
+  if gitleaks git --help >/dev/null 2>&1; then
+    gitleaks git --staged --redact --no-banner
+  else
+    gitleaks protect --staged --redact --no-banner
+  fi
+else
+  echo "pre-commit: gitleaks is not installed (brew install gitleaks); npm run verify, which pre-push runs, needs it" >&2
+fi

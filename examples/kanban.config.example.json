@@ -1,0 +1,28 @@
+{
+  "language": "system",
+  "autoStart": {},
+  "disabledPools": [],
+  "staleStopPct": {},
+  "families": {},
+  "bannedProviders": {
+    "providers": [],
+    "families": [],
+    "pools": [],
+    "models": []
+  },
+  "supervisorAgentId": null,
+  "supervisors": {},
+  "concurrency": {
+    "global": 5,
+    "pools": {},
+    "roles": {
+      "executor": 3,
+      "reviewer": 2,
+      "reader": 1,
+      "decision": 1,
+      "batch": 1,
+      "supervisor": 1
+    }
+  },
+  "projects": {}
+}

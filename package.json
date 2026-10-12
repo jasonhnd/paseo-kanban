@@ -1,0 +1,102 @@
+{
+  "name": "@jasonhnd/paseo-kanban",
+  "version": "0.1.0",
+  "description": "A single Paseo plugin for boards, roles, quota policies and decisions, with review by a different actual model.",
+  "license": "MIT",
+  "author": "jasonhnd",
+  "homepage": "https://github.com/jasonhnd/paseo-kanban#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jasonhnd/paseo-kanban.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jasonhnd/paseo-kanban/issues"
+  },
+  "keywords": [
+    "paseo",
+    "paseo-plugin",
+    "agents",
+    "kanban",
+    "review",
+    "dispatch"
+  ],
+  "type": "module",
+  "files": [
+    "paseo-plugin.json",
+    "OVERVIEW.md",
+    "LICENSE",
+    "index.client.tsx",
+    "index.server.ts",
+    "client/",
+    "server/",
+    "shared/",
+    "locales/",
+    "assets/",
+    "bin/paseo-kanban.mjs",
+    "bin/check-missing-cwd",
+    "bin/codex-kanban-launch",
+    "bin/*.bundle.mjs",
+    "examples/",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/__fixtures__/",
+    "!**/*.map",
+    "!server/contract/test/",
+    "bin/afc.mjs",
+    "bin/roles.mjs",
+    "!server/fleet/test/"
+  ],
+  "bin": {
+    "paseo-kanban": "bin/paseo-kanban.mjs",
+    "afc": "bin/afc.mjs",
+    "roles": "bin/roles.mjs"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "zod": "^4.4.3",
+    "@getpaseo/client": "0.11.0",
+    "@getpaseo/protocol": "0.11.0",
+    "@getpaseo/relay": "0.11.0"
+  },
+  "scripts": {
+    "hooks": "git config core.hooksPath .githooks",
+    "scan": "node scripts/check-private.mjs --all",
+    "identity": "node scripts/check-identity.mjs --history",
+    "pack:check": "node scripts/check-package-files.mjs --secret-scan",
+    "prepack:check": "npm run build",
+    "contract:check": "node scripts/check-single-source.mjs contract",
+    "shared:check": "node scripts/check-single-source.mjs gates",
+    "typecheck": "node scripts/typecheck.mjs",
+    "test": "node --test \"scripts/*.test.mjs\"",
+    "test:plugin": "node scripts/test-plugin.mjs",
+    "pretest:plugin": "npm run build",
+    "test:node": "node scripts/test-node.mjs",
+    "test:native": "node --import tsx --test test/native/*.integration.ts",
+    "verify": "node scripts/verify.mjs",
+    "build": "node scripts/build-cli.mjs",
+    "build:check": "node scripts/paseo-build-check.mjs --strict",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "@getpaseo/plugin": "0.11.0",
+    "@tanstack/react-query": "^5.90.11",
+    "@types/node": "^24",
+    "@types/react": "~19.2.0",
+    "c8": "^12.0.0",
+    "esbuild": "^0.28.2",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-test-renderer": "19.1.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "jsdom": "^30.1.1",
+    "react-dom": "19.1.0",
+    "react-native-web": "^0.21.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

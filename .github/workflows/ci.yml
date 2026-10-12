@@ -1,0 +1,25 @@
+name: ci
+on: [push, pull_request]
+# pull-requests: read lets gitleaks-action list a pull request's commits (a 403 there fails the step).
+permissions: { contents: read, pull-requests: read }
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: npm ci
+      # Gate 2: generic rules only; the private denylist never leaves the author's machine.
+      - run: node scripts/check-private.mjs --all --no-private-list
+      # Every commit's author and committer must be the placeholder or a GitHub noreply address.
+      - run: node scripts/check-identity.mjs --history --no-private-list
+      - uses: gitleaks/gitleaks-action@v3
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+      - run: npm run typecheck
+      - run: npm test
+      - run: node scripts/test-plugin.mjs
+      - run: node scripts/sync-contract.mjs --check
+      # Gate 3: npm pack --dry-run of the root package; every file must match the whitelist.
+      - run: node scripts/check-package-files.mjs --print

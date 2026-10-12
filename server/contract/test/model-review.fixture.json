@@ -1,0 +1,47 @@
+{
+  "profiles": [
+    { "name": "Demo executor", "role": "executor", "model": "demo-alpha", "family": "demo-family-a", "provider": "demo-provider-a", "pool": "demo-ready" },
+    { "name": "Demo same family reviewer", "role": "reviewer", "model": "demo-beta", "family": "demo-family-a", "provider": "demo-provider-a", "pool": "demo-ready", "notes": "High risk" },
+    { "name": "Demo same model reviewer", "role": "candidate", "candidateFor": "reviewer", "model": "demo-alpha", "family": "demo-family-b", "provider": "demo-provider-b", "pool": "demo-ready", "thinkingOptionId": "xhigh", "modeId": "demo-mode-b", "notes": "High risk" },
+    { "name": "Demo unknown reviewer", "role": "candidate", "candidateFor": "reviewer", "family": "demo-family-b", "provider": "demo-provider-b", "pool": "demo-ready", "notes": "High risk" },
+    { "name": "Demo ordinary reviewer", "role": "candidate", "candidateFor": "reviewer", "model": "demo-gamma", "family": "demo-family-b", "provider": "demo-provider-b", "pool": "demo-ready" },
+    { "name": "Demo paused reviewer", "role": "candidate", "candidateFor": "reviewer", "model": "demo-delta", "family": "demo-family-b", "provider": "demo-provider-b", "pool": "demo-paused", "notes": "High risk" }
+  ],
+  "base": {
+    "version": 1,
+    "defaultTier": "L2",
+    "downgradeWhenTight": ["L1", "L2"],
+    "roles": {
+      "executor": { "L2": [{ "profile": "Demo executor", "effort": "high" }] },
+      "reviewer": {
+        "L2": [
+          { "profile": "Demo same family reviewer", "effort": "high" },
+          { "profile": "Demo same model reviewer", "effort": "xhigh" },
+          { "profile": "Demo unknown reviewer", "effort": "high" },
+          { "profile": "Demo ordinary reviewer", "effort": "high" },
+          { "profile": "Demo paused reviewer", "effort": "high" }
+        ],
+        "L4": [
+          { "profile": "Demo same family reviewer", "effort": "xhigh" },
+          { "profile": "Demo same model reviewer", "effort": "xhigh" },
+          { "profile": "Demo unknown reviewer", "effort": "xhigh" },
+          { "profile": "Demo ordinary reviewer", "effort": "xhigh" },
+          { "profile": "Demo paused reviewer", "effort": "xhigh" }
+        ]
+      }
+    }
+  },
+  "pools": {
+    "demo-ready": { "dispatchable": true, "prefer": true },
+    "demo-paused": { "dispatchable": false, "prefer": false }
+  },
+  "cases": [
+    { "label": "same family different model", "executorModel": "demo-alpha", "reviewer": "Demo same family reviewer", "tier": "L2", "allowed": true },
+    { "label": "different family provider effort and mode, same model", "executorModel": "demo-alpha", "reviewer": "Demo same model reviewer", "tier": "L2", "allowed": false },
+    { "label": "missing actual executor model", "executorModel": null, "reviewer": "Demo same family reviewer", "tier": "L2", "allowed": false },
+    { "label": "missing reviewer model", "executorModel": "demo-alpha", "reviewer": "Demo unknown reviewer", "tier": "L2", "allowed": false },
+    { "label": "ordinary model cannot pass high risk", "executorModel": "demo-alpha", "reviewer": "Demo ordinary reviewer", "tier": "L4", "allowed": false },
+    { "label": "quota pause remains closed", "executorModel": "demo-alpha", "reviewer": "Demo paused reviewer", "tier": "L2", "allowed": false },
+    { "label": "high risk different model", "executorModel": "demo-alpha", "reviewer": "Demo same family reviewer", "tier": "L4", "allowed": true }
+  ]
+}

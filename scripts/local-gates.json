@@ -1,0 +1,15 @@
+[
+  "typecheck",
+  "test (scripts)",
+  "build (CLI)",
+  "build (Paseo)",
+  "test (plugin)",
+  "scan (check-private --all)",
+  "scan (reachable history)",
+  "identity (next commit)",
+  "identity (history)",
+  "gitleaks (history)",
+  "contract (single source + compatibility)",
+  "shared gates (single source)",
+  "pack:check"
+]

@@ -1,0 +1,15 @@
+{
+  "contract": "fleet-quota/v1",
+  "files": {
+    "server/contract/index.ts": "7fefcf6acc728d54a7322477140add34814229fa1f3b2163a770f6cfbe99e6f3",
+    "server/contract/io.ts": "cd2de75500d8250542bd9c6d7f87ea816ce335cc62f94b815d0b0570c44faf19",
+    "server/contract/paths.ts": "63a1fc1fbf0fd9f100ad64f56fba32e6f9fb32e75d52cbb1b1669e5f24ad4c8a",
+    "server/contract/test/fixtures.ts": "9f929e855310d2528823e5f16d46b49db3399158d17b32de6202f3b0bd38bb32",
+    "server/contract/test/io.test.ts": "3bf9205c9999aa5d0361595def3d0fe66576f406968adbc93825c809eabb1c78",
+    "server/contract/test/model-review.fixture.json": "116d4e17b880ede46317cdb0a0411825ee27b4721d562748fda431180a12b392",
+    "server/contract/test/paths.test.ts": "3b34867240aa4cd3891c2fd5ff84a96d7205674fe99ec11e819e9f490da96055",
+    "server/contract/test/schema.test.ts": "05f917e1bcc7db67c2a6998cd331f91aa3138d7726f77bcd611ba39505d5850a",
+    "shared/contract/index.ts": "467083a161867f36e383b167cd9d98193688819b233c26b6be9052e7f13e164b",
+    "shared/contract/schema.ts": "43b51e0557bffe0d9c8477ad5b50eb3d522bfc13dec723b5c88d96e6e3098931"
+  }
+}

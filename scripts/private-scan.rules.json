@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "neverPublicPaths": ["^docs/validation/hourly-quota(?:/|$)"],
+  "privateIdentifierExceptions": [
+    { "termParts": ["jo", "bs"], "path": "^server/cleanup-state\\.ts$", "function": "trackCleanupWork" }
+  ],
+  "ignorePaths": ["^node_modules/", "^package-lock\\.json$", "\\.(png|jpg|jpeg|gif|webp|mp4|ico|woff2?)$"],
+  "forbiddenPaths": {
+    "patterns": [
+      "(^|/)(plans|access-map|decisions|kanban\\.config|usage-ledger|pool-status|dispatch-matrix|cursor-token|supervisor|doctor-report|quota-history)[^/]*\\.(json|jsonl|token)$",
+      "(^|/)(ops|tmp|backups|state|data|archive)/",
+      "\\.(db|sqlite|db-wal|db-shm|log|jsonl|bak|pem|key|p12)$",
+      "(^|/)\\.env(\\..*)?$"
+    ],
+    "allow": ["\\.example\\.json$", "(^|/)__fixtures__/", "^docs/.*\\.md$"]
+  },
+  "rules": [
+    { "id": "home-path", "why": "absolute home directory",
+      "pattern": "(^|[^A-Za-z0-9_])/(Users|home)/[A-Za-z0-9._-]+/",
+      "allow": ["/(Users|home)/(me|you|user|<user>|example)/"] },
+    { "id": "windows-home", "pattern": "[A-Za-z]:\\\\Users\\\\[A-Za-z0-9._-]+\\\\" },
+    { "id": "email", "why": "any e-mail address",
+      "pattern": "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}",
+      "allow": ["@example\\.(com|org|invalid)$", "@users\\.noreply\\.github\\.com$", "^noreply@"] },
+    { "id": "uuid", "why": "agent, session or workspace ids",
+      "pattern": "\\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\b",
+      "allow": ["^00000000-0000-4000-8000-[0-9a-f]{12}$", "^(aaaaaaaa|11111111|deadbeef)-"] },
+    { "id": "paseo-id", "pattern": "\\b(wks|prj|srv|ses)_[0-9a-f]{12,}\\b", "allow": ["_0{12,}$"] },
+    { "id": "card-code", "why": "board card numbers from a real board",
+      "pattern": "\\b[A-Z]{2,5}_\\d{4}\\b", "allow": ["^(DEMO|EX|ABC|XYZ|TEST)_"] },
+    { "id": "api-key",
+      "pattern": "\\b(sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36}|gho_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|xox[abpr]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|npm_[A-Za-z0-9]{36}|xai-[A-Za-z0-9]{20,})\\b" },
+    { "id": "private-key", "pattern": "-----BEGIN [A-Z ]*PRIVATE KEY-----" },
+    { "id": "jwt", "pattern": "\\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\b" },
+    { "id": "bearer", "pattern": "Bearer [A-Za-z0-9._~+/-]{24,}=*", "allow": ["Bearer <token>", "Bearer \\$\\{?[A-Z_]+"] },
+    { "id": "url-with-token", "pattern": "https?://[^\\s\"']*[?&](token|key|secret|sig)=[^\\s\"'&]{8,}" },
+    { "id": "cjk-outside-locales", "why": "all user- and agent-facing text goes through i18n",
+      "pattern": "[\\u3040-\\u30ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\uac00-\\ud7af\\uff01-\\uff5e]",
+      "onlyPaths": ["^(?!(packages/[^/]+/|[^/]+/)?((shared/)?locales/zh-CN(\\.json$|/)|server/protocol/zh-CN/)|docs/zh-CN/)"] }
+  ]
+}

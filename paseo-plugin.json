@@ -1,0 +1,14 @@
+{
+  "id": "paseo-kanban",
+  "name": "Paseo Kanban",
+  "description": "A single Paseo plugin for boards, roles, quota policies and decisions, with review by a different actual model.",
+  "requirements": {
+    "paseo": ">=0.11.0 <0.12.0"
+  },
+  "build": [
+    [
+      "node",
+      "server/prepare.mjs"
+    ]
+  ]
+}

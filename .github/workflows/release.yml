@@ -1,0 +1,40 @@
+name: release
+# Manual only. Publishes this repository's package (the repository root is the plugin) with npm trusted
+# publishing (OIDC): no npm token is stored anywhere, and every release carries a provenance statement.
+# Set up a trusted publisher for the package on npmjs.com (this repository, workflow release.yml) before
+# the first run.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Run every gate and npm publish --dry-run, publish nothing
+        type: boolean
+        default: true
+permissions:
+  contents: read
+  id-token: write
+concurrency: { group: release, cancel-in-progress: false }
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, registry-url: "https://registry.npmjs.org" }
+      # Trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
+      - run: npm install -g npm@^11.5.1
+      - run: npm ci
+      - run: node scripts/check-private.mjs --all --no-private-list
+      - run: node scripts/check-identity.mjs --history --no-private-list
+      - uses: gitleaks/gitleaks-action@v3
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+      - run: npm run typecheck
+      - run: npm test
+      - run: node scripts/test-plugin.mjs
+      - run: node scripts/sync-contract.mjs --check
+      - run: node scripts/check-package-files.mjs --print
+      - name: Publish
+        env:
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: npm publish --access public --provenance $DRY_RUN

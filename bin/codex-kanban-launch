@@ -1,0 +1,56 @@
+#!/bin/sh
+# Paseo's Codex command prefix. Only board processes disable automatic memories.
+set -eu
+
+fail() {
+  printf 'codex-kanban-launch: %s\n' "$1" >&2
+  exit 127
+}
+
+wrapper=$0
+case "$wrapper" in
+  */*) ;;
+  *) wrapper=$(command -v "$wrapper") || fail 'cannot locate this wrapper' ;;
+esac
+
+# Walk PATH ourselves: command -v codex may return this wrapper's symlink.
+# -ef compares file identity, including symlinks and hard links (macOS/Linux sh).
+find_on_path() {
+  search_path=${PATH-}
+  while :; do
+    case "$search_path" in
+      *:*) entry=${search_path%%:*}; search_path=${search_path#*:}; more=1 ;;
+      *) entry=$search_path; more=0 ;;
+    esac
+    candidate=${entry:-.}/$1
+    if [ -f "$candidate" ] && [ -x "$candidate" ] && ! [ "$candidate" -ef "$wrapper" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+    [ "$more" = 1 ] || return 1
+  done
+}
+
+if [ -n "${KANBAN_REAL_CODEX-}" ]; then
+  case "$KANBAN_REAL_CODEX" in
+    */*) real_codex=$KANBAN_REAL_CODEX ;;
+    *) real_codex=$(find_on_path "$KANBAN_REAL_CODEX") || fail 'KANBAN_REAL_CODEX was not found outside this wrapper' ;;
+  esac
+  [ -f "$real_codex" ] && [ -x "$real_codex" ] || fail 'KANBAN_REAL_CODEX is not an executable file'
+  ! [ "$real_codex" -ef "$wrapper" ] || fail 'KANBAN_REAL_CODEX points to this wrapper (recursive launch refused)'
+else
+  real_codex=$(find_on_path codex) || fail 'real codex not found in PATH; set KANBAN_REAL_CODEX to its executable path'
+fi
+
+if [ "${PASEO_\
+KANBAN-}" = 1 ]; then
+  set -- -c memories.generate_memories=false -c features.memories=false "$@"
+fi
+
+# Optional argv-only debugging. Each record is argc\0arg1\0...argN\0, so empty
+# arguments and embedded newlines round-trip. Never record environment values.
+if [ -n "${KANBAN_CODEX_WRAPPER_LOG-}" ]; then
+  printf '%s\000' "$#" "$@" >> "$KANBAN_CODEX_WRAPPER_LOG" || fail 'cannot append to KANBAN_CODEX_WRAPPER_LOG'
+fi
+
+exec "$real_codex" "$@"

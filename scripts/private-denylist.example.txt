@@ -1,0 +1,11 @@
+# paseo-fleet private denylist. One term per line.
+# Plain text = case-insensitive literal. /regex/flags = regular expression. Lines starting with # are ignored.
+# Keep this file OUTSIDE every repository: the default location is ~/.config/paseo-fleet/private-denylist.txt
+# (or set FLEET_PRIVATE_DENYLIST). Put in it everything that identifies you and must never be published:
+# your login name, real name, e-mail user part, project and directory names, board prefixes.
+your-login-name
+your-email-user
+/\bYourFirstName\b/
+your-workspace-folder
+your-private-project
+/\b(ABC|XYZ)_\d{4}\b/

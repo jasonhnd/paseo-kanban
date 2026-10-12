@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "importMode": "public source trees only; never merge source ancestry",
+  "inputs": [
+    {
+      "name": "kanban",
+      "commit": "6ca7f562fb21938c16eec2991972a14995fd2d56",
+      "tree": "5ad320758f34637e18b985fd14bda3096321fb7f",
+      "trackedPaths": 576,
+      "counts": {
+        ".githooks": 2,
+        ".github": 5,
+        "root": 14,
+        "bin": 6,
+        "client": 20,
+        "docs": 29,
+        "examples": 1,
+        "scripts": 24,
+        "server": 206,
+        "shared": 21,
+        "test": 248
+      },
+      "primaryObjects": {
+        "contract.manifest.json": "1986a2b4978c19bdff45dc751bfbb69ac8c51bcb",
+        "index.client.tsx": "4492acc52113c2d4b5b376cbf7d9ef2a6b4ac6f0",
+        "index.server.ts": "9572078adcce0011c15f14b9a3d12843d635b223",
+        "package-lock.json": "3aa55823747258b99cbf3a4f535edacf2cc06e3f",
+        "package.json": "6d1baa50dc4bb959be58817940d9c9f18b490531",
+        "paseo-plugin.json": "b6416be1135b4140d8d464b56e7bba20ec3ee93e",
+        "server/paths.ts": "9086a6e35e68097228daa1ad0a80a8c18b196698",
+        "shared/contract/schema.ts": "ddb582584e00fc3333d1936eb9f3d627fcf6b299"
+      }
+    },
+    {
+      "name": "fleet",
+      "commit": "a383ec4a7406f221ed4ef3dea69a3e692008c1d6",
+      "tree": "8ead44922b954be7adc10eda6990bba74cb0eeff",
+      "trackedPaths": 384,
+      "counts": {
+        ".githooks": 2,
+        ".github": 5,
+        "root": 14,
+        "bin": 6,
+        "client": 29,
+        "docs": 24,
+        "examples": 2,
+        "scripts": 24,
+        "server": 180,
+        "shared": 97,
+        "test": 1
+      },
+      "primaryObjects": {
+        "contract.manifest.json": "323879e6f53bd7f24af3c16d09edfe8ac2bf94f0",
+        "index.client.tsx": "c28f3ff6e9861d1bbfd53cb352354ff94e3b51f9",
+        "index.server.ts": "4c9c692633fff4f62ead844e23dd1acef3716986",
+        "package-lock.json": "e75c8cca85218c60d969a4473610f69de16913bd",
+        "package.json": "1ed99b8d91edce835152dbfdd9490f069437a752",
+        "paseo-plugin.json": "cd6e6f57827f4309ac67f11ea24a2fbf2326f888",
+        "server/paths.ts": "2c08ac6d999861483d8ae38c4a8f82e308847b46",
+        "server/pools-status.ts": "f215922cccdca34fc001bfc0c8a0c191f7863cc6",
+        "server/provider-usage.ts": "d0d89037606a48182638833e05848313a22f20e1",
+        "server/quota-sampling.ts": "716c7f32dbf2c28f4a0cca26b8cb67e4b6f87ed2",
+        "shared/contract/schema.ts": "fdba460da1e1fe733d066017be7f795ff366771a",
+        "shared/review-model.ts": "658a912eaa2bc81a8d5fbe85da8c7ac050fd306d",
+        "shared/roles-policy.ts": "48b0b38ab7050e54e66c414c168e805843f70241",
+        "shared/quota-time.ts": "f9733d137db083ddd3258f3f36bccef2e8776652",
+        "server/quota-timing.ts": "4cad7c511ab021187a09df41c82c0ee4ab86b0da",
+        "server/dispatch.ts": "4d690b6c124947dfe238cb3c9ae535cabc588f2a",
+        "server/pools-reviewer.ts": "fa1e0f5409c399718d2c52d7e9b10a982386f564",
+        "server/test/model-review.test.ts": "9e2f30b38a5cedb0f7b0202cc3f3a84f84a7b038",
+        "server/test/model-review-mount.test.ts": "2c5541d0b1df98ab2f33efc22070ff07f7e3adb9",
+        "server/test/quota-sampling.test.ts": "38fe2d65f2deb64df5439ea5e9a8a3f639784911",
+        "server/test/provider-status.test.ts": "647e1e91227ee947a7cfa639370f97984dd10fcf",
+        "server/test/roles-language.test.ts": "b1680811f4cf66efcc02d409c2981f76a359f9c2",
+        "server/contract/test/model-review.fixture.json": "53ea4ce024cea07c4e81f263c1c8beb7f3c16037"
+      },
+      "includedAncestors": {
+        "hourlySampling": "31d9e0277401b158d42de717eced811f36518248",
+        "modelComparator": "a2545d0b39ef84b920b5ab3be7c4ca7b101b31e2"
+      }
+    }
+  ],
+  "prohibitedImports": [
+    "private repository ancestry",
+    "runtime data and databases",
+    "private handoffs and archives",
+    "credentials",
+    "docs/validation/hourly-quota"
+  ],
+  "publicationStatus": "stopped: card identifiers in selected commit messages; actual package privacy findings also remain",
+  "foundationImplementation": "7ee23d6907cf06eb6c8f158bcd449588f2b81a4c"
+}

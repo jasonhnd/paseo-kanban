@@ -1,0 +1,1484 @@
+{
+  "version": 1,
+  "sourceCommit": "a383ec4a7406f221ed4ef3dea69a3e692008c1d6",
+  "sourceTree": "8ead44922b954be7adc10eda6990bba74cb0eeff",
+  "mode": "blob contents only; no donor ancestry",
+  "imports": [
+    {
+      "source": "bin/afc.mjs",
+      "blob": "a8430f5f3c64d585d5d248209edb51d6f3a5ccdd",
+      "destination": "bin/afc.mjs"
+    },
+    {
+      "source": "bin/coupon.ts",
+      "blob": "0b072d2b975590a3bde4c29cc95fa12dbb8c69fe",
+      "destination": "server/fleet/coupon-cli.ts"
+    },
+    {
+      "source": "bin/daemon-client.ts",
+      "blob": "0eb3b23f2e2c79c193abbb7819672469d1567902",
+      "destination": "server/fleet/daemon-client.ts"
+    },
+    {
+      "source": "bin/roles.mjs",
+      "blob": "cad0af9adb4ac1633a266a9f54120aaa64d3560c",
+      "destination": "bin/roles.mjs"
+    },
+    {
+      "source": "client/access.tsx",
+      "blob": "07edca1fb00a6ed92d57ca4f5c648c9a6fa77020",
+      "destination": "client/fleet/access.tsx"
+    },
+    {
+      "source": "client/antigravity-quota.tsx",
+      "blob": "d3e32babd4d6d211e7be11114eefa93a2ae05b6d",
+      "destination": "client/fleet/antigravity-quota.tsx"
+    },
+    {
+      "source": "client/board.tsx",
+      "blob": "c3e2eafe488e3a1ff692c6eb5f3e51521511f115",
+      "destination": "client/fleet/board.tsx"
+    },
+    {
+      "source": "client/decision-actions.tsx",
+      "blob": "db6a65290d69ddf7dff5daa8c6b89daa7c115578",
+      "destination": "client/fleet/decision-actions.tsx"
+    },
+    {
+      "source": "client/decision-card.tsx",
+      "blob": "d71d14fe404c63671a28cada0877a24ce7981edc",
+      "destination": "client/fleet/decision-card.tsx"
+    },
+    {
+      "source": "client/decisions.tsx",
+      "blob": "c778ca9941913297f48233605c0829d7bb60c3cb",
+      "destination": "client/fleet/decisions.tsx"
+    },
+    {
+      "source": "client/dispatch-settings.tsx",
+      "blob": "dcd943aaa030e46c885447af3610057b647399b3",
+      "destination": "client/fleet/dispatch-settings.tsx"
+    },
+    {
+      "source": "client/doctor.tsx",
+      "blob": "d05f757bc32ef76c9a22892c688d58433ce4f4f8",
+      "destination": "client/fleet/doctor.tsx"
+    },
+    {
+      "source": "client/home-leaders.tsx",
+      "blob": "70c2badc56f0fa992b48f05ae5f9df22a3657b89",
+      "destination": "client/fleet/home-leaders.tsx"
+    },
+    {
+      "source": "client/home-quota.tsx",
+      "blob": "6d223b43c4e1ce31bfbce7ce2bffdae8695b267e",
+      "destination": "client/fleet/home-quota.tsx"
+    },
+    {
+      "source": "client/home-roles.tsx",
+      "blob": "b644ebc126062e4b3a8424f8e2f77de84c1b500f",
+      "destination": "client/fleet/home-roles.tsx"
+    },
+    {
+      "source": "client/home-tokens.tsx",
+      "blob": "e651459acccdffa70ed98aaa2d024213e83e4cdf",
+      "destination": "client/fleet/home-tokens.tsx"
+    },
+    {
+      "source": "client/home.tsx",
+      "blob": "ab7047acbe3e3217375783f7dc816d23bf7caaef",
+      "destination": "client/fleet/home.tsx"
+    },
+    {
+      "source": "client/leader-attention.tsx",
+      "blob": "008d9a4f2304b2840c213b910b99f4e6a69f486a",
+      "destination": "client/fleet/leader-attention.tsx"
+    },
+    {
+      "source": "client/leader-details.tsx",
+      "blob": "c34b8fb7af6b2905708c74b8470719cd2df2c8cc",
+      "destination": "client/fleet/leader-details.tsx"
+    },
+    {
+      "source": "client/leader-reply.tsx",
+      "blob": "b343de7292a6fe7ddfe93856a367ed36b7a5b4d3",
+      "destination": "client/fleet/leader-reply.tsx"
+    },
+    {
+      "source": "client/onboarding.tsx",
+      "blob": "6c6600b5517339cea5f2e55174f497453629bfdc",
+      "destination": "client/fleet/onboarding.tsx"
+    },
+    {
+      "source": "client/panel-tabs.tsx",
+      "blob": "73a262dc4965060794a18c13b21d7330963c61f5",
+      "destination": "client/fleet/panel-tabs.tsx"
+    },
+    {
+      "source": "client/quota-plans.tsx",
+      "blob": "7cb51f46d4c89584b171b64e184238f36bc6c61a",
+      "destination": "client/fleet/quota-plans.tsx"
+    },
+    {
+      "source": "client/quota.tsx",
+      "blob": "17c57c2fa97bb1e606e051e31c746782cf10c6c7",
+      "destination": "client/fleet/quota.tsx"
+    },
+    {
+      "source": "client/records.tsx",
+      "blob": "bc68250c93d8ee8c1398a1d9120be9e9af3a1c1d",
+      "destination": "client/fleet/records.tsx"
+    },
+    {
+      "source": "client/roles-history.tsx",
+      "blob": "3deecdaaa7106653da5ed6a0b49ccf8a18bd3d72",
+      "destination": "client/fleet/roles-history.tsx"
+    },
+    {
+      "source": "client/roles.tsx",
+      "blob": "a9d511540470b640ffcfbf12b3ccc9a3d990be07",
+      "destination": "client/fleet/roles.tsx"
+    },
+    {
+      "source": "client/settings-language.ts",
+      "blob": "f47a3b422914ed28833ed0db2466e48bfb2d480c",
+      "destination": "client/fleet/settings-language.ts"
+    },
+    {
+      "source": "client/settings.tsx",
+      "blob": "bc0fd84e97dfd471e0c6159b4027f0860ab8b011",
+      "destination": "client/fleet/settings.tsx"
+    },
+    {
+      "source": "client/tab-pane.tsx",
+      "blob": "ed4871f62381502e33cecb184aa9e31f14cd2a57",
+      "destination": "client/fleet/tab-pane.tsx"
+    },
+    {
+      "source": "client/theme.ts",
+      "blob": "f1bb7b3d38bd18ee58a85db0bd9c04fa43831462",
+      "destination": "client/fleet/theme.ts"
+    },
+    {
+      "source": "client/ui.tsx",
+      "blob": "4fa600716857d1dcf78cff898210cf28480729a4",
+      "destination": "client/fleet/ui.tsx"
+    },
+    {
+      "source": "client/work.tsx",
+      "blob": "ef542fb32df67ec20d3f5c3f705e6b3ae64ccea7",
+      "destination": "client/fleet/work.tsx"
+    },
+    {
+      "source": "index.server.ts",
+      "blob": "4c9c692633fff4f62ead844e23dd1acef3716986",
+      "destination": "server/fleet/service.ts"
+    },
+    {
+      "source": "server/access.ts",
+      "blob": "5b45638a0386612bfe577d347ee0f004e871dd9c",
+      "destination": "server/fleet/access.ts"
+    },
+    {
+      "source": "server/adapters/config.ts",
+      "blob": "904bbea49c0fecb974d0fc6a7663a4b49020e48e",
+      "destination": "server/fleet/adapters/config.ts"
+    },
+    {
+      "source": "server/adapters/plans.ts",
+      "blob": "32792a82099c8c0e30d09fb779c528a37e32b574",
+      "destination": "server/fleet/adapters/plans.ts"
+    },
+    {
+      "source": "server/adapters/windows.ts",
+      "blob": "a667ffe4363ba2bb0e3147eda76393473c511e0e",
+      "destination": "server/fleet/adapters/windows.ts"
+    },
+    {
+      "source": "server/commands.ts",
+      "blob": "0eab25ae9c080b49b85ebec332254c2b35463859",
+      "destination": "server/fleet/commands.ts"
+    },
+    {
+      "source": "server/compat-audit.ts",
+      "blob": "22d0f281a5a3ede2fd75aae9650efd6f236f6d90",
+      "destination": "server/fleet/compat-audit.ts"
+    },
+    {
+      "source": "server/contract/index.ts",
+      "blob": "0de0efbcf36b1be07d041ecbcc75cfec0e9587b9",
+      "destination": "server/contract/index.ts"
+    },
+    {
+      "source": "server/contract/io.ts",
+      "blob": "3dc3737101616fdf9ac1fe5c641537a75be6d5a2",
+      "destination": "server/contract/io.ts"
+    },
+    {
+      "source": "server/contract/paths.ts",
+      "blob": "0833132d1e12a9817c0ab08e4324cf2158d16406",
+      "destination": "server/contract/paths.ts"
+    },
+    {
+      "source": "server/contract/test/fixtures.ts",
+      "blob": "d4db498ff5869a6904ecf93aa2a3b38b29af0249",
+      "destination": "server/contract/test/fixtures.ts"
+    },
+    {
+      "source": "server/contract/test/io.test.ts",
+      "blob": "30c312367c534210f6a82e565e3fefd9860979d0",
+      "destination": "server/contract/test/io.test.ts"
+    },
+    {
+      "source": "server/contract/test/model-review.fixture.json",
+      "blob": "53ea4ce024cea07c4e81f263c1c8beb7f3c16037",
+      "destination": "server/contract/test/model-review.fixture.json"
+    },
+    {
+      "source": "server/contract/test/paths.test.ts",
+      "blob": "2070c2181e085d6ad927997b4003a99d2402ed54",
+      "destination": "server/contract/test/paths.test.ts"
+    },
+    {
+      "source": "server/contract/test/schema.test.ts",
+      "blob": "1bc6f08af48836bbe609712e4ed3cc89637cb746",
+      "destination": "server/contract/test/schema.test.ts"
+    },
+    {
+      "source": "server/coupon-use.ts",
+      "blob": "af5db0f3f2fb68d6fd07bf346d80002f8386bae5",
+      "destination": "server/fleet/coupon-use.ts"
+    },
+    {
+      "source": "server/cursor-api.ts",
+      "blob": "3c11b0ae120adc6cc56988d53fbe1521c8281e58",
+      "destination": "server/fleet/cursor-api.ts"
+    },
+    {
+      "source": "server/cursor-login.ts",
+      "blob": "b7522c9c6e8211a805eff0852b5b676c6a3ac5c9",
+      "destination": "server/fleet/cursor-login.ts"
+    },
+    {
+      "source": "server/cursor-parse.ts",
+      "blob": "bdf8e4ce951989054622ada080c10abf95cc2fb7",
+      "destination": "server/fleet/cursor-parse.ts"
+    },
+    {
+      "source": "server/cursor-token-store.ts",
+      "blob": "343a8bea878b0ca35a4d3b8ff10ca54e06ea9321",
+      "destination": "server/fleet/cursor-token-store.ts"
+    },
+    {
+      "source": "server/cursor-usage.ts",
+      "blob": "e89f7a855c29b6da8299edc6d9f2fdcff4e401c8",
+      "destination": "server/fleet/cursor-usage.ts"
+    },
+    {
+      "source": "server/daemon-log.ts",
+      "blob": "57cef9bfb9f6360d50f486fc7ced1480627a0f14",
+      "destination": "server/fleet/daemon-log.ts"
+    },
+    {
+      "source": "server/daemon-watch.ts",
+      "blob": "13689e062c1d7778f50da6c55ac60d215048ff23",
+      "destination": "server/fleet/daemon-watch.ts"
+    },
+    {
+      "source": "server/decide-change.ts",
+      "blob": "9207eff735a7e0e53604c33d36c1083f49e76ffb",
+      "destination": "server/fleet/decide-change.ts"
+    },
+    {
+      "source": "server/decide-reply.ts",
+      "blob": "3c03442fc7f8e5eae2dff3afa0558cd01e80d537",
+      "destination": "server/fleet/decide-reply.ts"
+    },
+    {
+      "source": "server/decision-check.ts",
+      "blob": "5a250b8e8198bce78ee672a8274cf6c867de8600",
+      "destination": "server/fleet/decision-check.ts"
+    },
+    {
+      "source": "server/decisions-maint.ts",
+      "blob": "51e52c3d092fe6d6dd89e5dbd43f85fe92bbdedb",
+      "destination": "server/fleet/decisions-maint.ts"
+    },
+    {
+      "source": "server/dispatch-settings.ts",
+      "blob": "d52aa955b59a72dbb128237904d09e0416c4cab9",
+      "destination": "server/fleet/dispatch-settings.ts"
+    },
+    {
+      "source": "server/dispatch.ts",
+      "blob": "4d690b6c124947dfe238cb3c9ae535cabc588f2a",
+      "destination": "server/fleet/dispatch.ts"
+    },
+    {
+      "source": "server/doctor-cli.ts",
+      "blob": "6355f024a7d4a8aafe4f5c366ca348524b5370dd",
+      "destination": "server/fleet/doctor-cli.ts"
+    },
+    {
+      "source": "server/doctor-daily.ts",
+      "blob": "05c0531fd7d29afb31e341e2b539ac7555b6004b",
+      "destination": "server/fleet/doctor-daily.ts"
+    },
+    {
+      "source": "server/doctor.ts",
+      "blob": "d5f22d99b3bc0547baeec8796de4bbcfbb90321c",
+      "destination": "server/fleet/doctor.ts"
+    },
+    {
+      "source": "server/early-reset.ts",
+      "blob": "8006e56b463ff314803e655e7b440cf6c736d130",
+      "destination": "server/fleet/early-reset.ts"
+    },
+    {
+      "source": "server/exports.ts",
+      "blob": "a4128b690d10eefc80a62b3b19fc70f7096844d6",
+      "destination": "server/fleet/exports.ts"
+    },
+    {
+      "source": "server/grok-usage.ts",
+      "blob": "a1dbd1c4ed01da95608d0ce4e067b90fe00858a0",
+      "destination": "server/fleet/grok-usage.ts"
+    },
+    {
+      "source": "server/home-feed.ts",
+      "blob": "2e51ec9207eb6d2a4b1a046bdc3c140f80069dfd",
+      "destination": "server/fleet/home-feed.ts"
+    },
+    {
+      "source": "server/insights.ts",
+      "blob": "75aa2c7055105d08cc83b04fea583260f0b42477",
+      "destination": "server/fleet/insights.ts"
+    },
+    {
+      "source": "server/kanban-source.ts",
+      "blob": "139124f4b17198183e461953d435ed00b7dabe7d",
+      "destination": "server/fleet/kanban-source.ts"
+    },
+    {
+      "source": "server/kanban.ts",
+      "blob": "b14b0483a64ed219f0bfb0dd6e6021db8fd318cc",
+      "destination": "server/fleet/kanban.ts"
+    },
+    {
+      "source": "server/keychain-probe.ts",
+      "blob": "0f0f9b37e2942f9d73f35caf018c01bc06e88a40",
+      "destination": "server/fleet/keychain-probe.ts"
+    },
+    {
+      "source": "server/language.ts",
+      "blob": "26b0792256705dbf9bf960d556f3f842f4d26942",
+      "destination": "server/fleet/language.ts"
+    },
+    {
+      "source": "server/leader-activity-archive.ts",
+      "blob": "e536530ebd31de43e1ca0dbf14ed166f893a2d1f",
+      "destination": "server/fleet/leader-activity-archive.ts"
+    },
+    {
+      "source": "server/leader-cli.ts",
+      "blob": "1b9bcde988e1f7ad420daf3b82733234943e0c19",
+      "destination": "server/fleet/leader-cli.ts"
+    },
+    {
+      "source": "server/leader-command.ts",
+      "blob": "635c5f0c7bb58d51d494dad11834bbec2debd9e5",
+      "destination": "server/fleet/leader-command.ts"
+    },
+    {
+      "source": "server/leader-nudge.ts",
+      "blob": "4e37dd636eedfd7d0367cc3248e995d48bb7ad93",
+      "destination": "server/fleet/leader-nudge.ts"
+    },
+    {
+      "source": "server/leader-panel.ts",
+      "blob": "81c77b7018d37bf641d6d3342a883490dbb42439",
+      "destination": "server/fleet/leader-panel.ts"
+    },
+    {
+      "source": "server/leader-reply.ts",
+      "blob": "0aef476b7091cc5a2fadeb70dab3f7d3c9cef7df",
+      "destination": "server/fleet/leader-reply.ts"
+    },
+    {
+      "source": "server/leader-rpc-client.ts",
+      "blob": "d28cc9cff3e63cab129c3027dcc38fb4de3a5a59",
+      "destination": "server/fleet/leader-rpc-client.ts"
+    },
+    {
+      "source": "server/leader-week.ts",
+      "blob": "79d7817079b52cf31931575ec2e1fdf55b38b5e1",
+      "destination": "server/fleet/leader-week.ts"
+    },
+    {
+      "source": "server/ledger.ts",
+      "blob": "6a25eaa80c768b9a8c46fbff85d70499944cb3a4",
+      "destination": "server/fleet/ledger.ts"
+    },
+    {
+      "source": "server/node-paths.ts",
+      "blob": "3fe4d29dac3488b9a02c7f3bec9ac79040d2ea15",
+      "destination": "server/fleet/node-paths.ts"
+    },
+    {
+      "source": "server/panel-prefs.ts",
+      "blob": "0b85d193d93e436dd3ebd6eb426790872e556d7d",
+      "destination": "server/fleet/panel-prefs.ts"
+    },
+    {
+      "source": "server/paseo-api.ts",
+      "blob": "5407d95023413b55f722bcb9f4b91b2860e78d24",
+      "destination": "server/fleet/paseo-api.ts"
+    },
+    {
+      "source": "server/paseo-client.bundle.d.mts",
+      "blob": "cedaa0e4065005d8e8c0c9a4c96220d9191fd753",
+      "destination": "server/fleet/paseo-client.bundle.d.mts"
+    },
+    {
+      "source": "server/paths.ts",
+      "blob": "2c08ac6d999861483d8ae38c4a8f82e308847b46",
+      "destination": "server/fleet/paths.ts"
+    },
+    {
+      "source": "server/paused.ts",
+      "blob": "0a335edf27b25a9361713c71296fec68af010967",
+      "destination": "server/fleet/paused.ts"
+    },
+    {
+      "source": "server/platform.ts",
+      "blob": "44c25e2b1aa32dd964414900e34824a4412e5955",
+      "destination": "server/fleet/platform.ts"
+    },
+    {
+      "source": "server/pool-refresh.ts",
+      "blob": "988b0a6a6b743a690271c4afa3c982c72300a527",
+      "destination": "server/fleet/pool-refresh.ts"
+    },
+    {
+      "source": "server/pools-alerts.ts",
+      "blob": "a2cd34ef602c081029293f7de484d96b7b3d64ec",
+      "destination": "server/fleet/pools-alerts.ts"
+    },
+    {
+      "source": "server/pools-hard.ts",
+      "blob": "1b7a9bad4f42af945244b528c589908dc92023a5",
+      "destination": "server/fleet/pools-hard.ts"
+    },
+    {
+      "source": "server/pools-pace.ts",
+      "blob": "ddf037e6031cbc2a660bc9fffb0973873dbc58e7",
+      "destination": "server/fleet/pools-pace.ts"
+    },
+    {
+      "source": "server/pools-reviewer.ts",
+      "blob": "fa1e0f5409c399718d2c52d7e9b10a982386f564",
+      "destination": "server/fleet/pools-reviewer.ts"
+    },
+    {
+      "source": "server/pools-status.ts",
+      "blob": "f215922cccdca34fc001bfc0c8a0c191f7863cc6",
+      "destination": "server/fleet/pools-status.ts"
+    },
+    {
+      "source": "server/pools-types.ts",
+      "blob": "37da361b66d6a9c136f1c354375fd6f5b5640537",
+      "destination": "server/fleet/pools-types.ts"
+    },
+    {
+      "source": "server/pools-unread.ts",
+      "blob": "645f0afabf9682ac4ced6a882359fabc51513e80",
+      "destination": "server/fleet/pools-unread.ts"
+    },
+    {
+      "source": "server/pools-windows.ts",
+      "blob": "4efaacb3b3b037e57243d2ea78c5516b06bca0ee",
+      "destination": "server/fleet/pools-windows.ts"
+    },
+    {
+      "source": "server/pools.ts",
+      "blob": "d7ae08dbac6c169b3a60d0b66b4aba10c50ca2c9",
+      "destination": "server/fleet/pools.ts"
+    },
+    {
+      "source": "server/prices.ts",
+      "blob": "f25fd483ddad03bda42b2f04620756f43b87b02e",
+      "destination": "server/fleet/prices.ts"
+    },
+    {
+      "source": "server/profile-bootstrap.ts",
+      "blob": "bb468b8240f6e07bb33bcd3a107854bcf5cfa8fe",
+      "destination": "server/fleet/profile-bootstrap.ts"
+    },
+    {
+      "source": "server/provider-usage.ts",
+      "blob": "d0d89037606a48182638833e05848313a22f20e1",
+      "destination": "server/fleet/provider-usage.ts"
+    },
+    {
+      "source": "server/queue.ts",
+      "blob": "d27de05f936f25dc2eb5ae409eaee30affaec67d",
+      "destination": "server/fleet/queue.ts"
+    },
+    {
+      "source": "server/quota-history.ts",
+      "blob": "e3844a7a752021959544a4515e1acf8b8baf0eb5",
+      "destination": "server/fleet/quota-history.ts"
+    },
+    {
+      "source": "server/quota-sampling.ts",
+      "blob": "716c7f32dbf2c28f4a0cca26b8cb67e4b6f87ed2",
+      "destination": "server/fleet/quota-sampling.ts"
+    },
+    {
+      "source": "server/quota-timing.ts",
+      "blob": "4cad7c511ab021187a09df41c82c0ee4ab86b0da",
+      "destination": "server/fleet/quota-timing.ts"
+    },
+    {
+      "source": "server/quota/antigravity-usage.ts",
+      "blob": "d678cda48a9cefc0b3a2302b2b7609748b0f4322",
+      "destination": "server/fleet/quota/antigravity-usage.ts"
+    },
+    {
+      "source": "server/records.ts",
+      "blob": "04ca70afc40b5cf0b4d6dac8d013c14949ea0ff4",
+      "destination": "server/fleet/records.ts"
+    },
+    {
+      "source": "server/reset-coupons-codex.ts",
+      "blob": "828fd2136cbabe1525e03f7d19afb096cb680f4a",
+      "destination": "server/fleet/reset-coupons-codex.ts"
+    },
+    {
+      "source": "server/reset-coupons-credits.ts",
+      "blob": "f27d5e28f094cb20c21e27df989e7c7fb9f151bd",
+      "destination": "server/fleet/reset-coupons-credits.ts"
+    },
+    {
+      "source": "server/reset-coupons-home.ts",
+      "blob": "0a62b182cce394d13d159a2bb2157cd0e9ebe3c8",
+      "destination": "server/fleet/reset-coupons-home.ts"
+    },
+    {
+      "source": "server/reset-coupons-notify.ts",
+      "blob": "32fd87a40efa4ef6f15221ac9f94aeae9e37f223",
+      "destination": "server/fleet/reset-coupons-notify.ts"
+    },
+    {
+      "source": "server/reset-coupons-signals.ts",
+      "blob": "e337d8169b72254818b8a9ad758e02b611e183d3",
+      "destination": "server/fleet/reset-coupons-signals.ts"
+    },
+    {
+      "source": "server/reset-coupons-state.ts",
+      "blob": "53281421c9ddfcf3623a541ee81e18f9d4f9cc76",
+      "destination": "server/fleet/reset-coupons-state.ts"
+    },
+    {
+      "source": "server/reset-coupons-surplus.ts",
+      "blob": "43ee060cf0603174093bf038c15ea157ead63460",
+      "destination": "server/fleet/reset-coupons-surplus.ts"
+    },
+    {
+      "source": "server/reset-coupons-types.ts",
+      "blob": "90616164421de47f9e21e06a299ad18fec7f00ad",
+      "destination": "server/fleet/reset-coupons-types.ts"
+    },
+    {
+      "source": "server/reset-coupons-view.ts",
+      "blob": "55d9ddafff7b0fd31215d7c40c63b4553ac1c214",
+      "destination": "server/fleet/reset-coupons-view.ts"
+    },
+    {
+      "source": "server/reset-coupons.ts",
+      "blob": "7ac0af56379ce68531e9a0ce50793ad111788767",
+      "destination": "server/fleet/reset-coupons.ts"
+    },
+    {
+      "source": "server/roles-cli.ts",
+      "blob": "dec117954516b8324072fc79d51374e9e677d77c",
+      "destination": "server/fleet/roles-cli.ts"
+    },
+    {
+      "source": "server/roles-history.ts",
+      "blob": "966f76e81e258ed2949b603abe746df35538e69b",
+      "destination": "server/fleet/roles-history.ts"
+    },
+    {
+      "source": "server/roles-page.ts",
+      "blob": "ca3f36090a2324bc20964606caa9b76275dfdc2d",
+      "destination": "server/fleet/roles-page.ts"
+    },
+    {
+      "source": "server/runtime-location.ts",
+      "blob": "3c80f4138ae518f4a1f1e9af1a5e615a00ee8ab2",
+      "destination": "server/fleet/runtime-location.ts"
+    },
+    {
+      "source": "server/scan.ts",
+      "blob": "f6528087f80752437d81aac6eab39d27b9f160ef",
+      "destination": "server/fleet/scan.ts"
+    },
+    {
+      "source": "server/screen-read.ts",
+      "blob": "27a35633377d968bb81a567402400202ff2b902c",
+      "destination": "server/fleet/screen-read.ts"
+    },
+    {
+      "source": "server/settings-dispatch.ts",
+      "blob": "dee1eb396a8008e37f2afd353a53dfab7127452d",
+      "destination": "server/fleet/settings-dispatch.ts"
+    },
+    {
+      "source": "server/settings.ts",
+      "blob": "99d687e3a8582995bfaca42ebad6be8f64858b06",
+      "destination": "server/fleet/settings.ts"
+    },
+    {
+      "source": "server/snapshot-cache.ts",
+      "blob": "65098b9b0f9b9bdb663ffba66ddcae9879982261",
+      "destination": "server/fleet/snapshot-cache.ts"
+    },
+    {
+      "source": "server/snapshot-parts.ts",
+      "blob": "e8c0f15d0ae908f7c2b287685cf9049d8ad672b8",
+      "destination": "server/fleet/snapshot-parts.ts"
+    },
+    {
+      "source": "server/snapshot.ts",
+      "blob": "e8f66cb5f4a5a0b99d181d4c2f0005fe681db717",
+      "destination": "server/fleet/snapshot.ts"
+    },
+    {
+      "source": "server/stale-cache.ts",
+      "blob": "9b3be190dedea8370b2412bb251457572002df73",
+      "destination": "server/fleet/stale-cache.ts"
+    },
+    {
+      "source": "server/supervisor-shift.ts",
+      "blob": "9751d275ff6638f16b779b0c1913d94a21c46cea",
+      "destination": "server/fleet/supervisor-shift.ts"
+    },
+    {
+      "source": "server/sweep-select.ts",
+      "blob": "515255835a5e130241f64a2ed42c961c412da5af",
+      "destination": "server/fleet/sweep-select.ts"
+    },
+    {
+      "source": "server/sweep.ts",
+      "blob": "fe085665bb5f260c84794e9339a138f04e7e8e21",
+      "destination": "server/fleet/sweep.ts"
+    },
+    {
+      "source": "server/tar.ts",
+      "blob": "c87d04227d93ad45610c5802592142919e5a8954",
+      "destination": "server/fleet/tar.ts"
+    },
+    {
+      "source": "server/test/adapter-config.test.ts",
+      "blob": "baf9a2b17b1ff60c5a88a9d879a96d819cdfbecf",
+      "destination": "server/fleet/test/adapter-config.test.ts"
+    },
+    {
+      "source": "server/test/agent-record-files.test.ts",
+      "blob": "4a487924308917503d0cc91e4a33241af55b1c28",
+      "destination": "server/fleet/test/agent-record-files.test.ts"
+    },
+    {
+      "source": "server/test/antigravity-display.test.ts",
+      "blob": "f68d0784f50de610f3f0e8a7b1a8b4a8584865e5",
+      "destination": "server/fleet/test/antigravity-display.test.ts"
+    },
+    {
+      "source": "server/test/antigravity-quota-mount.test.ts",
+      "blob": "ea4d122fb3e78aa575bc6fdb47e6cd8a9b1d5db9",
+      "destination": "server/fleet/test/antigravity-quota-mount.test.ts"
+    },
+    {
+      "source": "server/test/antigravity-usage.test.ts",
+      "blob": "cb42f0f0fc5a1de5bd652e012bd1e62f27538b7d",
+      "destination": "server/fleet/test/antigravity-usage.test.ts"
+    },
+    {
+      "source": "server/test/closed-pool-window.test.ts",
+      "blob": "17441c9db5f85677cdbab2553c2365741b286f9d",
+      "destination": "server/fleet/test/closed-pool-window.test.ts"
+    },
+    {
+      "source": "server/test/coupon-commands.test.ts",
+      "blob": "c31593fad2419522455a1ec5fc635277b7ed81c8",
+      "destination": "server/fleet/test/coupon-commands.test.ts"
+    },
+    {
+      "source": "server/test/daemon-client.test.ts",
+      "blob": "a1efec31c1f9c5a3c4bf24d05b426f7ec373d29b",
+      "destination": "server/fleet/test/daemon-client.test.ts"
+    },
+    {
+      "source": "server/test/decision-dismiss.test.ts",
+      "blob": "03598134e288b7389fc9e577450f20a0c65f7fce",
+      "destination": "server/fleet/test/decision-dismiss.test.ts"
+    },
+    {
+      "source": "server/test/decision-panel-mount.test.ts",
+      "blob": "d1672c68a661cb34a04efdbe0af42df6a46edd8c",
+      "destination": "server/fleet/test/decision-panel-mount.test.ts"
+    },
+    {
+      "source": "server/test/dispatch-base.test.ts",
+      "blob": "65c3e339084c0f6cdba534aee900f0c69673e0be",
+      "destination": "server/fleet/test/dispatch-base.test.ts"
+    },
+    {
+      "source": "server/test/dispatch-overrides.test.ts",
+      "blob": "623869a1fb19744681097e66f383b4f26008b9d4",
+      "destination": "server/fleet/test/dispatch-overrides.test.ts"
+    },
+    {
+      "source": "server/test/dispatch-publication.test.ts",
+      "blob": "882e9b701ea58ba711d2687064793e0ebb591e0f",
+      "destination": "server/fleet/test/dispatch-publication.test.ts"
+    },
+    {
+      "source": "server/test/dispatch-settings-mount.test.ts",
+      "blob": "8f8cfbc138fc89fdf99877abadf7960852f51f76",
+      "destination": "server/fleet/test/dispatch-settings-mount.test.ts"
+    },
+    {
+      "source": "server/test/dispatch-settings-publication.test.ts",
+      "blob": "c5e373cb2dc4b48a566566e89984f68110ed51ec",
+      "destination": "server/fleet/test/dispatch-settings-publication.test.ts"
+    },
+    {
+      "source": "server/test/dispatch-slots.test.ts",
+      "blob": "941f5879d3ba6ad2016628893b1462c2727e56a1",
+      "destination": "server/fleet/test/dispatch-slots.test.ts"
+    },
+    {
+      "source": "server/test/doctor-daily.test.ts",
+      "blob": "bafd37420e892429d099961030e99bb7e8b23661",
+      "destination": "server/fleet/test/doctor-daily.test.ts"
+    },
+    {
+      "source": "server/test/exports.test.ts",
+      "blob": "72f5bf5cf5330902ae124e518826d70d5a7cea81",
+      "destination": "server/fleet/test/exports.test.ts"
+    },
+    {
+      "source": "server/test/fixtures/json-writer.ts",
+      "blob": "e45554b9c9c76c24cc475c1212f4ff44494e4875",
+      "destination": "server/fleet/test/fixtures/json-writer.ts"
+    },
+    {
+      "source": "server/test/fixtures/previous-main-defaults.json",
+      "blob": "5cf08fb72f6fb969a1db19fe27bf1d13bf0183a1",
+      "destination": "server/fleet/test/fixtures/previous-main-defaults.json"
+    },
+    {
+      "source": "server/test/fixtures/themes.ts",
+      "blob": "06fda56b56ee148354bc965bee61dc55f22a805d",
+      "destination": "server/fleet/test/fixtures/themes.ts"
+    },
+    {
+      "source": "server/test/hidden-plans.test.ts",
+      "blob": "675b0d509a810baebe13008d0db67f5cf8b4343f",
+      "destination": "server/fleet/test/hidden-plans.test.ts"
+    },
+    {
+      "source": "server/test/i18n.test.ts",
+      "blob": "4e10de65aac5f98d7f952a1e8c0c7dadd96e6ee8",
+      "destination": "server/fleet/test/i18n.test.ts"
+    },
+    {
+      "source": "server/test/json-write.test.ts",
+      "blob": "eb0c7cc0b07bed7da56c575866e0b82884d3f388",
+      "destination": "server/fleet/test/json-write.test.ts"
+    },
+    {
+      "source": "server/test/kanban-source.test.ts",
+      "blob": "4e9365d30fedb71c3631524822a4c87d22be68dd",
+      "destination": "server/fleet/test/kanban-source.test.ts"
+    },
+    {
+      "source": "server/test/leader-swap.test.ts",
+      "blob": "bf3c4522232dc948f21986b4525367f724286b93",
+      "destination": "server/fleet/test/leader-swap.test.ts"
+    },
+    {
+      "source": "server/test/leader-ui-mount.test.ts",
+      "blob": "443e15be44ffddaf00625b6423b8dda63bcccffc",
+      "destination": "server/fleet/test/leader-ui-mount.test.ts"
+    },
+    {
+      "source": "server/test/leader-usage.test.ts",
+      "blob": "9cd7929ea25e09e136cfe3b81960edd72e5b428f",
+      "destination": "server/fleet/test/leader-usage.test.ts"
+    },
+    {
+      "source": "server/test/model-review-mount.test.ts",
+      "blob": "2c5541d0b1df98ab2f33efc22070ff07f7e3adb9",
+      "destination": "server/fleet/test/model-review-mount.test.ts"
+    },
+    {
+      "source": "server/test/model-review.test.ts",
+      "blob": "9e2f30b38a5cedb0f7b0202cc3f3a84f84a7b038",
+      "destination": "server/fleet/test/model-review.test.ts"
+    },
+    {
+      "source": "server/test/onboarding-mount.test.ts",
+      "blob": "998ae23726f9480a44b7e517d6529ac3034d578f",
+      "destination": "server/fleet/test/onboarding-mount.test.ts"
+    },
+    {
+      "source": "server/test/ops-project-routing.test.ts",
+      "blob": "4a5c43f5a4ab6996e39a260ad7d332241d92397b",
+      "destination": "server/fleet/test/ops-project-routing.test.ts"
+    },
+    {
+      "source": "server/test/panel-prefs.test.ts",
+      "blob": "8e95a82fe84478d36674a31ee8c45ebf443dffb5",
+      "destination": "server/fleet/test/panel-prefs.test.ts"
+    },
+    {
+      "source": "server/test/paths.test.ts",
+      "blob": "e013f99964a7e5cb18891ce5e14db51a46bf95a4",
+      "destination": "server/fleet/test/paths.test.ts"
+    },
+    {
+      "source": "server/test/plan-role-limits.test.ts",
+      "blob": "e7042a5e57bf9e7fa75649e40a786ca4abc3c885",
+      "destination": "server/fleet/test/plan-role-limits.test.ts"
+    },
+    {
+      "source": "server/test/platform-cli.test.ts",
+      "blob": "a704a8671305c5a99379d60965c861fd1570babb",
+      "destination": "server/fleet/test/platform-cli.test.ts"
+    },
+    {
+      "source": "server/test/pool-ids.test.ts",
+      "blob": "b4b06b477644cb3b212e4810f78f0e7628067731",
+      "destination": "server/fleet/test/pool-ids.test.ts"
+    },
+    {
+      "source": "server/test/pool-write.test.ts",
+      "blob": "94489d7aa4fe893fd22c5250f437134a67677f93",
+      "destination": "server/fleet/test/pool-write.test.ts"
+    },
+    {
+      "source": "server/test/profile-bootstrap.test.ts",
+      "blob": "564d0a95a1563de5f412b047156c7dd845e469cc",
+      "destination": "server/fleet/test/profile-bootstrap.test.ts"
+    },
+    {
+      "source": "server/test/provider-policy.test.ts",
+      "blob": "0cf18d87692ebac4831685106a149b337c5fc4a8",
+      "destination": "server/fleet/test/provider-policy.test.ts"
+    },
+    {
+      "source": "server/test/provider-status.test.ts",
+      "blob": "647e1e91227ee947a7cfa639370f97984dd10fcf",
+      "destination": "server/fleet/test/provider-status.test.ts"
+    },
+    {
+      "source": "server/test/public-defaults.test.ts",
+      "blob": "ae6f442087622df2c4e4f931ba27cc1d21a48cba",
+      "destination": "server/fleet/test/public-defaults.test.ts"
+    },
+    {
+      "source": "server/test/quota-adapters.test.ts",
+      "blob": "aacd7814ab0894b583bff0d88564216094b1bda3",
+      "destination": "server/fleet/test/quota-adapters.test.ts"
+    },
+    {
+      "source": "server/test/quota-cycle.test.ts",
+      "blob": "810759af3eb9b95e7c7bcfe27e2318080d811255",
+      "destination": "server/fleet/test/quota-cycle.test.ts"
+    },
+    {
+      "source": "server/test/quota-refresh.test.ts",
+      "blob": "f1352af7df37ed54ca070db7551dc8d8e000415a",
+      "destination": "server/fleet/test/quota-refresh.test.ts"
+    },
+    {
+      "source": "server/test/quota-sampling.test.ts",
+      "blob": "38fe2d65f2deb64df5439ea5e9a8a3f639784911",
+      "destination": "server/fleet/test/quota-sampling.test.ts"
+    },
+    {
+      "source": "server/test/quota-setup.test.ts",
+      "blob": "731e6772d47fe07257deccef53a38ad00ca796ce",
+      "destination": "server/fleet/test/quota-setup.test.ts"
+    },
+    {
+      "source": "server/test/roles-language.test.ts",
+      "blob": "b1680811f4cf66efcc02d409c2981f76a359f9c2",
+      "destination": "server/fleet/test/roles-language.test.ts"
+    },
+    {
+      "source": "server/test/settings-language.test.ts",
+      "blob": "4d0541b5b1dd50fa5ee77d5aca6cabf6f8fc2eec",
+      "destination": "server/fleet/test/settings-language.test.ts"
+    },
+    {
+      "source": "server/test/settings.test.ts",
+      "blob": "f162466c8e315eed18db6ea68c3598dadbd16508",
+      "destination": "server/fleet/test/settings.test.ts"
+    },
+    {
+      "source": "server/test/theme-colors.test.ts",
+      "blob": "827488971e1bf28b02932dc148557460bb6303a9",
+      "destination": "server/fleet/test/theme-colors.test.ts"
+    },
+    {
+      "source": "server/test/theme-mount.test.ts",
+      "blob": "19c9e8e5657b96a9d8ff02032a63926382307a2d",
+      "destination": "server/fleet/test/theme-mount.test.ts"
+    },
+    {
+      "source": "server/test/theme-source.test.ts",
+      "blob": "91dcc6ba8a5c1213b5d761eb8f5526b652a3c013",
+      "destination": "server/fleet/test/theme-source.test.ts"
+    },
+    {
+      "source": "server/timing.ts",
+      "blob": "a4ca2eec414d4bbdf67327c8e2b46b6b10cdb707",
+      "destination": "server/fleet/timing.ts"
+    },
+    {
+      "source": "server/transcripts.ts",
+      "blob": "8ae0c64ae451dcb19773e4613f4c79bbc5c4d8ef",
+      "destination": "server/fleet/transcripts.ts"
+    },
+    {
+      "source": "server/upgrade-check.ts",
+      "blob": "aaefeb068d8b9cf210f2683d15561e0471a7b7ef",
+      "destination": "server/fleet/upgrade-check.ts"
+    },
+    {
+      "source": "server/upgrade-watch.ts",
+      "blob": "57dc4314e0bd364b8593f85da84ed13e8ae4688f",
+      "destination": "server/fleet/upgrade-watch.ts"
+    },
+    {
+      "source": "server/usage-view.ts",
+      "blob": "16170ccb665ee28af7c89b234de10ee69136c07c",
+      "destination": "server/fleet/usage-view.ts"
+    },
+    {
+      "source": "server/usage.ts",
+      "blob": "2d321956e282f35a4ecbd2a42826e253a6e51e90",
+      "destination": "server/fleet/usage.ts"
+    },
+    {
+      "source": "server/util.ts",
+      "blob": "51a8761cb097b620b6e25487d216e439bbe1428b",
+      "destination": "server/fleet/util.ts"
+    },
+    {
+      "source": "shared/access-parse.ts",
+      "blob": "6c1daef6b3a3497e2252b4431a8691e9c11c19bb",
+      "destination": "shared/fleet/access-parse.ts"
+    },
+    {
+      "source": "shared/access-view.ts",
+      "blob": "487320d3b6147f111942d158683fe16a528b671f",
+      "destination": "shared/fleet/access-view.ts"
+    },
+    {
+      "source": "shared/access.ts",
+      "blob": "8979110d2d9324c647e2ad7dc30ca33ec006f22f",
+      "destination": "shared/fleet/access.ts"
+    },
+    {
+      "source": "shared/alert-groups.ts",
+      "blob": "8b1b147d6c593669b161f1128a2e527e762f5896",
+      "destination": "shared/fleet/alert-groups.ts"
+    },
+    {
+      "source": "shared/antigravity-display.ts",
+      "blob": "f6f34db8c8575824c16222367cb6a89cccbadbc1",
+      "destination": "shared/fleet/antigravity-display.ts"
+    },
+    {
+      "source": "shared/board-chrome.ts",
+      "blob": "772faeedef5d67f43213742ff377ec5f3ce62d6d",
+      "destination": "shared/fleet/board-chrome.ts"
+    },
+    {
+      "source": "shared/board.ts",
+      "blob": "40c3eb37db27ef27e66958c2d5df8ee3b9854624",
+      "destination": "shared/fleet/board.ts"
+    },
+    {
+      "source": "shared/card-code.ts",
+      "blob": "277bc1d0fd7b248b9cf4061abca111af65bf407c",
+      "destination": "shared/fleet/card-code.ts"
+    },
+    {
+      "source": "shared/clip-error.ts",
+      "blob": "bd5d752edfbe6f1101b4b3e7f57bfab28d426133",
+      "destination": "shared/fleet/clip-error.ts"
+    },
+    {
+      "source": "shared/contract/index.ts",
+      "blob": "813ec7822d85fc376df64915fea5b5cc5890912f",
+      "destination": "shared/contract/index.ts"
+    },
+    {
+      "source": "shared/contract/schema.ts",
+      "blob": "fdba460da1e1fe733d066017be7f795ff366771a",
+      "destination": "shared/contract/schema.ts"
+    },
+    {
+      "source": "shared/cursor-login.ts",
+      "blob": "2ecd1ac535c2e7537887a7b1c8e61615bec8bc06",
+      "destination": "shared/fleet/cursor-login.ts"
+    },
+    {
+      "source": "shared/daemon-crash.ts",
+      "blob": "e1fbbdc09ffe18c67312d1c01a2b75805f5cd289",
+      "destination": "shared/fleet/daemon-crash.ts"
+    },
+    {
+      "source": "shared/daemon-log.ts",
+      "blob": "5aee925de08a61b0ffb0cad1a096898e5cff14f6",
+      "destination": "shared/fleet/daemon-log.ts"
+    },
+    {
+      "source": "shared/decision-card.ts",
+      "blob": "6c40af76cbe20e1fbe85d78ae984242b9c72963c",
+      "destination": "shared/fleet/decision-card.ts"
+    },
+    {
+      "source": "shared/decision-change.ts",
+      "blob": "7da7129d51982fc3092228c5197a7ebea54a4f27",
+      "destination": "shared/fleet/decision-change.ts"
+    },
+    {
+      "source": "shared/decision-check.ts",
+      "blob": "e69b1fc546917cf0f3c08f21df16e72c060bfd47",
+      "destination": "shared/fleet/decision-check.ts"
+    },
+    {
+      "source": "shared/decision-choices.ts",
+      "blob": "4fdf056f586a9682c0f42486d6b2b65217f1f1c7",
+      "destination": "shared/fleet/decision-choices.ts"
+    },
+    {
+      "source": "shared/decision-parse.ts",
+      "blob": "1151ef56ff707cd6f64bd657d7b503ecec2eb587",
+      "destination": "shared/fleet/decision-parse.ts"
+    },
+    {
+      "source": "shared/decisions-view.ts",
+      "blob": "3af452f82ef9676326bac42c84776127ee5d4630",
+      "destination": "shared/fleet/decisions-view.ts"
+    },
+    {
+      "source": "shared/decisions.ts",
+      "blob": "5bd591a9117b225be52685b9e32b30c6ded9339e",
+      "destination": "shared/fleet/decisions.ts"
+    },
+    {
+      "source": "shared/default-dispatch.example.json",
+      "blob": "fa413142065f6cf8d5dfb9da7f6c7cf1a91b152d",
+      "destination": "shared/fleet/default-dispatch.example.json"
+    },
+    {
+      "source": "shared/dispatch-overrides.ts",
+      "blob": "d8a0b9782ee5936965b927eadda7cfe1ec6c74c3",
+      "destination": "shared/fleet/dispatch-overrides.ts"
+    },
+    {
+      "source": "shared/dispatch-priority.ts",
+      "blob": "6dabc58f7e1187d229bf48a4e17c447664caecae",
+      "destination": "shared/fleet/dispatch-priority.ts"
+    },
+    {
+      "source": "shared/dispatch-slots.ts",
+      "blob": "b8bebd7bcd2f9ce015876b5e48df4a490e27a440",
+      "destination": "shared/fleet/dispatch-slots.ts"
+    },
+    {
+      "source": "shared/dispatch.ts",
+      "blob": "4f8a459464121a5900e17780fa41dc406e5abee1",
+      "destination": "shared/fleet/dispatch.ts"
+    },
+    {
+      "source": "shared/doctor-checks.ts",
+      "blob": "c59b28844a803497e0480898bbf2a666de9b9d50",
+      "destination": "shared/fleet/doctor-checks.ts"
+    },
+    {
+      "source": "shared/doctor-daily.ts",
+      "blob": "06a79bca4ec69b6f9f82b1a989a87555be3527c4",
+      "destination": "shared/fleet/doctor-daily.ts"
+    },
+    {
+      "source": "shared/doctor.ts",
+      "blob": "050725b03b24e83eb7dbe6359fa454e6daa795a8",
+      "destination": "shared/fleet/doctor.ts"
+    },
+    {
+      "source": "shared/early-reset.ts",
+      "blob": "14b20bf5e820800c85f9d051ed54089acaddcf15",
+      "destination": "shared/fleet/early-reset.ts"
+    },
+    {
+      "source": "shared/hidden-plans.ts",
+      "blob": "6aaf049bafa656b8f97b260d1cfb8c9fd2b29b31",
+      "destination": "shared/fleet/hidden-plans.ts"
+    },
+    {
+      "source": "shared/home-status.ts",
+      "blob": "a8f0b16a27a1f805e7a55a3b6f254ac7742dc490",
+      "destination": "shared/fleet/home-status.ts"
+    },
+    {
+      "source": "shared/home-summary.ts",
+      "blob": "928fea8c3b5f55deb384d5abebe2bb84220a5103",
+      "destination": "shared/fleet/home-summary.ts"
+    },
+    {
+      "source": "shared/home-view.ts",
+      "blob": "a95f6b26307e7f7518dec672df4bc769eee0dbf3",
+      "destination": "shared/fleet/home-view.ts"
+    },
+    {
+      "source": "shared/i18n.ts",
+      "blob": "3234ab8448182ad9f3a4d8787e5bb3d89acb0cd2",
+      "destination": "shared/fleet/i18n.ts"
+    },
+    {
+      "source": "shared/kanban-presence.ts",
+      "blob": "7e253035e1fa54593e6830b9e5ba31bb1a32c72e",
+      "destination": "shared/fleet/kanban-presence.ts"
+    },
+    {
+      "source": "shared/keychain-probe.ts",
+      "blob": "d5e09d73394496fc7843f6c802be4c1b74fe2884",
+      "destination": "shared/fleet/keychain-probe.ts"
+    },
+    {
+      "source": "shared/leader-attention.ts",
+      "blob": "60909a46630edfc3b4942e0a619b564aca580cd8",
+      "destination": "shared/fleet/leader-attention.ts"
+    },
+    {
+      "source": "shared/leader-command.ts",
+      "blob": "9b1b468feb5f7e725b92c582569c364bbfc72f46",
+      "destination": "shared/fleet/leader-command.ts"
+    },
+    {
+      "source": "shared/leader-panel.ts",
+      "blob": "dcf5ab7027271b30154800bb4eccfb8466f36af9",
+      "destination": "shared/fleet/leader-panel.ts"
+    },
+    {
+      "source": "shared/leader-proxy.ts",
+      "blob": "e3472ec88fb750f656e09b31cacb65ed7ddfac31",
+      "destination": "shared/fleet/leader-proxy.ts"
+    },
+    {
+      "source": "shared/leader-shift-view.ts",
+      "blob": "947a698e26064f70ba165899bfc4e8562675dfc1",
+      "destination": "shared/fleet/leader-shift-view.ts"
+    },
+    {
+      "source": "shared/leader-title.ts",
+      "blob": "73a4f0117695ae849de952464d8492bb0e8009aa",
+      "destination": "shared/fleet/leader-title.ts"
+    },
+    {
+      "source": "shared/leader-usage.ts",
+      "blob": "17cb1cfe7ed317cd0a147d27b037e2d1ff238290",
+      "destination": "shared/fleet/leader-usage.ts"
+    },
+    {
+      "source": "shared/leader-week.ts",
+      "blob": "7a1561ab1287a24546fbc7e44df440e9dea48989",
+      "destination": "shared/fleet/leader-week.ts"
+    },
+    {
+      "source": "shared/locales/en.json",
+      "blob": "54a8dd88179fd937d6caf3ecc7cf2edd0e2486e5",
+      "destination": "shared/locales/en/fleet.json"
+    },
+    {
+      "source": "shared/locales/zh-CN.json",
+      "blob": "539b3f02fa13f4c2f06b1b3b72c195106be3e44e",
+      "destination": "shared/locales/zh-CN/fleet.json"
+    },
+    {
+      "source": "shared/migration.ts",
+      "blob": "267a57f6c08dea0d664727cbb6ec95fa0ecf9742",
+      "destination": "shared/fleet/migration.ts"
+    },
+    {
+      "source": "shared/ops-project.ts",
+      "blob": "e539c53382ba1e0658c8fd4a76d585a38ee871b1",
+      "destination": "shared/fleet/ops-project.ts"
+    },
+    {
+      "source": "shared/palette.ts",
+      "blob": "4e33bd53cd46ce677bf9b5035876ea1ddcefcaf7",
+      "destination": "shared/fleet/palette.ts"
+    },
+    {
+      "source": "shared/panel-prefs-state.ts",
+      "blob": "05da16efe07b22881caca0f0dc43e4d19d865503",
+      "destination": "shared/fleet/panel-prefs-state.ts"
+    },
+    {
+      "source": "shared/panel-prefs.ts",
+      "blob": "1ceaaa4fb979c5c05283a2dfa093d6f2daa8fdd5",
+      "destination": "shared/fleet/panel-prefs.ts"
+    },
+    {
+      "source": "shared/panel-tabs.ts",
+      "blob": "eef6144ca038f82d02789ba256797ed42731d549",
+      "destination": "shared/fleet/panel-tabs.ts"
+    },
+    {
+      "source": "shared/paused.ts",
+      "blob": "1ee41209f09d100bca20bed7d2c6b85e62dbee55",
+      "destination": "shared/fleet/paused.ts"
+    },
+    {
+      "source": "shared/profile-bootstrap.ts",
+      "blob": "c6955520824482afce133bfa5f593c195611339d",
+      "destination": "shared/fleet/profile-bootstrap.ts"
+    },
+    {
+      "source": "shared/provider-policy.ts",
+      "blob": "854a27fcd6315e06b46e4d549931fb734cacfffa",
+      "destination": "shared/fleet/provider-policy.ts"
+    },
+    {
+      "source": "shared/quota-adapters.ts",
+      "blob": "1809f152f90da32cc6635fd1b8b433505e079f96",
+      "destination": "shared/fleet/quota-adapters.ts"
+    },
+    {
+      "source": "shared/quota-companies.ts",
+      "blob": "18d51df748557fc83f5a9a5fe118afce10b148d7",
+      "destination": "shared/fleet/quota-companies.ts"
+    },
+    {
+      "source": "shared/quota-cycle.ts",
+      "blob": "b903b739e93e8ec8d424b05234fb42273058b88c",
+      "destination": "shared/fleet/quota-cycle.ts"
+    },
+    {
+      "source": "shared/quota-line.ts",
+      "blob": "ca619b9024a86afd29688bead1f1226b601e81a2",
+      "destination": "shared/fleet/quota-line.ts"
+    },
+    {
+      "source": "shared/quota-page.ts",
+      "blob": "badcce2b798c1ed0dad7dae8d04bf5898ae0a5dd",
+      "destination": "shared/fleet/quota-page.ts"
+    },
+    {
+      "source": "shared/quota-plans-view.ts",
+      "blob": "21e02ce06527019f26dc8d27e82830166bfda838",
+      "destination": "shared/fleet/quota-plans-view.ts"
+    },
+    {
+      "source": "shared/quota-reason.ts",
+      "blob": "831c23bc8c53a0087bea0945a6574a2487bc0687",
+      "destination": "shared/fleet/quota-reason.ts"
+    },
+    {
+      "source": "shared/quota-tiles.ts",
+      "blob": "46c348ca329fbb170e5607961065a4ed91add0ea",
+      "destination": "shared/fleet/quota-tiles.ts"
+    },
+    {
+      "source": "shared/quota-time.ts",
+      "blob": "f9733d137db083ddd3258f3f36bccef2e8776652",
+      "destination": "shared/fleet/quota-time.ts"
+    },
+    {
+      "source": "shared/records-view.ts",
+      "blob": "2fbef86b173f15cd1de9dd0c98a76210e4d987b9",
+      "destination": "shared/fleet/records-view.ts"
+    },
+    {
+      "source": "shared/reset-coupons-alerts.ts",
+      "blob": "9fe5c6d5b1587ce6ac6cef3a69570d751288f469",
+      "destination": "shared/fleet/reset-coupons-alerts.ts"
+    },
+    {
+      "source": "shared/reset-coupons-burn.ts",
+      "blob": "e539209291b6afad6b5c09b9ccf2297b76f62796",
+      "destination": "shared/fleet/reset-coupons-burn.ts"
+    },
+    {
+      "source": "shared/reset-coupons-cli.ts",
+      "blob": "a509ef144a34397cde0d0321191e06b94130f83c",
+      "destination": "shared/fleet/reset-coupons-cli.ts"
+    },
+    {
+      "source": "shared/reset-coupons-codex.ts",
+      "blob": "99a91f26d867b904eab2ef7d9264f11ddd6afc0f",
+      "destination": "shared/fleet/reset-coupons-codex.ts"
+    },
+    {
+      "source": "shared/reset-coupons-core.ts",
+      "blob": "3e8506c919d06c2dbf0d05727adfc5a31253f89e",
+      "destination": "shared/fleet/reset-coupons-core.ts"
+    },
+    {
+      "source": "shared/reset-coupons-credits.ts",
+      "blob": "314656e95b79b3ed76bfbdb8cd379f031142a10d",
+      "destination": "shared/fleet/reset-coupons-credits.ts"
+    },
+    {
+      "source": "shared/reset-coupons-page.ts",
+      "blob": "d8f0c62b816b9d6af8539004d3a521cfcd244f43",
+      "destination": "shared/fleet/reset-coupons-page.ts"
+    },
+    {
+      "source": "shared/reset-coupons-surplus.ts",
+      "blob": "28d16113bf793f8c9c787eb30ebc6eb7331da582",
+      "destination": "shared/fleet/reset-coupons-surplus.ts"
+    },
+    {
+      "source": "shared/reset-coupons-usage.ts",
+      "blob": "91df56b2487cbdf83fffbae79da59f8449411d13",
+      "destination": "shared/fleet/reset-coupons-usage.ts"
+    },
+    {
+      "source": "shared/reset-coupons.ts",
+      "blob": "e50e53b8f58a0f470050fe70defd8c24eada632b",
+      "destination": "shared/fleet/reset-coupons.ts"
+    },
+    {
+      "source": "shared/responsive.ts",
+      "blob": "a67dbfd2a68d235512bb28d94ba7f9947fad18d6",
+      "destination": "shared/fleet/responsive.ts"
+    },
+    {
+      "source": "shared/review-model.ts",
+      "blob": "658a912eaa2bc81a8d5fbe85da8c7ac050fd306d",
+      "destination": "shared/fleet/review-model.ts"
+    },
+    {
+      "source": "shared/role-plain.ts",
+      "blob": "023c3f2d2c90a0f5d57018269cd7b793ed5c5cc6",
+      "destination": "shared/fleet/role-plain.ts"
+    },
+    {
+      "source": "shared/roles-history.ts",
+      "blob": "ae076800d841253246d4f221f6da88c0d011c456",
+      "destination": "shared/fleet/roles-history.ts"
+    },
+    {
+      "source": "shared/roles-page.ts",
+      "blob": "3bf7041310557a849a59f7b232fa6e7c79c3559c",
+      "destination": "shared/fleet/roles-page.ts"
+    },
+    {
+      "source": "shared/roles-policy.ts",
+      "blob": "48b0b38ab7050e54e66c414c168e805843f70241",
+      "destination": "shared/fleet/roles-policy.ts"
+    },
+    {
+      "source": "shared/roles-swap.ts",
+      "blob": "ca100094ffd90a6921b765788b70e7344a3c3f31",
+      "destination": "shared/fleet/roles-swap.ts"
+    },
+    {
+      "source": "shared/settings.ts",
+      "blob": "889e80e550a764d699c875329f8943a6930370f5",
+      "destination": "shared/fleet/settings.ts"
+    },
+    {
+      "source": "shared/supervisor-shift-format.ts",
+      "blob": "5e6058e4bb81db0c02aa1b030927caaea78d60d5",
+      "destination": "shared/fleet/supervisor-shift-format.ts"
+    },
+    {
+      "source": "shared/supervisor-shift-rows.ts",
+      "blob": "e86d73611ac68cf559aa767d0b9efb578342e739",
+      "destination": "shared/fleet/supervisor-shift-rows.ts"
+    },
+    {
+      "source": "shared/supervisor-shift-run.ts",
+      "blob": "774778ab04bf6baccd641e8646320c146901942f",
+      "destination": "shared/fleet/supervisor-shift-run.ts"
+    },
+    {
+      "source": "shared/supervisor-shift-state.ts",
+      "blob": "84dadcca44d7d95da2d8de185bfe3ff607b0078f",
+      "destination": "shared/fleet/supervisor-shift-state.ts"
+    },
+    {
+      "source": "shared/supervisor-shift-types.ts",
+      "blob": "848cc55d667a9d579740b32cb00f103d975d37ac",
+      "destination": "shared/fleet/supervisor-shift-types.ts"
+    },
+    {
+      "source": "shared/supervisor-shift-ui.ts",
+      "blob": "744520c08f840301666c849d5f21867493c231cf",
+      "destination": "shared/fleet/supervisor-shift-ui.ts"
+    },
+    {
+      "source": "shared/supervisor-shift.ts",
+      "blob": "5c66d540ad8b4e303a9a0aa435b36255a75e1a3b",
+      "destination": "shared/fleet/supervisor-shift.ts"
+    },
+    {
+      "source": "shared/theme-fallback.ts",
+      "blob": "89a9e2c4cbcb3c814eec23b9d0ffbb0286954633",
+      "destination": "shared/fleet/theme-fallback.ts"
+    },
+    {
+      "source": "shared/token-block.ts",
+      "blob": "013b5c0a96c96b8508f27b082e31e81c695c3320",
+      "destination": "shared/fleet/token-block.ts"
+    },
+    {
+      "source": "shared/token-chart.ts",
+      "blob": "cc66c373426b471ba73b330ea594a3ca63fb5a4d",
+      "destination": "shared/fleet/token-chart.ts"
+    },
+    {
+      "source": "shared/unowned-decisions.ts",
+      "blob": "c9ee48bc6f938c67941528ca8d3a42df2bbc054f",
+      "destination": "shared/fleet/unowned-decisions.ts"
+    },
+    {
+      "source": "shared/usage.ts",
+      "blob": "6ecb4c956244d7fa7d3e2677db6213c0d76604a6",
+      "destination": "shared/fleet/usage.ts"
+    },
+    {
+      "source": "shared/waste-risk.ts",
+      "blob": "ee4895cb1fbdd23173c9d6dac4743b49714110ec",
+      "destination": "shared/fleet/waste-risk.ts"
+    },
+    {
+      "source": "examples/afc.config.example.json",
+      "blob": "9df492fa78362b155e36ce20e201b3c6b0b3a190",
+      "destination": "examples/afc.config.example.json"
+    },
+    {
+      "source": "examples/plans.example.json",
+      "blob": "b132c8a42697448d27aa6530593a7cda97187df2",
+      "destination": "examples/plans.example.json"
+    }
+  ],
+  "excluded": [
+    "standalone plugin roots and package/lock",
+    "standalone migration executables and their matrix tests",
+    "standalone preparation and managed-location tests",
+    "donor scripts, workflows, history and docs"
+  ]
+}
