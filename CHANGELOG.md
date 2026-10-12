@@ -18,7 +18,7 @@ No public release is declared by this document.
 
 ### Fixed
 
-- No released baseline yet.
+- The sidebar registers one standard item (`id`, `title`, `icon`, `surface`) that shares `board` with the screen. Desktop and compact sidebars open that same panel. A physical phone is still unverified.
 
 ### Security
 

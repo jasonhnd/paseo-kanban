@@ -2,7 +2,7 @@
 
 用于 [Paseo](https://github.com/getpaseo/paseo) 的单插件：看板、Fleet 阵容、额度、决定和设置。[English](../../README.md)
 
-包为 `@jasonhnd/paseo-kanban`，唯一插件 id 为 `paseo-kanban`，显示名为 Paseo Kanban。一个侧栏入口，保留 `board` 深链与 workspace 项目限制。
+包为 `@jasonhnd/paseo-kanban`，唯一插件 id 为 `paseo-kanban`，显示名为 Paseo Kanban。一个侧栏入口，是标准项（id、title、icon、surface），与画面共用 `board`，保留深链与 workspace 项目限制。真实手机仍须单独验收。
 
 > 未发布的实验版本。真实 app/phone、Linux 真宿主和真实 provider 首卡仍须独立验收。本机编译和匿名挂载不能代替这些验证。
 

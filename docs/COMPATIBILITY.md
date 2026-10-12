@@ -55,4 +55,4 @@ paseo plugin update paseo-kanban --check --ref vX.Y.Z
 paseo plugin update paseo-kanban --ref vX.Y.Z
 ```
 
-Only `paseo-kanban` is registered by the integrated package. Manifest preparation builds its combined CLI entries. Real Linux host, app/phone and provider first-card acceptance remain separate release prerequisites; local Darwin compilation and anonymous DOM mounting do not prove them. Back up data and plugin settings before changing sources. Code downgrade does not undo data writes. See [RELEASE](RELEASE.md).
+Only `paseo-kanban` is registered by the integrated package. Manifest preparation builds its combined CLI entries. Real Linux host, app/phone and provider first-card acceptance remain separate release prerequisites; local Darwin compilation, anonymous DOM mounting and installed-host registration of the standard sidebar item do not prove a physical phone. Back up data and plugin settings before changing sources. Code downgrade does not undo data writes. See [RELEASE](RELEASE.md).

@@ -12,7 +12,7 @@ A cross-project board for coding agents: role-based cards, independent review an
 
 ## One plugin
 
-Paseo Kanban includes the board, Fleet roles, quota, decisions and settings in one package, with one sidebar entry. The board screen id stays `board`, preserving `/plugin/paseo-kanban/board` links and workspace project filtering.
+Paseo Kanban includes the board, Fleet roles, quota, decisions and settings in one package, with one sidebar entry. That entry is the standard sidebar item `{id, title, icon, surface}` and shares id `board` with the screen, preserving `/plugin/paseo-kanban/board` links and workspace project filtering. A physical phone still needs its own acceptance.
 
 Fleet collectors provide an immutable `paseo-policy/v1` revision to Kanban admission. Missing or invalid policy and unknown protected quota readings hold dispatch. The old `fleet-quota/v1` files and `afc`/`roles` commands remain compatibility interfaces within the new root; they do not select an old Fleet installation. See [data ownership](docs/DATA.md), [policy and compatibility](docs/CONTRACT.md) and [manual transfer](docs/MANUAL-MIGRATION.md).
 

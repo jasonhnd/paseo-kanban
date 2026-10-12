@@ -47,4 +47,4 @@ paseo plugin update paseo-kanban --check --ref vX.Y.Z
 paseo plugin update paseo-kanban --ref vX.Y.Z
 ```
 
-合并包只注册 paseo-kanban；manifest 准备流程构建统一命令。真实 Linux 宿主、桌面/phone 和真实 provider 首卡仍需独立发版验收，本机 Darwin 编译与匿名 DOM 挂载不能证明这些项目。切来源前备份数据和设置，代码回退不撤销数据写入。见 [RELEASE](RELEASE.md)。
+合并包只注册 paseo-kanban；manifest 准备流程构建统一命令。真实 Linux 宿主、桌面/phone 和真实 provider 首卡仍需独立发版验收。本机 Darwin 编译、匿名 DOM 挂载，以及已安装宿主上的标准侧栏注册，都不能证明真实手机。切来源前备份数据和设置，代码回退不撤销数据写入。见 [RELEASE](RELEASE.md)。
