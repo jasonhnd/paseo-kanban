@@ -1,6 +1,6 @@
 # 变更记录
 
-本插件版本与 tag 独立于伴随插件。此文不宣布公开发布。
+单插件使用一个版本与 CHANGELOG。本批以 Git 分发；此文不宣布版本化发布、npm 发布或官方目录收录。
 
 ## 未发布
 
@@ -13,7 +13,9 @@
 
 ### 变更（Changed）
 
-- 尚无已发布基线。
+- 中英文上手改用真实公开 `integration/single-plugin-reviewed` ref，明确每次 update／check 的 ref、启用、卸载和当前 revision 确认。
+- 用户 Git 安装与开发 directory 流程分开；补充无沙箱／适配器继承、统一数据根备份及代码／数据回退区别。
+- 提供命令重放清单、使用侧 directory 转 Git 预案和目录申请草稿；均不表示生产切换、真实产品验收或外部提交已完成。
 
 ### 修复（Fixed）
 
@@ -26,9 +28,8 @@
 
 ### 注意（Notes）
 
-- 初始包版本计划 0.1.0，experimental、未发布。
-- Paseo >=0.11.0 <0.12.0；完整平台/桌面认证未完成。
-- fleet-quota/v1，兼容新增 contractVersion 为 1.2.0；本文档修改不变更契约或迁移数据。
-- 最低伴随发布版本未建立，不声明已支持版本对。
-- 实测伴随 tag/提交、升级顺序须每次发版互通验证后登记，不由包同号推断。
+- 包元数据为 0.1.0，experimental；公开 Git 源码不等于版本化发布或已存在 tag。
+- Paseo daemon/app >=0.11.0 <0.12.0；官方命令／编译器基线 0.11.2。help/docs 核语法不等于已安装产品验证，完整平台/桌面/手机/provider 首卡仍需独立证据。
+- 派活使用不可变 paseo-policy/v1；fleet-quota/v1、contractVersion 1.2.0 为同根兼容接口。本文档修改不变契约或迁移数据。
+- 统一数据根为 KANBAN_DATA_DIR 或 PASEO_HOME/plugin-data/paseo-kanban；旧 Fleet 不自动导入。
 - 发版前须 Git 安装、包、桌面、首卡、回退证据，见 RELEASE；代码回退不撤销数据写入。

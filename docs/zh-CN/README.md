@@ -1,30 +1,137 @@
 # Paseo Kanban
 
-用于 [Paseo](https://github.com/getpaseo/paseo) 的单插件：看板、Fleet 阵容、额度、决定和设置。[English](../../README.md)
+用于 [Paseo](https://github.com/getpaseo/paseo) 的单插件，把跨项目代码 agent 看板与 Fleet 阵容、额度、决定和设置放在一起。执行者交活，使用不同实际模型的审查者核对，最后由项目 leader 验收。
 
-包为 `@jasonhnd/paseo-kanban`，唯一插件 id 为 `paseo-kanban`，显示名为 Paseo Kanban。一个侧栏入口，是标准项（id、title、icon、surface），与画面共用 `board`，保留深链与 workspace 项目限制。真实手机仍须单独验收。
+[English](../../README.md)
 
-> 未发布的实验版本。真实 app/phone、Linux 真宿主和真实 provider 首卡仍须独立验收。本机编译和匿名挂载不能代替这些验证。
+> **实验性 Git 源码。** 公开源码位于 `integration/single-plugin-reviewed`。本文不宣布版本化发布、npm 发布或官方目录收录。干净宿主安装、真实 app/phone 和真实 provider 首卡闭环仍需独立证据。不承诺稳定性或响应时间。
 
-## 要求与设置
+唯一插件 id 为 `paseo-kanban`，只有一个标准侧栏入口。看板与 Fleet 共用 `board` 画面、`/plugin/paseo-kanban/board` 深链与 workspace 项目筛选。包元数据为 `@jasonhnd/paseo-kanban`、版本 `0.1.0`；元数据不代表 npm 包或 Git tag 已发布。
 
-- daemon 与 app 均为 `>=0.11.0 <0.12.0`，启用全局和本插件开关。
-- Node >=22.13.0，`node:sqlite` 可用；Git、npm 在测试或 daemon PATH 中。
-- 用户自行登录 provider 并配置角色档案。执行与审查必须使用两个明确、非空的实际 model，trim/lower 后比较。同 family 不同 model 允许；同 model 跨 provider、mode 或 effort 拒绝，缺证据就等。
-- Fleet 设置提供角色预览，不自动写真实档案。保留已有档案，配置角色、pool 与实际 model。额度来源未知且受保护时，拒绝派活。
+## 前置要求
 
-只有独立批准发布后才安装 npm 版本：
+- Paseo **daemon 和 app** 均在 `>=0.11.0 <0.12.0`，全局插件和本插件开关均启用。本批命令／编译器基线为 **0.11.2**；声明范围不代表每个补丁和客户端都已验证。
+- Node **>=22.13.0** 且 `node:sqlite` 可用；Git、npm 位于 **daemon 宿主的 PATH**。包括 CLI 指向远端时，下载和准备都在该宿主执行。
+- 用户自行安装、登录的本地 provider。自动执行／审查流程要求**两个已确认、非空、不同的实际 model**。发现 provider 不证明登录和额度可用。
+- macOS 有本机源码／CLI／编译证据；Linux、WSL2 仍需分别验证真实流程。首发不支持原生 Windows。见[兼容性](COMPATIBILITY.md)。
 
-`paseo plugin install npm:@jasonhnd/paseo-kanban`
+Paseo 插件是**受信任、无沙箱的代码**。server 和准备命令可以使用 daemon 用户的文件、进程、凭证和网络；client 运行在 app 内。本插件持久保存看板／Fleet 状态、操作配置的 workspace 和 agent，并可运行 Git、Node 与配置的 provider 命令。启用的额度适配器可能访问服务或调用本地工具。启用前阅读[访问及数据边界](DATA.md)。
 
-源码安装先执行 `npm ci` 和 `npm run build`。不要同时注册旧 Fleet 插件；新装使用统一 fresh root，旧资料只按[手动转移说明](../MANUAL-MIGRATION.md)处理，没有自动迁移。
+## 从 GitHub 安装
 
-首卡演示使用匿名、可丢弃的 Git workspace。配置项目、短号和保护分支；在项目 leader 面板预览并启动 leader，再登记 `kanban_supervise`。执行者按自包含简报提交，异实际模型审查，最后由 leader 验收。不要把普通角色对话或审查通过当成最终验收；演示无需 push 或发布。
+先核对 CLI、daemon、app 版本及 daemon 的 Node 环境。`paseo --version` 只报告 CLI 版本，不证明 daemon/app 版本。
 
-## 本机检查与资料
+```sh
+paseo --version
+node --version
+paseo plugin install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed
+paseo plugin ls paseo-kanban --json
+```
 
-`npm run verify` 的十三项本机闸包含 typecheck、脚本/插件回归、CLI 与严格真实编译器、源码/可达历史/身份/secrets、内部契约及兼容负例、单 package/lock/插件身份和实际包字节检查。不依赖或重新启用 GitHub Actions。历史失败仍拒绝，匿名导出历史通过不代表原历史通过。
+这里使用官方 Paseo CLI 的 GitHub 下载路径。该分支是真实公开 ref，但分支尖端会变。要可复现安装，把 `--ref` 改成[发布记录](RELEASE.md)中审过的**完整 commit SHA**。这些命令不表示插件已经通过官方目录审核。不要替换成裸 registry id `jasonhnd/paseo-kanban`、npm 来源或虚构 tag。
 
-`npm run contract:check` 与 `npm run shared:check` 检查同一源码及实质负例，无需另一仓。`afc`/`roles` 是同根下的兼容入口，不依赖跨进程内存。默认测试不需要 Python。
+1. 在目标宿主 **Settings -> Plugins** 打开 **Enable plugins** 和单独的 `paseo-kanban` 开关。全局开关也会启动其他单独启用的插件。全局开关开启后可运行 `paseo plugin enable paseo-kanban --json` 启用本插件。
+2. 再运行 `paseo plugin ls paseo-kanban --json`，确认 `running` 且无加载错误。从该宿主的侧栏打开 **Paseo Kanban**；看板、Fleet、Settings 应共用这一个入口。必须打开真实页面；只有 `running` 不证明 client 挂载成功。窄视口不证明真实手机。
+3. 只有 CLI 默认 daemon 正是目标时才用默认值。管理其他 daemon 时，每条命令均在 `plugin` 前加 `--host "$PASEO_TARGET"`，值为 `tcp://host:port` 等 CLI endpoint。非默认本地 home 另用 `--home`；与 `--host` 二选一，不能同用。[Git 安装](../GIT-INSTALL.md)详述宿主选择、版本确认和开发者 directory 安装。
 
-[工作流](WORKFLOW.md) · [数据与隐私](DATA.md) · [策略和兼容契约](../CONTRACT.md) · [兼容性](COMPATIBILITY.md) · [发布](RELEASE.md) · [参与开发](CONTRIBUTING.md) · [安全](SECURITY.md)
+安装会按锁文件准备依赖并生成命令 bundle。使用者无需开发 checkout 或另跑 `npm run build`。相同 id 已安装时，重复 `install` 会失败；Git 来源使用[更新](#更新停用和卸载)，directory 来源使用[来源切换 runbook](RELEASE.md#directory-转-git-操作预案)。
+
+## 配置并完成首卡
+
+1. 在合并的 Settings 页选择英文或简体中文。Fleet 角色设置只**预览**可用档案；在 Paseo 手动配置适用档案并保留已有项。给 leader、executor、reviewer 设置 role、pool 和明确的实际 model。同 family 不同 model 允许；trim/lower 后相同 model 即使 provider、mode、effort 不同也拒绝。缺实际 model 证据时等待。预览不保存档案、不验证登录；用户自行登录 provider。
+2. 配置自己的额度来源和策略。Fleet 向派活入口提供不可变 `paseo-policy/v1`；策略缺失／无效或受保护额度未知时，拒绝派活，未知不是 0。旧 `fleet-quota/v1` 文件、`afc`／`roles` 是同根下兼容入口。不要再注册独立的旧 Fleet 插件。
+3. 新装使用 `KANBAN_DATA_DIR`，否则为 `PASEO_HOME/plugin-data/paseo-kanban`（Paseo home 默认 `~/.paseo`）。取消非空旧存储变量。不会自动导入旧资料；复用状态前阅读[数据归属](DATA.md)和[手动转移](../MANUAL-MIGRATION.md)。
+4. 建立可丢弃的 `demo` Git 仓库／workspace，先做初始 commit。项目设置填 workspace、短号、保护分支；项目 leader 面板选档案／workspace／语言，预览并启动 leader，确认协议送达。普通对话选择同一档案不完成此设置。
+5. 在该 leader 会话为 `demo` 调用 `kanban_supervise`，或运行：
+
+   ```sh
+   node "$BOARD_INSTALL/bin/paseo-kanban.mjs" supervise --project demo
+   ```
+
+   `BOARD_INSTALL` 取自 `paseo plugin ls paseo-kanban --json` 报告的当前安装路径。CLI 与插件使用相同 Paseo home／数据根。会话使用自己注入的身份，不粘贴 token。面板确认登记；已有活着的 leader 须交接，不直接替换。
+6. 告诉 leader：“创建 L1 卡，在 demo 仓库添加 hello.md，内容严格为 Hello 加换行；检查文件与内容，本地提交、审查、验收，不 push 或发布。”核对执行 commit／交接、不同实际 model 审查、leader 验收、卡片完成、内容正确、Git 干净及托管 agent／workspace 清理。这是验证步骤，不是首卡已通过的报告。
+
+派活等待时查[工作流](WORKFLOW.md)及[排错](COMPATIBILITY.md)。不要把认证文件、原始数据库、备份或未脱敏 doctor 输出发进 issue。
+
+## 更新、停用和卸载
+
+先备份状态，并记录当前完整 revision、来源、安装路径与 enabled 状态。**每次明确 ref**，先预览再更新：
+
+```sh
+paseo plugin update paseo-kanban --check --ref integration/single-plugin-reviewed --json
+paseo plugin update paseo-kanban --ref integration/single-plugin-reviewed --json
+paseo plugin ls paseo-kanban --json
+```
+
+`--check` 只预览。`--ref` 只选择这次操作；以后不带 ref 更新会跟随远端默认 HEAD。完整审过的 SHA 可精确指定目标。更新后核对 revision／路径和真实 UI，托管目录可能变化，因此更新 `BOARD_INSTALL`。不要在托管 checkout 里改代码或构建。[发布与恢复](RELEASE.md)提供备份、精确 SHA 回退和待重放清单。
+
+```sh
+paseo plugin disable paseo-kanban --json
+paseo plugin enable paseo-kanban --json
+paseo plugin remove paseo-kanban --json
+```
+
+停用会停止本插件；启用仍需全局开关。卸载会删除托管 Git checkout，并可能移除宿主插件设置；directory 源码保留。外置数据根独立，卸载不等于清空数据。重装保留同一 id／home／root，并明确恢复设置。**代码回退不恢复数据**；恢复一致备份是另一操作，会丢失备份后的写入。托管更新失败保留旧安装，仍须核 revision／状态；`plugin reload` 失败不会自动恢复旧 bundle。
+
+## 资料
+
+[Git 安装](../GIT-INSTALL.md) · [工作流](WORKFLOW.md) · [数据与隐私](DATA.md) · [兼容性](COMPATIBILITY.md) · [发布](RELEASE.md) · [安全](SECURITY.md) · [变更](CHANGELOG.md)
+
+## 开发者 directory 流程
+
+本节用于改源码，与上面的使用者 GitHub 安装分开。从公开 integration 分支建立干净 clone、安装锁定依赖，并在用源码命令前构建：
+
+```sh
+git clone --branch integration/single-plugin-reviewed --single-branch https://github.com/jasonhnd/paseo-kanban.git
+cd paseo-kanban
+npm ci
+npm run typecheck
+npm run build
+```
+
+只在隔离开发 daemon 上用 `paseo plugin install "$PLUGIN_CHECKOUT"` 安装 directory，变量为 clone 的绝对路径。directory 直接引用 checkout，普通 Git update 会跳过；改源码并检查类型后用 `paseo plugin reload paseo-kanban`，无需重启 daemon。已有安装先准备来源切换方案再执行生命周期命令。
+
+Git preparation 通过 manifest 的 `build` 运行 `server/prepare.mjs`。本地 `npm pack`／prepack／白名单检查验证分发字节，不发布到 npm。八个 Node bundle 为生成文件，不提交 Git。见[准备流程](../GIT-INSTALL.md#git-preparation-and-local-development)和[命令入口](../COMMAND-LAUNCHERS.md)；合并版本以本文 Node 要求为准。
+
+可选 [Codex shell wrapper](../CODEX-WRAPPER.md)有独立配置和平台要求。[写入身份](../WRITE-PROVENANCE.md)只审认证身份，不证明 provider 回合来源。[工具链验证](../TOOLCHAIN-VALIDATION.md)与真实 app/provider 验收分开；[Antigravity 授权](../ANTIGRAVITY-AUTHORIZATION.md)记录该适配器派活边界。
+
+## 开发者隐私闸
+
+个人状态不能进入仓库或分发产物。这些检查适用于 Git 源码和本地打包产物；本批不走 npm 发布。
+
+1. `.githooks/pre-commit` 扫描暂存文件的通用规则及仓外私人 denylist；身份检查只接受占位或 GitHub noreply；有 gitleaks 时同时运行。规则禁止私人 home 路径、邮箱、id、卡号、密钥、真实数据和中文对应目录以外的中文内容。
+2. `npm run verify` 及 `.githooks/pre-push` 的十三闸包含类型、脚本／插件测试、CLI／真实 Paseo 编译、源码／完整可达历史／身份／泄漏、单源码契约及实质负例、真实包字节。出站 ref 与 annotated tag 单独扫描，并导出精确提交用锁定依赖重验。任何失败均拒绝发布；无需启用 GitHub Actions。
+3. `package.json` 的 `files` 白名单由真实 `npm pack` 解包字节检查；它不是 npm 已发布证明。
+
+```sh
+npm ci
+npm run hooks
+git config user.name "paseo-fleet contributors"
+git config user.email "<id>+<user>@users.noreply.github.com"  # 或 noreply@example.invalid
+mkdir -p ~/.config/paseo-fleet
+cp scripts/private-denylist.example.txt ~/.config/paseo-fleet/private-denylist.txt
+brew install gitleaks
+```
+
+denylist 保留个人身份、项目和目录等禁止词，不进任何仓库；缺少它会拒绝本机提交。可用 `FLEET_PRIVATE_DENYLIST=<path>` 指定仓外路径。短词误报须改公开措辞，不削弱规则。
+
+```sh
+npm run verify
+sh .githooks/pre-push </dev/null
+npm run build:check  # 严格真实编译器；需要时 PASEO_SERVER_DIR 指公开宿主包
+npm run typecheck
+npm test
+npm run test:plugin
+npm run build
+npm run scan
+npm run identity
+npm run pack:check
+npm run contract:check
+npm run shared:check
+```
+
+独立命令生成后以 Node 运行，tsx 等用于开发。测试保留 locale preload、私有临时目录、信号清理及回归完成后的性能阶段。单源码契约和闸命令负例不需要另一仓；旧比较工具保留为受测工具。[参与开发](CONTRIBUTING.md)
+
+## 许可
+
+[MIT](../../LICENSE)

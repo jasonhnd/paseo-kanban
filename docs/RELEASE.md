@@ -1,60 +1,128 @@
-# Manual release checklist
+# Git release and recovery checklist
 
-The combined plugin has one package, version, tag and CHANGELOG. This checklist does not authorize a push, tag, publish, production update or external message. Local checks are required; GitHub Actions is not a prerequisite and must not be enabled merely to satisfy the checklist.
+This batch distributes the single plugin through **Git only**. The public repository is `https://github.com/jasonhnd/paseo-kanban`, branch `integration/single-plugin-reviewed`. Package version `0.1.0` is experimental metadata, not evidence of an npm release, published tag or official registry listing. This checklist records work to do; it does not declare publication, production switching or external submission complete, and does not authorize those operations.
 
-## Version policy
+## Version and evidence policy
 
-First release: `0.1.0`, **experimental**. In 0.x, a patch is a compatible fix; new features or breaking configuration/behavior changes increment the minor version. From 1.x, use SemVer: breaking changes increment major, compatible additions minor, fixes patch. Package version, release heading, npm version when published and `vX.Y.Z` tag agree for the same plugin.
+The combined plugin has one package/version/CHANGELOG and runtime id `paseo-kanban`. In 0.x, use patches for compatible fixes and minors for new features or breaking configuration/behavior. From 1.x, use SemVer. Contract/schema versions are separate; compatible additions retain their version, while breaking changes need an explicit migration/recovery plan.
 
-Keep Added, Changed, Fixed, Security and Notes sections under Unreleased. Notes must state host range, schema/contract changes, tested standalone compatibility inputs, fresh-install storage and manual transfer/rollback limits. Contract versions are separate from package versions: compatible additions retain v1; breaking changes require a new schema version.
+A Git branch is mutable. Every release record must save a full reviewed public commit, regardless of whether a tag exists. A tag is optional for this channel; do not document one as an install target before it exists. If a tag is later used, align it with package/CHANGELOG version, review its metadata, and never move, overwrite or reuse it. Preserve the previous verified public commit for rollback.
 
-## Before a release
+Keep Added, Changed, Fixed, Security and Notes under Unreleased until publication is verified. Notes must state host range, data/contract changes and real test limits. Do not turn source-only checks into app/provider certification.
 
-- [ ] Triage the intended changes, link issues to self-contained briefs, and assign an owner for shared issues. Verify actual fixes against reproduction steps.
-- [ ] Install locked development dependencies with `npm ci` and build the combined commands with `npm run build`.
-- [ ] Run `npm run verify` on the exact candidate in the single package. Retain commands, full commit ids, exits and summaries. All thirteen gates, including actual Paseo compilation, plugin tests, leak/privacy/identity checks and package whitelist, must pass locally.
-- [ ] Check `npm pack --dry-run --json`, version metadata and CHANGELOG. Put any actual package artifacts outside the checkout. Test unpacked CLI commands with Node alone.
-- [ ] Obtain independent review by a different actual model and lead acceptance. Keep the tree clean. Record the exact combined candidate and frozen source inputs.
-- [ ] In a disposable home with isolated data, test actual candidate installations from npm artifacts and Git tags, desktop mounting, language persistence, roles, leader protocol/registration and a complete first card. Check one plugin/sidebar, board/workspace navigation and Fleet panels. Unverified phone behavior remains explicitly unverified.
-- [ ] Record macOS and Linux evidence separately before claiming support; WSL2 is a separate record. Verify failure recovery, settings restoration, provider paths and affected upgrade/downgrade behavior. Pure mocks or a minimal sample plugin do not count as product validation.
-- [ ] The single manifest runs `server/prepare.mjs`; see [Git installation](GIT-INSTALL.md). Generated `bin/*.bundle.mjs` are ignored by Git; npm artifacts include all eight prepacked bundles. Validate the actual clean-host installation. Do not release a Git tag whose installed commands need a development checkout.
-- [ ] Confirm the owner has enabled GitHub private vulnerability reporting and checked the repository's Report a vulnerability entry. Publication must not invent an alternate email address.
-- [ ] Obtain the owner's publication authorization. If history is rewritten before first publication, rerun checks and validate the final commit before making the immutable release tag.
+## Before publishing a candidate
+
+- [ ] Work from the approved public ancestor in a clean clone, with only permitted changes. Do not merge unpublished development history. Save the base, full commit/tree, patch/bundle hashes and exact file list.
+- [ ] Run locked `npm ci`, local build and `npm run verify` on the **combined final candidate**. All thirteen local gates, including real Paseo compilation, plugin tests, privacy/reachable-history/identity/leak checks, contracts and actual package bytes must pass. Separate component checks are not final-candidate evidence.
+- [ ] Check `npm pack --dry-run --json` and actual packed bytes, all eight generated commands and Node-only CLI behavior. Put artifacts outside the checkout. Packing is an internal gate, not npm publication.
+- [ ] Get independent review by a different actual model and leader acceptance of the exact diff. Require clean Git status; record the outcome before publishing.
+- [ ] In isolated home/cache/data/ports with no production configuration or credentials, test exact-candidate local Git acquisition/preparation, explicit-ref updates/downgrades, failure preservation and same-id directory-to-Git conversion. Use `NODE_ENV=production` as a separate preparation case.
+- [ ] Test the actual installed product's desktop and compact page, sidebar/deep link/workspace filter, board/Fleet tabs, language/theme, RPC success/error and cleanup. Record real phone and authenticated provider first-card evidence separately; mocks/anonymous DOM fixtures are not substitutes.
+- [ ] Check default and explicit data roots, host settings/enabled restoration, current CLI paths, and separate code/data rollback. Record macOS, Linux and WSL2 individually; leave unsupported or untested environments explicit.
+- [ ] Confirm owner publication authorization and private vulnerability reporting. Publish only the reviewed ref by an approved ordinary push; no force push, unrelated refs, npm publish or registry submission is implied.
+- [ ] Resolve the final public full SHA again from GitHub, compare it to the reviewed artifact, and replay the GitHub README commands in a second clean home. Retain results before describing this remote candidate as validated.
+
+Hosted CI is not enabled or required by this integration. All required tests/builds run locally before handoff or merge. External CI, publication or another card's completion can be recorded as waiting work; it is not a reason to claim a local check passed or to leave a prepared handoff unsubmitted.
 
 ## Release record template
 
-Copy this into the release evidence; replace every placeholder before publishing:
+Fill the draft with actual evidence before claiming publication:
 
-| Field | Required value |
+| Field | Required evidence |
 |---|---|
-| Plugin/package/version/date | This plugin only; CHANGELOG release heading |
-| Candidate and final commit | Full hashes; explain any difference and revalidation |
-| Tag -> commit | `vX.Y.Z` -> full commit; verify with `git rev-parse vX.Y.Z^{commit}` |
-| Compatibility inputs | Frozen source commits and explicitly tested legacy fixtures |
-| Host/platform | Daemon/app/Node/npm/OS versions; provider/model/family |
-| Contract | Schema, manifest hashes and interoperability evidence |
-| Local verification | Commands, exits, test totals, CLI/Paseo build and scan results |
-| Package | `npm pack` file list and unpacked command results |
-| Review and desktop evidence | Review outcome, actual panel and first-card checks |
-| Recovery | Consistent data/settings backups, disabled-state handling, rollback test |
-| Release authorization | Owner approval and intended distribution channels |
+| Identity/version/status/date | Single plugin/package version; experimental or released status and verification date. |
+| Public source | Repository, explicit branch or existing tag, and full remote commit. |
+| Base/candidate/final | Full base, candidate/final commit and tree; explain changes and revalidation. |
+| Artifacts | Bundle/patch/pack hashes and permitted file list. |
+| Host/platform | Exact daemon/app/CLI/Node/npm/OS; provider and actual executor/reviewer models when used. |
+| Contract/data | Schema/manifest hashes, stable data root, compatibility evidence, migration limits. |
+| Local checks | Commands, exits, test totals, all thirteen gates and CLI/Paseo build. |
+| Installation and UI | Local Git and fresh remote replay; real desktop/compact/phone separately. |
+| First card | Completion, different-model review, leader acceptance and cleanup; mark missing conditions. |
+| Recovery | Consistent data backup, host settings/enabled capture, failed-update and source/code/data recovery evidence. |
+| Review/authorization | Exact reviewed artifact, review outcome, leader acceptance and authorized channel. |
 
-Create a tag only on the clean, reviewed, verified commit. Never move, overwrite or reuse a published tag; correct mistakes with a new version. Preserve access to the previous tag and its commit for rollback.
+## Command replay checklist
 
-## Experimental, stability and distribution
+Syntax was checked against public **Paseo CLI 0.11.2 help and fixed docs**, not a running product install. The isolated-validation and final-integration owners must fill this table with exact candidate/host, command, exit and before/after observations; the publishing owner repeats applicable rows from GitHub after the final ref is public. Keep logs private and summaries anonymous.
 
-An experimental first release may precede the long stability observation, after clean-host release validation and authorization. Keep the experimental label. Before claiming stability, observe the newly installed code for at least **14 days and 20 real, complete requested cards**, covering all five worker roles, independent review, any implemented ordinary self-check mode, restart, supported patch updates and demo-data rollback, with no unresolved P0/P1 defects. Never invent tasks to reach a count. A seven-day data-migration observation does not replace this code observation. A 1.0 claim requires longer evidence and a separate decision.
+Use a new test home in the child environment and an explicit CLI endpoint on **every** connection command, for example `paseo --host "$PASEO_TEST_HOST" plugin ...`, where the endpoint is `tcp://host:port`. Use `--home "$PASEO_TEST_HOME"` for local daemon startup; **never combine `--home` and `--host`**. The 0.11.2 target guard rejects that combination. Plugin/SDK `PASEO_URL` is a separate WebSocket URL with `/ws`, not the CLI `--host` value. Use a whitelist environment, no inherited agent identity/tokens, disabled relay/providers and explicit `false` optional adapters. A real provider test uses only a user-established isolated login, not copied production authentication.
 
-Maintain one evidence-backed status per item: landed (card/commit), broken, unverified (implemented without independent real-world validation), pending (requested), or abandoned (attempt and reason). Move entries when evidence changes rather than duplicating them.
+| Replay | Required result; current document status |
+|---|---|
+| `paseo --version`, top-level/plugin/install/update help | Version and options recorded; help-only checked, no daemon validation. |
+| `install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed --json` | Actual full remote revision/path and prepared product; pending isolated and post-publication replay. |
+| Install full final public SHA; local `file://` full SHA first | Exact content, locked preparation, eight bundles and working CLI under fresh cache/production environment; pending. |
+| `ls paseo-kanban --json`, `logs paseo-kanban --json` | Source/revision/path/enabled/load error and sanitized output; pending installed-product checks. |
+| Repeat same-id install; nonexistent ref | Refused without changing existing path/revision/enabled state/data; pending. |
+| `update paseo-kanban --check --ref "$REVIEWED_COMMIT" --json` | Preview only; revision/path/state unchanged; pending. |
+| `update paseo-kanban --ref "$REVIEWED_COMMIT" --json` | Exact new revision, working CLI/RPC/UI and stable data root; pending. |
+| Explicit `--ref "$PREVIOUS_COMMIT"` check/downgrade/re-upgrade | Code changes only, data sentinel remains; pending. |
+| Local-only bad prepare/compile/activation refs | Update refused, previous install/path/enabled/data and working action retained; pending. |
+| `disable`, `enable`, `remove`, reinstall same id | Lifecycle state, settings and external-root behavior verified; pending. |
+| Developer directory `install`/edit/typecheck/`reload` | Directory update is skipped/rejected; reload failure does not imply rollback; pending. |
+| Directory-to-Git and reverse conversion | Default and explicit roots, settings/enabled, CLI/exports and scheduler continuity; pending. |
+| Consistent anonymous backup and data restore | Separate from code downgrade; later writes and restore consequences demonstrated; pending. |
+| Installed `bin/paseo-kanban.mjs --help` / `list --json`; `roles.mjs ls`; doctors | Node-only commands, current paths and same root, no production access; pending installed-product replay. |
+| Real desktop/compact and physical phone | Actual host/app versions, anonymous screenshots, navigation/RPC/error/cleanup; each pending independently. |
+| Real provider first card | Executor commit -> handoff -> different-model review -> leader acceptance -> finished/cleaned; pending. |
 
-Registry submission follows a period of successful daily use and a separate readiness decision; it is not automatically triggered by the first tag or npm release. Evaluate accumulated changes regularly and release when justified; no fixed release or response schedule is promised.
+`REVIEWED_COMMIT` and `PREVIOUS_COMMIT` are full public SHAs from the release record. An unpublished candidate uses a local `file://` source, never an invented remote SHA. Branch refs can move between separate preview/apply operations; use the exact preview SHA for a controlled rollout. Never push deliberately broken failure-test refs.
+
+Official sources: [0.11.2 reference](https://github.com/getpaseo/paseo/blob/75953250959979b8f088bbca8dbd6ee61d0151b1/public-docs/plugins/reference.md#cli-reference), [publishing](https://github.com/getpaseo/paseo/blob/75953250959979b8f088bbca8dbd6ee61d0151b1/public-docs/plugins/publishing.md), and [current registry review snapshot](https://github.com/getpaseo/plugins/blob/06c64d182a3b0e0d879992231d1cf3c9a6bbf809/REVIEW.md). Syntax/document review does not certify runtime behavior.
 
 ## Updating and recovery
 
-Record current/target tag, full commit, source, path and enabled state. Pause dispatch/writes, take consistent data backups and separately save plugin settings/language and enabled state. Preview the explicit target with `update --check --ref`, then apply `update --ref`. Check revision, actual data-directory logs, configuration, quota matrix, installed CLI paths, card counts, desktop panels and a demo card before resuming.
+Record current/target full commits, source kind, actual paths, root and enabled state. Pause dispatch/writers, take [consistent data and separate host settings backups](DATA.md#backup-and-data-restore), then preview/apply an explicit SHA:
 
-Changing source requires backup, remove/install and restoration of settings/enabled state; it is not an ordinary update. Removal can delete plugin settings and managed checkout files while preserving plugin-data. Reinstallation may briefly enable the plugin. Rehearse with disposable data first. A failed update may try to restore the previous installation; verify the result. A failed reload does not itself restore an old bundle. Explicitly return to the previous verified tag and repeat checks. Preserve new data before restoring a compatible consistent backup; code rollback alone does not reverse a data migration.
+```sh
+paseo plugin update paseo-kanban --check --ref "$REVIEWED_COMMIT" --json
+paseo plugin update paseo-kanban --ref "$REVIEWED_COMMIT" --json
+paseo plugin ls paseo-kanban --json
+```
 
-## Offline issue-to-release rehearsal
+Before resuming, verify revision, actual server/CLI/Fleet root, settings/language, policy/matrix, counts, exports/CLI paths, real page and an approved demo cycle. A managed update failure retains the prior installation; inspect its revision/path/enabled state and working action. A failed reload stays failed until repaired/reloaded; it does not restore an old bundle automatically. Loading code changes does not require restarting the daemon.
 
-Use [the rehearsal fixture](OPERATIONS-DEMO.md) locally. It exercises issue intake, scope, card brief, review/acceptance criteria and an unpublished release draft without contacting GitHub or a live daemon. It does not replace the clean-host first-card gate.
+Git code rollback uses the recorded previously verified public SHA on `update --check --ref` and `update --ref`. Keep current data and verify schema compatibility. Data restoration is a separate, explicitly authorized action with all writers stopped and a consistent compatible backup; preserve current state first because restoring can lose later writes. Do not automatically recover data in response to an update error.
+
+## Directory-to-Git switch runbook
+
+**Prepared procedure, not executed production migration.** A usage-side operator needs authorization for the actual source/operating-mode switch, reviewed final remote SHA and successful isolated conversion/recovery evidence. This document does not give an agent permission to read production configuration, databases or credentials.
+
+1. Identify the intended host, same runtime id `paseo-kanban`, current directory path/source/enabled state, and actual canonical data root. Keep `PASEO_HOME` and `KANBAN_DATA_DIR` unchanged. Save host plugin settings/language/enabled separately and a consistent private root backup; retain the unchanged old source directory. Do not import old Fleet data as part of this conversion.
+2. Pause dispatch, scheduled helpers and every writer. Rehearse a pause mechanism that remains effective during install: a new installation may enable immediately and start loops before settings are restored. Do not perform a live switch until that behavior is controlled. Estimate interruption from the isolated rehearsal; no measured duration is supplied here.
+3. On that same host, disable and remove the directory installation. Removal keeps the source directory, but may delete host plugin settings. A directory source cannot be converted by ordinary update, and same-id Git install is rejected until removal.
+
+   ```sh
+   paseo plugin disable paseo-kanban --json
+   paseo plugin remove paseo-kanban --json
+   paseo plugin install github:jasonhnd/paseo-kanban --ref "$REVIEWED_COMMIT" --json
+   paseo plugin ls paseo-kanban --json
+   ```
+
+   Prefix every command with the intended `--host` endpoint or local `--home` selection when nondefault, never both. Do not hand-edit source entries or use config reload as a substitute for lifecycle commands.
+4. Confirm Git source/full revision/new path, same external data root across server/board/Fleet/CLI/exports, and no discarded `KANBAN_HOME` reference. Restore saved settings and intended enabled state; refresh CLI launchers/exports. Confirm policy/matrix, roles, counts, running/error/tick state, actual desktop/phone surfaces and a permitted demo cycle before resuming dispatch. Leave missing phone/provider evidence explicitly unresolved.
+5. On failure, keep writers paused and the old directory intact. If a Git entry exists, disable/remove it. Reinstall the unchanged directory with `paseo plugin install "$PREVIOUS_DIRECTORY" --json`, then restore saved host settings/enabled state and verify the same root/CLI/UI. `PREVIOUS_DIRECTORY` is the previously recorded absolute local source path. This code/source recovery is not data restore.
+
+No daemon restart is needed solely to install/update/reload source. Changing startup environment, data root, relay or provider configuration is a separate operating change with its own authorization and restart plan; restarting can interrupt running agents. This conversion preserves those values and does not migrate/merge old databases. Production-specific paths and backups stay private with the usage-side operator.
+
+## Registry submission draft
+
+**Draft only; not submitted and not listed.** Direct Git installation through the official CLI is independent of official registry approval. Recheck the current registry policy before a future submission; the current reviewed snapshot is linked above. A submission normally produces a review PR pinned to one artifact; maintainers review it and merge approval. Pushing Git commits does not list the plugin or update an approved registry pin.
+
+| Draft field | Proposed content / unresolved evidence |
+|---|---|
+| Route | [Official submission form](https://github.com/getpaseo/plugins/issues/new?template=submit-plugin.yml). |
+| Name | Paseo Kanban. |
+| Source | `https://github.com/jasonhnd/paseo-kanban/tree/<REVIEWED_PUBLIC_COMMIT>`; replace with the final full reviewed public SHA before sending. |
+| Categories | Orchestration first, Sidebar second. |
+| Description | Cross-project coding-agent cards with Fleet roles, quota policies, independent review and leader acceptance. |
+| Setup/access/limits | [OVERVIEW](../OVERVIEW.md), host/platform limits, [DATA](DATA.md) and completed release evidence. |
+| Media | At least one anonymous image of the actual installed visual interface, preferably PNG with an HTTPS asset URL; still to be supplied/verified. |
+| Artifact review inputs | Root manifest and both entries, dependency lock/origins, preparation and eight CLI purposes, exact public commit/hash, MIT attribution and access description. |
+
+The current form requires Source and offers categories. Visual interfaces need a suitable image under registry review policy; this is a listing requirement, not a Git install parser requirement. Account login/2FA and author authorization remain under the user's control. No agent submits the draft, publishes private data or guarantees official approval/date. Registry Git updates require another reviewed pin; this direct-Git update guide does not update that listing.
+
+Project readiness policy schedules a registry request after successful daily use and a separate decision. Before claiming stability, observe at least **14 days and 20 real requested complete cards**, covering worker roles, independent review, restart, supported patch updates and demo-data recovery, with no unresolved P0/P1. Do not invent tasks to reach a count. This project policy is not an official prerequisite for direct Git installation. Longer evidence and a separate decision are needed for 1.0.
+
+Track each evidence-backed item once as landed, broken, unverified, pending or abandoned; move it as status changes. The [offline operations rehearsal](OPERATIONS-DEMO.md) tests issue-to-draft flow without contacting GitHub or a live daemon and does not replace real installation/provider checks.

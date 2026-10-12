@@ -1,57 +1,112 @@
-# Installing and updating a Git tag
+# Git installation and updates
 
-Paseo 0.11 supports explicit Git sources and selectors:
+[README](../README.md) is the user quickstart. This guide separates managed Git installation from a developer's directory source. Command syntax is based on the public Paseo **0.11.2** CLI help and [fixed reference](https://github.com/getpaseo/paseo/blob/75953250959979b8f088bbca8dbd6ee61d0151b1/public-docs/plugins/reference.md#cli-reference). Help checks are not proof of an installed product, UI or provider cycle; use the [replay checklist](RELEASE.md#command-replay-checklist).
+
+## Select the host and source
+
+Install to the intended daemon. With the default local home:
 
 ```sh
-paseo plugin install github:jasonhnd/paseo-kanban --ref vX.Y.Z
-paseo plugin update paseo-kanban --ref vX.Y.Z
+paseo --version
+node --version
+git --version
+npm --version
+paseo plugin install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed --json
+paseo plugin ls paseo-kanban --json
+```
 
-# A local Git repository uses the same managed-clone path.
-paseo plugin install "file://$PLUGIN_REPOSITORY" --ref vX.Y.Z
+The current public source is `https://github.com/jasonhnd/paseo-kanban`, branch `integration/single-plugin-reviewed`. The published baseline for this documentation work is `fcf1b97c9db2c610b376ea792c50428fbc8f07f8`; it is an earlier public source snapshot, not the final combined candidate. A branch can move. For an exact repeatable install, choose a reviewed full SHA that is available remotely:
+
+```sh
+paseo plugin install github:jasonhnd/paseo-kanban --ref "$REVIEWED_COMMIT" --json
+```
+
+`REVIEWED_COMMIT` must be the full public commit from the release record. Do not copy a local unpublished candidate SHA into a GitHub install. There is no required tag or npm release for this Git-only channel. The bare `jasonhnd/paseo-kanban` identifier means the official registry, which is a separate review process; it is not this direct Git source.
+
+For another daemon, select its endpoint explicitly for **every** operation:
+
+```sh
+paseo --host "$PASEO_TARGET" plugin install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed --json
+paseo --host "$PASEO_TARGET" plugin ls paseo-kanban --json
+```
+
+`PASEO_TARGET` is a CLI endpoint such as `tcp://host:port` (or `host:port`), not an agent identity or credential. Do not pass the SDK WebSocket URL to CLI `--host`. A nondefault local home instead uses `--home "$PASEO_TEST_HOME"`. **Choose either `--home` or `--host`, never both in one command**; 0.11.2 rejects both with `TARGET_AMBIGUOUS`. In isolated tests, keep child `HOME`/`PASEO_HOME` on the test home, use only `--host` on connection commands, and set plugin/SDK `PASEO_URL` to `ws://host:port/ws` (or the corresponding TLS URL). Acquisition, npm preparation and execution happen on that daemon host; the client device does not install dependencies. Do not infer remote Node/Git/npm availability from versions on the client machine. CLI `--version` does not certify the daemon/app version pair.
+
+Paseo plugins are trusted, unsandboxed code. Inspect the selected source and [access description](DATA.md). The manifest declares `>=0.11.0 <0.12.0`; daemon and app must both match. Node >=22.13.0 with working `node:sqlite`, Git and npm are needed on the daemon PATH. Platform evidence and remaining experimental limits are in [COMPATIBILITY](COMPATIBILITY.md).
+
+## Enable and confirm the installed version
+
+Turn on **Settings -> Plugins -> Enable plugins** on the intended host, and enable `paseo-kanban` individually. Turning on the global switch also activates other individually enabled plugins.
+
+```sh
+paseo plugin enable paseo-kanban --json
 paseo plugin ls paseo-kanban --json
 paseo plugin logs paseo-kanban --json
 ```
 
-Use a published tag that exists in the selected repository. These commands
-copy the selected revision into the daemon's managed plugin directory. A plain
-directory installation instead references the existing checkout. The selector
-does not pin later ordinary updates: supply `--ref` on each tag-based update.
+Require `running` without a load error. Record the returned source kind, full installed revision, enabled state and actual path. A package version of `0.1.0` alone cannot distinguish two source commits. Do not guess the managed cache path. Open the real sidebar entry and test the board/Fleet page on the same host.
 
-Persistent state is separate from the managed checkout. Server and commands
-use `KANBAN_DATA_DIR`, or `PASEO_HOME/plugin-data/paseo-kanban`, with Fleet state
-in its `fleet/` child. Compatibility metadata never redirects this root. Retired
-storage overrides produce configuration diagnostics. Updating a Git source does
-not transfer old data; see [data ownership](DATA.md) and the optional
-[user-run manual transfer](MANUAL-MIGRATION.md).
+The install does not put plugin commands on PATH. Set `BOARD_INSTALL` to the path from `ls`, then use the generated launchers with the same home/data-root environment as the daemon:
 
-Node 22.13 or newer and npm must be available on the daemon's `PATH`. The
-manifest's `build` commands run before compilation on install and update.
-`preparation` is not a manifest field in Paseo 0.11.2. See the official
-[manifest and preparation reference](https://paseo.sh/docs/plugins/reference#cli-reference).
+```sh
+node "$BOARD_INSTALL/bin/paseo-kanban.mjs" --help
+node "$BOARD_INSTALL/bin/paseo-kanban.mjs" list --json
+node "$BOARD_INSTALL/bin/roles.mjs" ls
+```
 
-`server/prepare.mjs` installs dependencies with lifecycle scripts disabled and
-development inputs explicitly included, even under `NODE_ENV=production`.
-Git checkouts use `npm ci` and the committed lockfile. The host compiler checks
-type imports as well as runtime imports, so it needs `@getpaseo/client`,
-protocol declarations and Node types. Merely changing imports to `import type`
-does not make those packages unnecessary. Zod and the pinned external command
-SDKs are production dependencies; compiler and CLI build tools remain
-development dependencies.
+No end-user build is needed after successful Git preparation. Authentication/roles/policy and the first-card walkthrough are in [README](../README.md#configure-and-finish-a-first-card). Do not paste supervisor tokens or provider credentials into commands or reports.
 
-For a Git checkout, preparation then calls the existing standalone CLI builder.
-The eight generated bundles run with Node alone. npm packages omit the repository
-scripts and already contain those bundles; their preparation uses `npm install`
-when no package-local lockfile exists and checks the prepacked commands without
-calling a missing builder. Every preparation failure refuses the candidate.
-Paseo retains the previous installation when an update fails.
+## Preview and update an explicit ref
 
-The daemon-wide plugin switch and the individual plugin must both be enabled
-for status `running`. Configure profiles in Paseo before dispatching cards.
-An isolated empty-board test can explicitly use `daemon.agentProfiles: []`.
-Read the managed directory from `plugin ls`, then run its
-`bin/paseo-kanban.mjs --help` and `bin/paseo-kanban.mjs list --json`.
+Save current revision/path/enabled state, pause dispatch and other writers, and take consistent [data/settings backups](DATA.md#backup-and-data-restore). Use the desired branch or, for a reproducible target, full reviewed public SHA on **both** commands:
 
-For disposable verification, select a separate daemon with `--home`, write its
-`daemon.listen` to an unused loopback port before starting it, disable its relay
-and providers, and point `PASEO_URL`, `KANBAN_DATA_DIR` and `TMPDIR` at that environment, with retired storage overrides unset. Create test tags only in a
-temporary clone. Stop the selected daemon before removing its temporary data.
+```sh
+paseo plugin update paseo-kanban --check --ref integration/single-plugin-reviewed --json
+paseo plugin update paseo-kanban --ref integration/single-plugin-reviewed --json
+paseo plugin ls paseo-kanban --json
+```
+
+`--check` only previews. A branch can advance between a separate preview and apply command; use the full SHA from the preview/release record when those operations must target identical bytes. `--ref` applies without another approval prompt. Install/update selectors do not permanently pin later ordinary updates: an update without `--ref` checks the remote default HEAD. Avoid `--all` and unqualified updates for a controlled rollout.
+
+Managed Git revisions may get different paths. Refresh `BOARD_INSTALL`, generated CLI references and any local command configuration after updating. Keep `PASEO_HOME` and `KANBAN_DATA_DIR` unchanged; do not point `KANBAN_HOME` at a discarded checkout. Never run `git checkout` or `npm ci` inside a managed installation to change its code. Verify revision, settings/data root, CLI/RPC and actual UI before resuming dispatch.
+
+A failed download, preparation, compile or activation retains the previous managed installation. Still verify its revision/path/enabled state and a working action. `plugin reload` is different: failure does not automatically restore the previous bundle. See [recovery](RELEASE.md#updating-and-recovery) and [troubleshooting](COMPATIBILITY.md).
+
+## Disable, remove and roll back code
+
+```sh
+paseo plugin disable paseo-kanban --json
+paseo plugin enable paseo-kanban --json
+paseo plugin remove paseo-kanban --json
+```
+
+Removal deletes managed Git files, keeps a directory source checkout, and may remove host plugin settings. The external data root is separate. Reinstallation can enable the plugin immediately; rehearse source switching before doing it on a live scheduler. Same-id `install` is rejected while the old installation exists.
+
+For a Git code downgrade, preserve current data and use a full **previously verified** public commit:
+
+```sh
+paseo plugin update paseo-kanban --check --ref "$PREVIOUS_COMMIT" --json
+paseo plugin update paseo-kanban --ref "$PREVIOUS_COMMIT" --json
+paseo plugin ls paseo-kanban --json
+```
+
+Set `PREVIOUS_COMMIT` from the saved release record, not from package version alone. Code downgrade does not undo data writes. Data restore needs a separate consistent, compatible backup and can discard newer writes. A directory-to-Git switch needs remove/install rather than Git update; see the [prepared runbook](RELEASE.md#directory-to-git-switch-runbook), which does not declare a production switch complete.
+
+## Git preparation and local development
+
+The manifest's `build` argv runs `node server/prepare.mjs` before compilation. Git preparation uses the committed lockfile with `npm ci --include=dev --ignore-scripts --no-audit --no-fund`, including under `NODE_ENV=production`, then builds all eight standalone command bundles. Compiler/type inputs are intentionally included. A missing bundle or failed command refuses the candidate. This behavior needs exact-candidate clean-host validation; it is not certified merely by reading this script.
+
+For a developer source directory only:
+
+```sh
+npm ci
+npm run typecheck
+npm run build
+paseo plugin install "$PLUGIN_CHECKOUT" --json
+# After edits and a successful typecheck on the same development directory:
+paseo plugin reload paseo-kanban --json
+```
+
+`PLUGIN_CHECKOUT` is the absolute path to your clean clone, on a disposable development host with no existing same-id installation. Directory sources reference that directory; `plugin update` skips them. Reload source without restarting the daemon. Local `npm pack`/prepack checks verify generated bytes for release gates; they do not establish a supported npm distribution channel.
+
+A disposable verification environment needs a separate home, private temp/cache/data roots, an unused loopback listener and explicit CLI host. Use a whitelist environment, no inherited agent identities/tokens, no personal provider configuration, disabled relay/providers, and explicit `false` optional adapters. Test a local Git source with `file://` and a full ref before remote replay. Keep failures local, stop test processes, and never use production databases or credentials.
