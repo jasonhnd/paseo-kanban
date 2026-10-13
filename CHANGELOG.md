@@ -1,9 +1,24 @@
 # Changelog
 
 The single plugin has one version and CHANGELOG. Distribution is through Git.
-Three release candidates are recorded here. `0.1.0-rc.3` is the current integrated candidate. `0.1.0-rc.2` remains frozen and unpublished. `0.1.0-rc.1` was local preparation only and was not published. No GitHub Release is declared by this document. There is no npm publication or official registry listing.
+Four release candidates are recorded here. `0.1.0-rc.4` is the current candidate, pending independent review. `0.1.0-rc.3` remains frozen, unpublished and rejected for publication. `0.1.0-rc.2` remains frozen and unpublished. `0.1.0-rc.1` was local preparation only and was not published. No GitHub Release is declared by this document. There is no npm publication or official registry listing.
 
-## 0.1.0-rc.3 — pending publication
+## 0.1.0-rc.4 — pending review and publication
+
+Local candidate tag: `v0.1.0-rc.4`. Install from GitHub only after its matching prerelease targets the reviewed full commit in the [release record](docs/RELEASE.md). This preparation does not publish it. Frozen rc.1, rc.2 and rc.3 tags are never moved.
+
+### Fixed
+
+- Default immutable policy consumption no longer reopens a producer's `dispatchable=false` when the snapshot expires, including quota-unprotected and older low-usage entries. Default routing retains matrix pauses across expiry. An originally open `quotaProtection=none` pool without a matrix pause remains eligible; explicit legacy compatibility behavior is unchanged.
+- Anonymous regression exercises the real pool producer, contract projection, immutable publication and default reader/routing/start path with a fake launcher. It covers freshness/TTL boundaries, protected expiry, missing/invalid policy, digest changes, local disabled pools, stale 99-percent legacy readings and producer safety stops.
+
+### Notes
+
+- Package and lock metadata are `0.1.0-rc.4`. Prior artifact-acceptance, decision-panel and managed command-path fixes remain. Dependencies, schemas and contract versions are unchanged.
+- The frozen rc.3 default stale-policy failure is retained. rc.3 at `61cce0d8ba07e8bf01fe7239ddf0ceeaf5983df4` (tree `633c99456b05cdbf7156f5c3ab1149451a767738`, annotated object `7e288e22f42598a651edef407dcdb82871c3d9de`) must not be published. Prior component or rc.3 gate results do not pass the new exact candidate.
+- Required final local gates and installed default-policy/UI evidence belong in the new candidate record. GitHub tag/full-SHA installation, three-host upgrade, natural 600-second refresh and rollback replay remain separate post-publication work. The earlier hot-update failure, mounted-only Undo, uppercase-host refusal, unresolved dependency alerts and all unverified phone/native/provider/platform/production limits remain below.
+
+## 0.1.0-rc.3 — frozen local candidate, rejected for publication
 
 Immutable candidate tag: `v0.1.0-rc.3`. Install it from GitHub only when its Release exists, is a prerelease, and targets the full reviewed commit in the [release record](docs/RELEASE.md). Otherwise it remains unpublished. Frozen rc.1 and rc.2 tags are never moved. rc.2 remains at `8be11b6144b6cc7b81bcf741a360acf18111001f`, annotated object `0e16a0c43de421db583a31b3dee7b6e6b67e6b82`.
 
