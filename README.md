@@ -4,9 +4,9 @@ A [Paseo](https://github.com/getpaseo/paseo) plugin that combines a cross-projec
 
 [Simplified Chinese](docs/zh-CN/README.md)
 
-> **Experimental RC `0.1.0-rc.2` — unpublished until its GitHub Release record exists.** Install `--ref v0.1.0-rc.2` only when that GitHub Release exists, is a prerelease, and its target commit equals the reviewed commit in the [release record](docs/RELEASE.md). While the Release record is absent, this candidate is unpublished and the tag is not a GitHub install target. `v0.1.0-rc.1` was local preparation for `22958ff54c955c1a90683f786d3ebb8b9ae88470` only; it was not published and is not moved. The current public baseline is c106 on `integration/single-plugin-reviewed`. That baseline passed isolated official 0.11.2 GitHub installation/recovery and Web UI checks in Microsoft Edge on macOS. Those checks, and any exact run of one fix by itself, are not the final pass for this integrated RC. After the Release record exists, replay the GitHub install. Physical phones, the native app and an authenticated provider first-card cycle remain unverified. No stable release, npm publication, official registry listing or response-time commitment is declared.
+> **Experimental RC `0.1.0-rc.3` — unpublished until its GitHub Release record exists.** Install `--ref v0.1.0-rc.3` only when that GitHub Release exists, is a prerelease, and its target commit equals the reviewed commit in the [release record](docs/RELEASE.md). While the Release record is absent, this candidate is unpublished and the tag is not a GitHub install target. `v0.1.0-rc.1` was local preparation for `22958ff54c955c1a90683f786d3ebb8b9ae88470` only; it was not published and is not moved. `v0.1.0-rc.2` remains frozen at `8be11b6144b6cc7b81bcf741a360acf18111001f` (annotated object `0e16a0c43de421db583a31b3dee7b6e6b67e6b82`), unpublished. This new candidate adds the managed-update command-path fix to both reviewed fix sets. The current public baseline is c106 on `integration/single-plugin-reviewed`. That baseline passed isolated official 0.11.2 GitHub installation/recovery and Web UI checks in Microsoft Edge on macOS. Those checks, and any exact run of one fix by itself, are not the final pass for this integrated RC. After the Release record exists, replay the GitHub install. Physical phones, the native app and an authenticated provider first-card cycle remain unverified. No stable release, npm publication, official registry listing or response-time commitment is declared.
 
-There is one plugin id, `paseo-kanban`, and one standard sidebar entry. The board and Fleet share the `board` screen, `/plugin/paseo-kanban/board` deep link and workspace project filtering. Package and lock metadata are `@jasonhnd/paseo-kanban` version `0.1.0-rc.2`. Official 0.11.2 identifies a Git install by its full revision; it does not use a manifest version field. Metadata alone is not publication.
+There is one plugin id, `paseo-kanban`, and one standard sidebar entry. The board and Fleet share the `board` screen, `/plugin/paseo-kanban/board` deep link and workspace project filtering. Package and lock metadata are `@jasonhnd/paseo-kanban` version `0.1.0-rc.3`. Official 0.11.2 identifies a Git install by its full revision; it does not use a manifest version field. Metadata alone is not publication.
 
 ## Requirements
 
@@ -19,12 +19,12 @@ Paseo plugins are **trusted, unsandboxed code**. Server and preparation code can
 
 ## Install from GitHub
 
-Check the CLI, daemon and app versions, and the daemon's Node environment first. `paseo --version` reports the CLI version, not proof of the app/daemon versions. **Run the following tag command only when the GitHub Release record for `v0.1.0-rc.2` exists and its target commit equals the reviewed full SHA in the [release record](docs/RELEASE.md). While that record is absent, the candidate is unpublished and the tag is not a GitHub install target.**
+Check the CLI, daemon and app versions, and the daemon's Node environment first. `paseo --version` reports the CLI version, not proof of the app/daemon versions. **Run the following tag command only when the GitHub Release record for `v0.1.0-rc.3` exists and its target commit equals the reviewed full SHA in the [release record](docs/RELEASE.md). While that record is absent, the candidate is unpublished and the tag is not a GitHub install target.**
 
 ```sh
 paseo --version
 node --version
-paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.2
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.3
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -34,7 +34,7 @@ This uses the official Paseo CLI's GitHub acquisition path. The tag must never m
 paseo plugin install github:jasonhnd/paseo-kanban --ref c106efb88a659931d01f40a236001823473561a8 --json
 ```
 
-That baseline has package metadata `0.1.0`. It is not `0.1.0-rc.2`, and it is not the unpublished local `0.1.0-rc.1` preparation. See [the RC changelog](CHANGELOG.md) for source changes and unresolved dependency alerts.
+That baseline has package metadata `0.1.0`. It is not `0.1.0-rc.3`, and it is not the unpublished local `0.1.0-rc.1` preparation. See [the RC changelog](CHANGELOG.md) for source changes and unresolved dependency alerts.
 
 1. In the intended host's **Settings -> Plugins**, turn on **Enable plugins** and the individual `paseo-kanban` switch. The global switch starts other individually enabled plugins too. You can enable this plugin with `paseo plugin enable paseo-kanban --json` once the global switch is on.
 2. Repeat `paseo plugin ls paseo-kanban --json`; require `running` without a load error. Open **Paseo Kanban** from that host's sidebar. Board, Fleet and Settings should share that entry. Check the actual page; `running` alone does not prove client mounting. A compact viewport does not prove a physical phone.
@@ -64,12 +64,16 @@ Use [workflow](docs/WORKFLOW.md) and [troubleshooting](docs/COMPATIBILITY.md) if
 Back up state and record the current full revision, source, installed path and enabled state first. After RC publication is confirmed, preview and apply an **explicit ref each time**:
 
 ```sh
-paseo plugin update paseo-kanban --check --ref v0.1.0-rc.2 --json
-paseo plugin update paseo-kanban --ref v0.1.0-rc.2 --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.3 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.3 --json
 paseo plugin ls paseo-kanban --json
 ```
 
-Use those two update commands only when the GitHub Release record authorizes `v0.1.0-rc.2`, as in [Install from GitHub](#install-from-github). After a managed update, board and Fleet information exports can still name a removed checkout for about 600 seconds. That is their existing export period. Run commands from the current installed path, and wait until both exports match it before resuming dispatch. This RC does not certify or fix immediate export freshness.
+Use those two update commands only when the GitHub Release record authorizes `v0.1.0-rc.3`, as in [Install from GitHub](#install-from-github). After a managed update, board and Fleet information exports can still name a removed checkout for about 600 seconds. That is their existing export period. The new command handlers resolve the current managed path when an action runs; the export delay remains unchanged.
+
+After every upgrade or code rollback, keep dispatch paused until the same host reports the intended full revision, current installed path, enabled/running state and unchanged data root/settings. Refresh `BOARD_INSTALL`; run the installed Node CLI from that path. Wait for both exports to name it, then use an approved disposable decision in the real panel: close it, verify both counts and stored done state, Undo while mounted, and verify it is open again. An export match or `running` alone does not prove a write works. If an action fails, preserve the error and keep dispatch paused.
+
+When downgrading to c106 or the unchanged local rc.1/rc.2 code, **run `paseo plugin reload paseo-kanban --json` on that same host after the update and require `running` before the checks above**. Those older versions cache command paths at module load. Use the same `--host` or local `--home` selector on reload and all plugin commands; never both. Do not use an unpublished tag for a GitHub rollback. Reload failure stays failed until repaired/reloaded; it is not automatic rollback. A daemon restart is not required solely for this code change.
 
 `--check` previews without installing. `--ref` selects this operation only; a later update without it follows the remote's default HEAD. A full reviewed SHA provides an exact target. Check the installed revision/path and actual UI after the update, and refresh `BOARD_INSTALL` because managed paths can change. Do not edit or build inside a managed checkout. See [release and recovery](docs/RELEASE.md) for backup, exact-SHA rollback and the pending verification checklist.
 
@@ -78,6 +82,7 @@ For code rollback to the previously verified public c106 baseline, keep the same
 ```sh
 paseo plugin update paseo-kanban --check --ref c106efb88a659931d01f40a236001823473561a8 --json
 paseo plugin update paseo-kanban --ref c106efb88a659931d01f40a236001823473561a8 --json
+paseo plugin reload paseo-kanban --json
 paseo plugin ls paseo-kanban --json
 ```
 

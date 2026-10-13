@@ -1,28 +1,28 @@
 # Git 发布与恢复清单
 
-本批准备单插件的 **Git-only 预发布 `0.1.0-rc.2`**。不可移动 tag `v0.1.0-rc.2` 与 GitHub prerelease 在 **GitHub Release 记录出现之前未发布**。公开仓库为 `https://github.com/jasonhnd/paseo-kanban`，分支 `integration/single-plugin-reviewed`；已验证公开代码基线是 `c106efb88a659931d01f40a236001823473561a8`，tree `581ff56cbd944b6d4244129c80a8aeb3bd8c01e2`。`v0.1.0-rc.1` 是 `22958ff54c955c1a90683f786d3ebb8b9ae88470` 的本地准备 tag，不挪动；那次准备只改元数据和文档，没有公开。`0.1.0-rc.2` 加上已审的产物验收修复，以及已审的决定面板计数、遗漏和关闭水位修复。本文不宣布或授权稳定版、npm 发布、官方目录收录或生产切换。
+本批准备单插件的 **Git-only 预发布 `0.1.0-rc.3`**。不可移动 tag `v0.1.0-rc.3` 与 GitHub prerelease 在 **GitHub Release 记录出现之前未发布**。公开仓库为 `https://github.com/jasonhnd/paseo-kanban`，分支 `integration/single-plugin-reviewed`；已验证公开代码基线是 `c106efb88a659931d01f40a236001823473561a8`，tree `581ff56cbd944b6d4244129c80a8aeb3bd8c01e2`。`v0.1.0-rc.1` 是 `22958ff54c955c1a90683f786d3ebb8b9ae88470` 的本地准备 tag，不挪动；那次准备只改元数据和文档，没有公开。`v0.1.0-rc.2` 仍冻结在 `8be11b6144b6cc7b81bcf741a360acf18111001f`（annotated object `0e16a0c43de421db583a31b3dee7b6e6b67e6b82`），没有公开。新候选在两组已审修复之上增加托管更新的命令路径修复。`0.1.0-rc.3` 加上已审的产物验收修复，以及已审的决定面板计数、遗漏和关闭水位修复。本文不宣布或授权稳定版、npm 发布、官方目录收录或生产切换。
 
 ## 版本及证据规则
 
 单插件只有一个 package／version／CHANGELOG，id 为 `paseo-kanban`。0.x 兼容修复升 patch，新增或配置／行为破坏升 minor；1.x 按 SemVer。契约/schema 版本独立；兼容新增保留，破坏须明确迁移／恢复方案。
 
-Git 分支可变。本 RC 计划要求不可移动 tag 与 GitHub prerelease，和 package／lock／CHANGELOG 对齐。保存完整审过的 commit/tree 及 tag object／元数据，审查并扫描 annotated tag 的身份与内容。绝不挪动、覆盖或复用 tag，即使修正发版也不例外。本地 `v0.1.0-rc.1` 已指向 `22958ff54c955c1a90683f786d3ebb8b9ae88470`，不挪动。本候选选用的下一个未用号是 `0.1.0-rc.2`。准备时远端 tag 和 GitHub Releases 都没有这两个 RC；发布主责须再查 GitHub Release 记录。保留 c106 作为已验证公开代码基线，不称前一个版本化 release。
+Git 分支可变。本 RC 计划要求不可移动 tag 与 GitHub prerelease，和 package／lock／CHANGELOG 对齐。保存完整审过的 commit/tree 及 tag object／元数据，审查并扫描 annotated tag 的身份与内容。绝不挪动、覆盖或复用 tag，即使修正发版也不例外。本地 `v0.1.0-rc.1` 已指向 `22958ff54c955c1a90683f786d3ebb8b9ae88470`，不挪动。本候选选用的下一个未用号是 `0.1.0-rc.3`。准备时远端 tag 和 GitHub Releases 都没有 rc.1、rc.2 或 rc.3；发布主责须再查 GitHub Release 记录。保留 c106 作为已验证公开代码基线，不称前一个版本化 release。
 
 准备中的 RC 可用明确标注**待发布**的版本标题；验证发布前不写发布日期、不称 tag 可用。写明宿主范围、数据／契约变更、既有依赖告警及真测限制。官方 0.11.2 Git 下载使用 revision／`--ref`，manifest schema 不消费插件版本字段；package.json、package-lock.json 顶层及根 package 版本必须一致，不虚构 manifest 字段。不把源码检查写成 app/provider 认证。
 
 ## RC 发布计划 — 待发布
 
-Release 标题为 **Paseo Kanban v0.1.0-rc.2**，GitHub Release 必须标 **prerelease**。正文写精确审过的公开 RC commit/tree，链接英中 CHANGELOG，说明兼容／访问／数据风险，区分前版 c106 证据与 RC 验证。正文先准备供审查，不含私有路径、身份、配置、凭证或证据仓。
+Release 标题为 **Paseo Kanban v0.1.0-rc.3**，GitHub Release 必须标 **prerelease**。正文写精确审过的公开 RC commit/tree，链接英中 CHANGELOG，说明兼容／访问／数据风险，区分前版 c106 证据与 RC 验证。正文先准备供审查，不含私有路径、身份、配置、凭证或证据仓。
 
 不同实际 model 审查、leader 亲看验收后，只有另获授权的发布主责可以公开批准的 commit／tag 并创建 prerelease。主责须重跑精确出站 branch／tag 的隐私／历史／身份门，确认远端 peeled tag 等于已审 commit，确认 GitHub Release 使用该 tag 且 prerelease=true。本计划不包含 force、替换 tag、npm 发布或 registry 提交。
 
 **以下命令在远端确认后执行，不是待发布 tag 已存在的证据：**
 
 ```sh
-paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.2 --json
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.3 --json
 paseo plugin ls paseo-kanban --json
-paseo plugin update paseo-kanban --check --ref v0.1.0-rc.2 --json
-paseo plugin update paseo-kanban --ref v0.1.0-rc.2 --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.3 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.3 --json
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -31,18 +31,19 @@ tag 和完整 RC SHA 冷安装分别用全新隔离 home/cache。另一个新宿
 ```sh
 paseo plugin update paseo-kanban --check --ref c106efb88a659931d01f40a236001823473561a8 --json
 paseo plugin update paseo-kanban --ref c106efb88a659931d01f40a236001823473561a8 --json
+paseo plugin reload paseo-kanban --json
 paseo plugin ls paseo-kanban --json
 ```
 
 发布交接记录精确 CLI/daemon/app 版本、命令／退出码、前后 source/revision/path/enabled/version、代码与数据保留、清理和限制。tag 安装及新 RC GitHub／UI 重放通过前仍为待做。公开前用本卡本地 `file://` Git 源核精确候选，不能证明未来 GitHub tag。daemon 与 app 均须 `>=0.11.0 <0.12.0`；macOS arm64 官方 0.11.2 为实测基线，Node 要求 >=22.13.0。声明范围不认证其他 patch／平台或已认证 provider。
 
-相对 c106，本 RC 改了已审的产物验收和决定面板行为，以及 package／lock 元数据和文档。schema、契约版本和依赖选择不变，没有自动数据迁移／导入。切换代码／来源前保持统一根、停派活与写者、备份一致状态及宿主设置。代码回退保留当前写入；另行兼容数据恢复可能丢失新写入。新装 enabled=true，全局插件开启时可能立即启动。插件开发／准备及官方宿主的既有依赖 audit／deprecated 告警未解决，交接保留精确观察。门通过不等于修复告警或稳定版证据。
+相对 c106，本 RC 改了已审的产物验收和决定面板行为，托管更新的命令路径解析，以及 package／lock 元数据和文档。schema、契约版本和依赖选择不变，没有自动数据迁移／导入。切换代码／来源前保持统一根、停派活与写者、备份一致状态及宿主设置。代码回退保留当前写入；另行兼容数据恢复可能丢失新写入。新装 enabled=true，全局插件开启时可能立即启动。插件开发／准备及官方宿主的既有依赖 audit／deprecated 告警未解决，交接保留精确观察。门通过不等于修复告警或稳定版证据。
 
 ## 仍保留的限制
 
-`0.1.0-rc.2` 继续保留这些限制：
+`0.1.0-rc.3` 继续保留这些限制：
 
-- 信息导出可能在约 600 秒内仍指向已删除的 checkout。命令用当前安装路径，两份导出一致后再恢复派活。
+- 信息导出可能在约 600 秒内仍指向已删除的 checkout。命令用当前安装路径并等待两份导出一致。这是必要条件，不证明命令写入可用；[更新与恢复](#更新与恢复)的动作复验为必需步骤。
 - 已关闭决定的 Undo 只在当前挂载的面板里。离开或重新加载后 Undo 消失。已保存的 done 和零计数保留。
 - pull request 产物只接受小写 `https://github.com/`。`https://GITHUB.COM/` 会被拒绝。
 - 依赖 deprecated 和 audit 告警未解决。构建或隐私门通过不是 audit 修复。
@@ -56,21 +57,21 @@ paseo plugin ls paseo-kanban --json
 
 | 记号 | 替换成 |
 |---|---|
-| `{{RC_VERSION}}` | `0.1.0-rc.2` |
-| `{{RC_TAG}}` | `v0.1.0-rc.2` |
+| `{{RC_VERSION}}` | `0.1.0-rc.3` |
+| `{{RC_TAG}}` | `v0.1.0-rc.3` |
 | `{{RC_COMMIT}}` | 已审完整 commit |
 | `{{RC_TREE}}` | 该 commit 的 tree |
 | `{{UTC_DATE}}` | 准备正文时的 UTC 日历日期，格式 `YYYY-MM-DD` |
 
 `{{INSTALL_STATUS}}` 只能是下面两段之一。
 
-已发布，且仅当 `v0.1.0-rc.2` 的 GitHub Release 存在、标为 prerelease、目标 commit 等于 `{{RC_COMMIT}}`：
+已发布，且仅当 `v0.1.0-rc.3` 的 GitHub Release 存在、标为 prerelease、目标 commit 等于 `{{RC_COMMIT}}`：
 
-`The GitHub Release record for v0.1.0-rc.2 on {{UTC_DATE}} targets {{RC_COMMIT}}. Install with --ref v0.1.0-rc.2.`
+`The GitHub Release record for v0.1.0-rc.3 on {{UTC_DATE}} targets {{RC_COMMIT}}. Install with --ref v0.1.0-rc.3.`
 
 未发布，即该 Release 记录不存在：
 
-`No GitHub Release record for v0.1.0-rc.2 exists as of {{UTC_DATE}}. The candidate is unpublished. Do not install v0.1.0-rc.2 from GitHub. v0.1.0-rc.1 was local preparation only and was not published.`
+`No GitHub Release record for v0.1.0-rc.3 exists as of {{UTC_DATE}}. The candidate is unpublished. Do not install v0.1.0-rc.3 from GitHub. v0.1.0-rc.1 was local preparation only; rc.1 and rc.2 were not published.`
 
 准备稿使用未发布那一段。以后的发布者把整段换成已发布那一段。在已发布记录给出自己的日期之前，UTC 日期是准备正文的日期。正文不含私有路径、身份、配置、凭证或证据仓。
 
@@ -145,7 +146,13 @@ paseo plugin update paseo-kanban --ref "$REVIEWED_COMMIT" --json
 paseo plugin ls paseo-kanban --json
 ```
 
-恢复前核 revision、server/CLI/Fleet 根、设置／语言、策略／矩阵、卡数、exports/CLI 路径、真页面、批准的演示闭环。托管更新失败保留旧安装，仍核 revision/path/enabled 和功能。reload 失败须修复／重载，不自动回旧 bundle；只加载源码变化不需重启 daemon。
+核 policy/matrix，并完成以下复验。
+
+每次升级或代码回退后，保持停派活，直到同一宿主报告目标完整 revision、当前安装路径、enabled/running，且数据根和设置未变。更新 `BOARD_INSTALL`，从该路径运行已安装 Node CLI。等待两份导出都指向该路径，再在真实面板用获准的可丢弃决定：关闭，核两处计数和已存 done；在面板仍挂载时 Undo，再核恢复为 open。导出一致或只有 running 都不证明写入可用。动作失败时保留错误，继续停派活。
+
+回退到 c106 或未改动的本地 rc.1/rc.2 代码时，**更新后必须在同一宿主运行 `paseo plugin reload paseo-kanban --json`，确认 running 再做上述复验**；这些旧版本在模块加载时缓存命令路径。reload 和所有 plugin 命令使用同一个 `--host` 或本地 `--home` 选择器，绝不同时用两者。GitHub 回退不可使用未公开 tag。reload 失败保持 failed，修复／重载前不恢复，不是自动回退。仅加载本代码改动无需重启 daemon。
+
+恢复前还须通过获准的 demo 闭环。托管更新失败保留旧安装，仍核 revision/path/enabled 和功能。reload 失败须修复／重载，不自动回旧 bundle；只加载源码变化不需重启 daemon。
 
 Git 代码回退在 `update --check --ref`／`update --ref` 指已验证旧公开 SHA，保留当前数据并核 schema。数据恢复另行明确授权：停全部写者、用一致兼容备份，先保留当前状态，因为会丢后续写入。不因更新错误自动恢复数据。
 

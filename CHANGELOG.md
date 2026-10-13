@@ -1,9 +1,24 @@
 # Changelog
 
 The single plugin has one version and CHANGELOG. Distribution is through Git.
-Two release candidates are recorded here. `0.1.0-rc.2` is the integrated candidate. `0.1.0-rc.1` was local preparation only and was not published. Neither GitHub Release is declared by this document. There is no npm publication or official registry listing.
+Three release candidates are recorded here. `0.1.0-rc.3` is the current integrated candidate. `0.1.0-rc.2` remains frozen and unpublished. `0.1.0-rc.1` was local preparation only and was not published. No GitHub Release is declared by this document. There is no npm publication or official registry listing.
 
-## 0.1.0-rc.2 — pending publication
+## 0.1.0-rc.3 — pending publication
+
+Immutable candidate tag: `v0.1.0-rc.3`. Install it from GitHub only when its Release exists, is a prerelease, and targets the full reviewed commit in the [release record](docs/RELEASE.md). Otherwise it remains unpublished. Frozen rc.1 and rc.2 tags are never moved. rc.2 remains at `8be11b6144b6cc7b81bcf741a360acf18111001f`, annotated object `0e16a0c43de421db583a31b3dee7b6e6b67e6b82`.
+
+### Fixed
+
+- Decision replies, role changes and decision maintenance resolve the roles command at invocation time. A managed Git update starts candidate code before changing the host path; a module-level command path could therefore retain a deleted previous checkout even after exports refreshed. The new regression keeps the production dependencies loaded, switches the configured installation and deletes the old checkout before exercising all three command paths.
+- Includes both reviewed artifact-acceptance and decision-panel fixes listed for rc.2. Package and lock metadata are `0.1.0-rc.3`; schema, contracts and dependency selections remain unchanged.
+
+### Notes
+
+- The previous hot-update decision-write failure is retained. Export agreement alone is insufficient: upgrades and code rollbacks require current CLI and real decision close/Undo/count/state checks. Downgrades to older c106/rc.1/rc.2 code also require an official single-plugin reload before those checks; see [recovery](docs/RELEASE.md#updating-and-recovery).
+- The approximately 600-second export period, mounted-panel-only Undo and rejection of uppercase `https://GITHUB.COM/` remain. Dependency alerts are unresolved. Phones, native app, authenticated provider cycles, Linux/WSL2 and production recovery remain unverified.
+- Exact rc.2 results or component results do not establish the final rc.3 pass. Final local candidate gates and actual installed-product checks belong in its evidence record. GitHub tag/full-SHA cold installation is pending until publication and must not be inferred from local Git tests.
+
+## 0.1.0-rc.2 — frozen local candidate, unpublished
 
 Planned immutable tag: `v0.1.0-rc.2`. This is an experimental prerelease, not a stable release. Local tag `v0.1.0-rc.1` already names `22958ff54c955c1a90683f786d3ebb8b9ae88470` and is not moved. When this candidate was prepared, the remote tag list and GitHub Releases did not include `v0.1.0-rc.1` or `v0.1.0-rc.2`; the publishing owner checks the GitHub Release record again before any install. The public code baseline remains [c106efb88a659931d01f40a236001823473561a8](https://github.com/jasonhnd/paseo-kanban/commit/c106efb88a659931d01f40a236001823473561a8). Install `--ref v0.1.0-rc.2` only when the GitHub Release for that tag exists, is a prerelease, and its target commit equals the reviewed commit in the release record. While that Release record is absent, this candidate is unpublished and the tag is not a GitHub install target. This heading does not claim that the Release exists. A UTC publication date belongs in the release record.
 
@@ -20,7 +35,7 @@ Planned immutable tag: `v0.1.0-rc.2`. This is an experimental prerelease, not a 
 ### Notes
 
 - This candidate contains both reviewed fixes. It is not a metadata-only change from c106. Schema, contract versions and dependency selections are unchanged. Dependencies were not upgraded and `npm audit fix` was not applied. Existing dependency deprecation and audit warnings remain unresolved. Passing build or privacy gates does not clear them.
-- Board and Fleet information exports can keep command paths from a removed checkout for about 600 seconds, their existing export period. Use the current installed path, and wait until both exports match it before resuming dispatch. This candidate does not certify or fix immediate export freshness.
+- Board and Fleet information exports can keep command paths from a removed checkout for about 600 seconds, their existing export period. Use the current installed path; export agreement alone did not prevent the retained rc.2 hot-update write failure. Current recovery instructions additionally require real write checks and reload when returning to this older code. The export delay remains unchanged.
 - Physical phones, the native app, and an authenticated provider first-card, review, acceptance and cleanup cycle remain unverified. A compact browser viewport is not a phone test. Linux, WSL2 and production recovery remain unverified.
 - A GitHub tag or full-SHA cold install of this RC is not claimed. Repeat that check only after the GitHub Release record exists. A local `file://` check does not pass that row.
 - The final pass is the gate record for this integrated commit. Exact results from `0.1.0-rc.1`, or from either fix by itself, are not that pass.

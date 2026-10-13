@@ -4,14 +4,14 @@
 
 ## Select the host and source
 
-Install to the intended daemon. **RC `0.1.0-rc.2` is unpublished until the GitHub Release record for `v0.1.0-rc.2` exists, is a prerelease, and its target commit equals the reviewed full commit. While that record is absent, do not run the tag commands as a GitHub install.** `v0.1.0-rc.1` remains the unpublished local preparation and is not moved. With the default local home, after the Release record matches:
+Install to the intended daemon. **RC `0.1.0-rc.3` is unpublished until the GitHub Release record for `v0.1.0-rc.3` exists, is a prerelease, and its target commit equals the reviewed full commit. While that record is absent, do not run the tag commands as a GitHub install.** `v0.1.0-rc.1` remains the unpublished local preparation and is not moved. `v0.1.0-rc.2` remains frozen at `8be11b6144b6cc7b81bcf741a360acf18111001f` (annotated object `0e16a0c43de421db583a31b3dee7b6e6b67e6b82`), unpublished. This new candidate adds the managed-update command-path fix to both reviewed fix sets. With the default local home, after the Release record matches:
 
 ```sh
 paseo --version
 node --version
 git --version
 npm --version
-paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.2 --json
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.3 --json
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -26,7 +26,7 @@ paseo plugin install github:jasonhnd/paseo-kanban --ref "$REVIEWED_COMMIT" --jso
 For another daemon, select its endpoint explicitly for **every** operation:
 
 ```sh
-paseo --host "$PASEO_TARGET" plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.2 --json
+paseo --host "$PASEO_TARGET" plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.3 --json
 paseo --host "$PASEO_TARGET" plugin ls paseo-kanban --json
 ```
 
@@ -44,7 +44,7 @@ paseo plugin ls paseo-kanban --json
 paseo plugin logs paseo-kanban --json
 ```
 
-Require `running` without a load error. Record the returned source kind, full installed revision, enabled state and actual path. Confirm the managed package/lock version is `0.1.0-rc.2` and the installed full revision matches the RC release record; version metadata alone cannot distinguish source commits. Official 0.11.2's Git identity is the revision, not a manifest version field. Do not guess the managed cache path. Open the real sidebar entry and test the board/Fleet page on the same host.
+Require `running` without a load error. Record the returned source kind, full installed revision, enabled state and actual path. Confirm the managed package/lock version is `0.1.0-rc.3` and the installed full revision matches the RC release record; version metadata alone cannot distinguish source commits. Official 0.11.2's Git identity is the revision, not a manifest version field. Do not guess the managed cache path. Open the real sidebar entry and test the board/Fleet page on the same host.
 
 The install does not put plugin commands on PATH. Set `BOARD_INSTALL` to the path from `ls`, then use the generated launchers with the same home/data-root environment as the daemon:
 
@@ -61,14 +61,18 @@ No end-user build is needed after successful Git preparation. Authentication/rol
 Save current revision/path/enabled state, pause dispatch and other writers, and take consistent [data/settings backups](DATA.md#backup-and-data-restore). After publication confirmation, use the immutable RC tag or its full reviewed public SHA on **both** commands:
 
 ```sh
-paseo plugin update paseo-kanban --check --ref v0.1.0-rc.2 --json
-paseo plugin update paseo-kanban --ref v0.1.0-rc.2 --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.3 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.3 --json
 paseo plugin ls paseo-kanban --json
 ```
 
 `--check` only previews. A branch can advance between a separate preview and apply command; use the full SHA from the preview/release record when those operations must target identical bytes. `--ref` applies without another approval prompt. Install/update selectors do not permanently pin later ordinary updates: an update without `--ref` checks the remote default HEAD. Avoid `--all` and unqualified updates for a controlled rollout.
 
-Managed Git revisions may get different paths. Refresh `BOARD_INSTALL`, generated CLI references and any local command configuration after updating. Keep `PASEO_HOME` and `KANBAN_DATA_DIR` unchanged; do not point `KANBAN_HOME` at a discarded checkout. Never run `git checkout` or `npm ci` inside a managed installation to change its code. Verify revision, settings/data root, CLI/RPC and actual UI before resuming dispatch.
+Managed Git revisions may get different paths. Refresh `BOARD_INSTALL`, generated CLI references and any local command configuration after updating. Keep `PASEO_HOME` and `KANBAN_DATA_DIR` unchanged; do not point `KANBAN_HOME` at a discarded checkout. Never run `git checkout` or `npm ci` inside a managed installation to change its code. 
+
+After every upgrade or code rollback, keep dispatch paused until the same host reports the intended full revision, current installed path, enabled/running state and unchanged data root/settings. Refresh `BOARD_INSTALL`; run the installed Node CLI from that path. Wait for both exports to name it, then use an approved disposable decision in the real panel: close it, verify both counts and stored done state, Undo while mounted, and verify it is open again. An export match or `running` alone does not prove a write works. If an action fails, preserve the error and keep dispatch paused.
+
+When downgrading to c106 or the unchanged local rc.1/rc.2 code, **run `paseo plugin reload paseo-kanban --json` on that same host after the update and require `running` before the checks above**. Those older versions cache command paths at module load. Use the same `--host` or local `--home` selector on reload and all plugin commands; never both. Do not use an unpublished tag for a GitHub rollback. Reload failure stays failed until repaired/reloaded; it is not automatic rollback. A daemon restart is not required solely for this code change.
 
 A failed download, preparation, compile or activation retains the previous managed installation. Still verify its revision/path/enabled state and a working action. `plugin reload` is different: failure does not automatically restore the previous bundle. See [recovery](RELEASE.md#updating-and-recovery) and [troubleshooting](COMPATIBILITY.md).
 
@@ -87,10 +91,12 @@ For a Git code downgrade, preserve current data and use a full **previously veri
 ```sh
 paseo plugin update paseo-kanban --check --ref "$PREVIOUS_COMMIT" --json
 paseo plugin update paseo-kanban --ref "$PREVIOUS_COMMIT" --json
+# Required when returning to c106 or unchanged rc.1/rc.2 code:
+paseo plugin reload paseo-kanban --json
 paseo plugin ls paseo-kanban --json
 ```
 
-For `0.1.0-rc.2`, `PREVIOUS_COMMIT=c106efb88a659931d01f40a236001823473561a8` is the previously verified public baseline, not a previous versioned release. Do not roll a GitHub install back to unpublished `v0.1.0-rc.1`. After code rollback or upgrade, exports can keep a removed checkout's command path for about 600 seconds. Use the current installed path and wait for both exports to match it. This candidate does not fix that delay. Otherwise take it from the saved release record, not from package version alone. Code downgrade does not undo data writes. Data restore needs a separate consistent, compatible backup and can discard newer writes. A directory-to-Git switch needs remove/install rather than Git update; see the [prepared runbook](RELEASE.md#directory-to-git-switch-runbook), which does not declare a production switch complete.
+For `0.1.0-rc.3`, `PREVIOUS_COMMIT=c106efb88a659931d01f40a236001823473561a8` is the previously verified public baseline, not a previous versioned release. Do not roll a GitHub install back to unpublished `v0.1.0-rc.1`. After code rollback or upgrade, exports can keep a removed checkout's command path for about 600 seconds. Use the current installed path and wait for both exports to match it, then complete the required reload (for older code) and real write/Undo checks above before resuming dispatch. The export delay is unchanged. Otherwise take it from the saved release record, not from package version alone. Code downgrade does not undo data writes. Data restore needs a separate consistent, compatible backup and can discard newer writes. A directory-to-Git switch needs remove/install rather than Git update; see the [prepared runbook](RELEASE.md#directory-to-git-switch-runbook), which does not declare a production switch complete.
 
 ## Git preparation and local development
 
