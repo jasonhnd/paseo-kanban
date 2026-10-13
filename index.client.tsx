@@ -5,7 +5,7 @@ import { Application, ApplicationSettings } from "./client/application";
 import { languageChosen, resolveLanguage, setLanguage, t } from "./shared/i18n";
 import { registerBoardPanel, rememberedLanguage, resetBoardPanel } from "./client/panel-title";
 
-/** Screen and sidebar item share this id, so saved `/plugin/paseo-kanban/board` links keep opening the board. */
+/** Stable screen/sidebar id for host-qualified `/h/<host-id>/plugin/paseo-kanban/{surface,sidebar}/board` routes. */
 const BOARD = "board";
 
 function projectName(root: string, display: string): string {

@@ -6,7 +6,7 @@
 
 > **实验性 RC `0.1.0-rc.5`，尚未发布。** 只有对应 GitHub prerelease 存在，且目标为[发布记录](RELEASE.md)中的独立审查提交时，才能安装该 tag。已在 macOS 的 Microsoft Edge 验证隔离官方 **0.11.2 Web UI**；原生 app、真实手机及已认证 provider 首卡仍未验证。不宣布稳定版、npm 发布、官方目录收录或响应时间承诺。
 
-唯一插件 id 为 `paseo-kanban`，一个侧栏入口打开看板、Fleet 和设置，保留看板深链与 workspace 项目筛选。
+唯一插件 id 为 `paseo-kanban`，一个侧栏入口打开看板、Fleet 和设置，看板使用包含宿主 id 的深链，并保留 workspace 项目筛选。
 
 ## 界面
 
@@ -55,6 +55,8 @@ paseo plugin install github:jasonhnd/paseo-kanban --ref c106efb88a659931d01f40a2
 1. 在目标宿主 **Settings -> Plugins** 打开 **Enable plugins** 和单独的 `paseo-kanban` 开关。全局开关也会启动其他单独启用的插件。全局开关开启后可运行 `paseo plugin enable paseo-kanban --json` 启用本插件。
 2. 再运行 `paseo plugin ls paseo-kanban --json`，确认 `running` 且无加载错误。从该宿主的侧栏打开 **Paseo Kanban**；看板、Fleet、Settings 应共用这一个入口。必须打开真实页面；只有 `running` 不证明 client 挂载成功。窄视口不证明真实手机。
 3. 只有 CLI 默认 daemon 正是目标时才用默认值。管理其他 daemon 时，每条命令均在 `plugin` 前加 `--host "$PASEO_TARGET"`，值为 `tcp://host:port` 等 CLI endpoint。非默认本地 home 另用 `--home`；与 `--host` 二选一，不能同用。[Git 安装](../GIT-INSTALL.md)详述宿主选择、版本确认和开发者 directory 安装。
+
+在 **0.11.2 Web UI** 中，先从目标宿主侧栏打开 **Paseo Kanban**，再复制地址栏的完整 URL 保存书签。侧栏打开的地址为 `<web-origin>/h/<host-id>/plugin/paseo-kanban/surface/board?pluginId=paseo-kanban&contributionKind=surface&contributionId=board`。`<web-origin>` 是 Paseo Web UI 的源地址，`<host-id>` 是 Paseo 生成的宿主 id；两者均使用自己地址栏中的值。在同一已连接宿主中，不带查询参数的 `/h/<host-id>/plugin/paseo-kanban/surface/board` 和 `/h/<host-id>/plugin/paseo-kanban/sidebar/board` 也能打开看板。缺少宿主信息的短路径 `/plugin/paseo-kanban/board` 在这个宿主版本显示 **Unmatched Route**。这些验证仅适用于 0.11.2 Web UI，原生 app 链接仍未验证。
 
 安装会按锁文件准备依赖并生成命令 bundle。使用者无需开发 checkout 或另跑 `npm run build`。相同 id 已安装时，重复 `install` 会失败；Git 来源使用[更新](#更新停用和卸载)，directory 来源使用[来源切换 runbook](RELEASE.md#directory-转-git-操作预案)。
 
