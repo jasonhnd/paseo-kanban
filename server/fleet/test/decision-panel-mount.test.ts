@@ -13,9 +13,9 @@ const { JSDOM } = createRequire(import.meta.url)("jsdom");
 
 const createdAt = "2026-06-01T00:00:00.000Z";
 const decision = { id: "demo-item", project: "demo", title: "Demo question", detail: "A: keep; B: wait. Recommend: A", blocking: true, kind: "decide", source: "leader", createdAt, agentId: null };
-const snapshot = (decisions = [decision], recentChoices: unknown[] = []) => ({ generatedAt: "2026-06-01T12:00:00.000Z", decisions, recentChoices, decisionMaint: { enabled: false }, pausedProjects: [], alerts: [], supervisorPanel: { rows: [], details: [], tasks: [], handoffs: [] } });
+const snapshot = (decisions = [decision], recentChoices: unknown[] = [], generatedAt = "2026-06-01T12:00:00.000Z") => ({ generatedAt, decisions, recentChoices, decisionMaint: { enabled: false }, pausedProjects: [], alerts: [], supervisorPanel: { rows: [], details: [], tasks: [], handoffs: [] } });
 
-test("mounted close and undo settle counts and blocking styles before and after refresh in both languages", async () => {
+test("mounted close, undo and cross-region refresh settle counts, styles and controls in both languages", async () => {
   const dir = await mkdtemp(join(tmpdir(), "decision-mount-"));
   const dom = new JSDOM("<html><body></body></html>", { pretendToBeVisual: true });
   const g = globalThis as Record<string, any>;
@@ -32,7 +32,7 @@ test("mounted close and undo settle counts and blocking styles before and after 
     const outfile = join(dir, "entry.mjs");
     await build({ stdin: { contents: `import {createRoot} from 'react-dom/client'; import {QueryClient, QueryClientProvider} from '@tanstack/react-query'; import {Decisions} from './client/fleet/decisions'; import {LeaderTab} from './client/fleet/home'; import {AttentionBlock} from './client/fleet/leader-attention'; import {LeaderDetails} from './client/fleet/leader-details'; import {useStyles} from './client/fleet/ui'; import {LIGHT_THEME} from './server/fleet/test/fixtures/themes'; import {setLanguage} from './shared/fleet/i18n';
       export function mount(lang,which,initial){setLanguage(lang);const container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container);const query=new QueryClient();
-      function Surface({data}){const s=useStyles(LIGHT_THEME,{compact:false,platform:'web'});return which==='attention'?<AttentionBlock s={s} data={data} nowMs={Date.parse(data.generatedAt)}/>:which==='details'?<LeaderDetails s={s} project="demo" data={data}/>:which==='leader'?<LeaderTab s={s} data={data} openAgent={null}/>:<Decisions s={s} data={data} openAgent={null} showSettings={false}/>;}
+      function Surface({data}){const s=useStyles(LIGHT_THEME,{compact:false,platform:'web'});return which==='both'?<><div data-area="attention"><AttentionBlock s={s} data={data} nowMs={Date.parse(data.generatedAt)}/></div><div data-area="details"><LeaderDetails s={s} project="demo" data={data}/></div></>:which==='attention'?<AttentionBlock s={s} data={data} nowMs={Date.parse(data.generatedAt)}/>:which==='details'?<LeaderDetails s={s} project="demo" data={data}/>:which==='leader'?<LeaderTab s={s} data={data} openAgent={null}/>:<Decisions s={s} data={data} openAgent={null} showSettings={false}/>;}
       const update=data=>root.render(<QueryClientProvider client={query}><Surface data={data}/></QueryClientProvider>);update(initial);return {container,update,unmount:()=>{root.unmount();query.clear();container.remove();}};}`,
       resolveDir: resolve(import.meta.dirname, "../../.."), sourcefile: "entry.tsx", loader: "tsx" }, bundle: true, platform: "node", format: "esm", outfile, jsx: "automatic", logLevel: "error",
       define: { "process.env.NODE_ENV": '"production"', __DEV__: "false" }, alias: { "react-native": "react-native-web" },
@@ -57,6 +57,8 @@ test("mounted close and undo settle counts and blocking styles before and after 
       mounted.update(snapshot([])); await tick(); assertClosed();
       await click("decisions.actions.dismissUndoLabel"); assertOpen();
       mounted.update(snapshot()); await tick(); assertOpen();
+      mounted.update(snapshot([])); await tick();
+      assert.ok(!text().includes(decision.title), text());
       mounted.unmount(); mounted = null;
       if (surface === "leader") {
         mounted = mount(lang, surface, snapshot([])); await tick(); assert.ok(!text().includes(label("home.unregistered"))); mounted.unmount();
@@ -64,8 +66,8 @@ test("mounted close and undo settle counts and blocking styles before and after 
       }
     }
     // A registered project bypasses the unregistered Decisions list entirely.
-    const registered = (decisions = [decision]) => {
-      const data = snapshot(decisions);
+    const registered = (decisions = [decision], generatedAt = "2026-06-01T12:00:00.000Z") => {
+      const data = snapshot(decisions, [], generatedAt);
       return { ...data, supervisorPanel: { ...data.supervisorPanel, rows: [{ project: "demo", code: "DEMO", agentId: "demo-leader" }] } };
     };
     for (const lang of ["en", "zh-CN"] as const) for (const surface of ["attention", "details"]) {
@@ -119,6 +121,116 @@ test("mounted close and undo settle counts and blocking styles before and after 
       mounted.unmount(); mounted = null;
     }
     assert.equal(calls.filter(choice => choice === "restore").length, 8);
+
+    // The same decision is mounted twice on the real Leader tab. A refreshed
+    // restore must release its retained row before the other region closes it.
+    for (const lang of ["en", "zh-CN"] as const) for (const first of ["attention", "details"] as const) {
+      mounted = mount(lang, "both", registered()); await tick();
+      const area = (name: string) => mounted.container.querySelector('[data-area="' + name + '"]');
+      const label = (key: Parameters<typeof tIn>[1]) => tIn(lang, key);
+      const click = async (name: string, buttonLabel: string) => {
+        const button = [...area(name).querySelectorAll("[aria-label]")].find((node: any) => node.getAttribute("aria-label") === buttonLabel) as any;
+        assert.ok(button, buttonLabel); button.click(); await tick();
+      };
+      const assertOpen = (name: string) => {
+        const text = area(name).textContent;
+        assert.ok(text.includes(tIn(lang, name === "attention" ? "leader.attention.headingCount" : "leader.ui.itemCount", { count: 1 })), text);
+        assert.ok(text.includes(label("leader.ui.blockingWork")), text);
+      };
+      const assertSettled = () => {
+        assert.ok(!area("attention").textContent.includes(tIn(lang, "leader.attention.headingCount", { count: 1 })), area("attention").textContent);
+        assert.ok(area("details").textContent.includes(tIn(lang, "leader.ui.itemCount", { count: 0 })), area("details").textContent);
+        assert.ok(!mounted.container.textContent.includes(label("leader.ui.blockingWork")), mounted.container.textContent);
+        assert.ok(!mounted.container.querySelector('[aria-label="' + label("leader.attention.decide") + ' DEMO"]'));
+      };
+      const close = async (name: string) => {
+        if (name === "attention" && !area(name).querySelector('[aria-label="' + label("decisions.actions.dismiss") + '"]')) await click(name, label("leader.attention.decide") + " DEMO");
+        await click(name, label("decisions.actions.dismiss")); await click(name, label("decisions.actions.dismissYesLabel"));
+      };
+      await close(first);
+      // An in-flight read can still carry the pre-close open list.
+      mounted.update(registered()); await tick();
+      assert.ok(area(first).querySelector('[aria-label="' + label("decisions.actions.dismissUndoLabel") + '"]'));
+      mounted.update(registered([])); await tick(); assertSettled();
+      await click(first, label("decisions.actions.dismissUndoLabel"));
+      mounted.update(registered()); await tick(); assertOpen("attention"); assertOpen("details");
+      const second = first === "attention" ? "details" : "attention";
+      await close(second);
+      mounted.update(registered([])); await tick(); assertSettled();
+      mounted.update(registered([])); await tick(); assertSettled();
+      // A restore observed from another region must also update mounted Undo
+      // controls, rather than keeping their first-render closed flag forever.
+      mounted.update(registered()); await tick(); assertOpen("attention"); assertOpen("details");
+      assert.ok(!mounted.container.querySelector('[aria-label="' + label("decisions.actions.dismissUndoLabel") + '"]'));
+      mounted.unmount(); mounted = null;
+    }
+
+    // Undo, then close the other region, without inserting an open snapshot.
+    // A newer omission must drop the restored row. The unconfirmed close keeps Undo.
+    for (const lang of ["en", "zh-CN"] as const) for (const first of ["attention", "details"] as const) {
+      const openedAt = "2026-06-01T12:00:00.000Z";
+      const omittedAt = "2026-06-01T12:00:05.000Z";
+      mounted = mount(lang, "both", registered([decision], openedAt)); await tick();
+      const area = (name: string) => mounted.container.querySelector('[data-area="' + name + '"]');
+      const label = (key: Parameters<typeof tIn>[1]) => tIn(lang, key);
+      const click = async (name: string, buttonLabel: string) => {
+        const button = [...area(name).querySelectorAll("[aria-label]")].find((node: any) => node.getAttribute("aria-label") === buttonLabel) as any;
+        assert.ok(button, `${lang} ${first} ${buttonLabel}`); button.click(); await tick();
+      };
+      const close = async (name: string) => {
+        if (name === "attention" && !area(name).querySelector('[aria-label="' + label("decisions.actions.dismiss") + '"]')) await click(name, `${label("leader.attention.decide")} DEMO`);
+        await click(name, label("decisions.actions.dismiss")); await click(name, label("decisions.actions.dismissYesLabel"));
+      };
+      const second = first === "attention" ? "details" : "attention";
+      await close(first);
+      await click(first, label("decisions.actions.dismissUndoLabel"));
+      await close(second);
+      mounted.update(registered([], omittedAt)); await tick();
+      const text = () => mounted.container.textContent as string;
+      assert.ok(!text().includes(label("leader.ui.blockingWork")), text());
+      assert.ok(!area("attention").textContent.includes(tIn(lang, "leader.attention.headingCount", { count: 1 })), area("attention").textContent);
+      assert.ok(area("details").textContent.includes(tIn(lang, "leader.ui.itemCount", { count: 0 })), area("details").textContent);
+      assert.ok(area(second).querySelector(`[aria-label="${label("decisions.actions.dismissUndoLabel")}"]`));
+      assert.equal(area(first).querySelector(`[aria-label="${label("decisions.actions.dismissUndoLabel")}"]`), null);
+      assert.ok(!area(first).textContent.includes(decision.title), area(first).textContent);
+      mounted.update(registered([], "2026-06-01T12:00:06.000Z")); await tick();
+      assert.ok(!text().includes(label("leader.ui.blockingWork")), text());
+      assert.ok(!area(first).textContent.includes(decision.title), area(first).textContent);
+      assert.ok(area(second).querySelector(`[aria-label="${label("decisions.actions.dismissUndoLabel")}"]`));
+      mounted.unmount(); mounted = null;
+    }
+
+    // An older omission must not confirm a local close. The open snapshot from
+    // that earlier generation keeps Undo instead of turning the row back into Needs you.
+    for (const lang of ["en", "zh-CN"] as const) for (const surface of ["attention", "details"] as const) {
+      const openedAt = "2026-06-01T12:00:00.000Z";
+      mounted = mount(lang, "both", registered([decision], openedAt)); await tick();
+      const area = (name: string) => mounted.container.querySelector('[data-area="' + name + '"]');
+      const label = (key: Parameters<typeof tIn>[1]) => tIn(lang, key);
+      const click = async (name: string, buttonLabel: string) => {
+        const button = [...area(name).querySelectorAll("[aria-label]")].find((node: any) => node.getAttribute("aria-label") === buttonLabel) as any;
+        assert.ok(button, `${lang} ${surface} ${buttonLabel}`); button.click(); await tick();
+      };
+      const close = async (name: string) => {
+        if (name === "attention" && !area(name).querySelector('[aria-label="' + label("decisions.actions.dismiss") + '"]')) await click(name, `${label("leader.attention.decide")} DEMO`);
+        await click(name, label("decisions.actions.dismiss")); await click(name, label("decisions.actions.dismissYesLabel"));
+      };
+      const undo = `[aria-label="${label("decisions.actions.dismissUndoLabel")}"]`;
+      const blocking = () => [...area(surface).querySelectorAll("div,span")].find((node: any) => node.textContent.trim() === (surface === "attention" ? label("leader.ui.blockingWork") : `${label("leader.ui.blockingWork")} · ${decision.id}`));
+      await close(surface);
+      mounted.update(registered([], "2026-06-01T11:00:00.000Z")); await tick();
+      mounted.update(registered([decision], openedAt)); await tick();
+      assert.ok(area(surface).querySelector(undo), area(surface).textContent);
+      assert.equal(blocking(), undefined);
+      mounted.update(registered([], "2026-06-01T12:00:05.000Z")); await tick();
+      assert.ok(area(surface).querySelector(undo), area(surface).textContent);
+      assert.equal(blocking(), undefined);
+      mounted.update(registered([decision], "2026-06-01T12:00:06.000Z")); await tick();
+      assert.equal(area(surface).querySelector(undo), null);
+      assert.ok(blocking(), area(surface).textContent);
+      mounted.unmount(); mounted = null;
+    }
+
   } finally {
     mounted?.unmount(); dom.window.close(); delete g.__decisionRpc;
     await rm(dir, { recursive: true, force: true });

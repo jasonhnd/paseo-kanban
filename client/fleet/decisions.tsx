@@ -10,6 +10,7 @@ import { t } from "../../shared/fleet/i18n";
 import { noLeaderHint, noLeaderTitle, partitionUnownedDecisions, shelveUnownedGroup, type UnownedGroup } from "../../shared/fleet/unowned-decisions";
 import { OpenSession, type ReplyMessage } from "./decision-actions";
 import { type Decision, DecisionCard } from "./decision-card";
+import { usePanelClosedRows, type PanelClosedRow } from "./panel-closed-rows";
 import { Badge, Empty, type OpenAgent, pressed, ResponsiveGrid, Section, type Styles } from "./ui";
 
 const CARD_MIN_WIDTH = 340;
@@ -41,12 +42,11 @@ export function Decisions({ s, data, openAgent, showSettings = true, sectionTitl
 }
 
 export interface KeptChoice { decision: Decision; chosen: ChosenState }
-interface HeldClose { decision: Decision; closed: boolean }
 
 function useDecisionLists(data: BoardSnapshot) {
   const [deferred, setDeferred] = useState<Set<string>>(new Set());
   const [session, setKept] = useState<ReadonlyMap<string, KeptChoice>>(new Map());
-  const [held, setHeld] = useState<ReadonlyMap<string, HeldClose>>(new Map());
+  const { held, note: noteClose } = usePanelClosedRows<Decision>(data);
   const kept = useMemo(() => mergeKept(storedKept(data.recentChoices ?? []), session), [data.recentChoices, session]);
   const [filter, setFilter] = useState<string | null>(null);
   const now = Date.parse(data.generatedAt) || Date.now();
@@ -65,21 +65,21 @@ function useDecisionLists(data: BoardSnapshot) {
   const note = (row: Decision, message: ReplyMessage) => {
     const chosen = message.chosen;
     if (chosen) setKept((prev) => new Map(prev).set(row.id, { decision: row, chosen }));
-    if (message.panelClosed || message.panelRestored) setHeld((prev) => new Map(prev).set(row.id, { decision: row, closed: message.panelClosed === true }));
+    noteClose(row.id, row, message);
   };
   return { now, cards, unread, unowned, sorted, visible, deferred, settled, processed, chosen: kept, panelClosed, filter: active, setFilter, empty, defer, note };
 }
 
 /** A panel-closed row stays until the open list has it again. */
-function withHeld(rows: Decision[], held: ReadonlyMap<string, HeldClose>): Decision[] {
+function withHeld(rows: Decision[], held: ReadonlyMap<string, PanelClosedRow<Decision>>): Decision[] {
   const open = new Set(rows.map((row) => row.id));
-  const extra = [...held.values()].filter((entry) => !open.has(entry.decision.id)).map((entry) => entry.decision);
+  const extra = [...held.values()].filter((entry) => !open.has(entry.row.id)).map((entry) => entry.row);
   return [...rows, ...extra];
 }
 
-function closedIds(held: ReadonlyMap<string, HeldClose>): Set<string> {
+function closedIds(held: ReadonlyMap<string, PanelClosedRow<Decision>>): Set<string> {
   // Successful local closes take effect before the refreshed open snapshot arrives.
-  return new Set([...held.values()].filter((entry) => entry.closed).map((entry) => entry.decision.id));
+  return new Set([...held.values()].filter((entry) => entry.closed).map((entry) => entry.row.id));
 }
 
 /** Answers stored by the server (last 24 hours) come back as answered cards when the panel is opened again. */

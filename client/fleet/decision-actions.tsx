@@ -1,6 +1,6 @@
 import { useRpc } from "@getpaseo/plugin/client";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { changeDecisionRpc, decideReplyRpc } from "../../shared/fleet/board";
 import { type CardOption, type ChosenState, chosenLine, confirmLine, parseDecisionCard } from "../../shared/fleet/decision-card";
@@ -35,7 +35,7 @@ export function DecisionActions({ s, id, title, detail, onDefer, onResult, allow
   /** false for decisions whose project has no <leader>: letters and shelve only. */
   allowText?: boolean;
   initialChosen?: ChosenState | null;
-  /** The snapshot already dropped this card after a panel close. */
+  /** The containing region's current close state, including a reopen read back from another region. */
   initialPanelClosed?: boolean;
 }) {
   const card = useMemo(() => parseDecisionCard(title, detail), [title, detail]);
@@ -45,6 +45,7 @@ export function DecisionActions({ s, id, title, detail, onDefer, onResult, allow
   const [shelving, setShelving] = useState(false);
   const [confirmDismiss, setConfirmDismiss] = useState(false);
   const [panelClosed, setPanelClosed] = useState(initialPanelClosed);
+  useEffect(() => { setPanelClosed(initialPanelClosed); }, [initialPanelClosed]);
   const pick = (letter: string) => {
     setConfirming(null);
     reply.send(letter, reply.text);

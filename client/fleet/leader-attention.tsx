@@ -9,6 +9,7 @@ import { elapsedLabel } from "../../shared/fleet/leader-panel";
 import { isPausedProject } from "../../shared/fleet/paused";
 import type { ReplyMessage } from "./decision-actions";
 import { type Decision, DecisionCard } from "./decision-card";
+import { usePanelClosedRows } from "./panel-closed-rows";
 import { LeaderReplyBox, RemindAcceptance, SendNotice, useLeaderSend } from "./leader-reply";
 import { Badge, Empty, type OpenAgent, pressed, toneColor, type Styles, type Tone } from "./ui";
 
@@ -25,7 +26,6 @@ export function TagChip({ s, tag }: { s: Styles; tag: LeaderTag }) {
 }
 
 interface KeptChoice { item: Extract<AttentionItem, { kind: "decision" }>; chosen: ChosenState }
-interface HeldClose { item: Extract<AttentionItem, { kind: "decision" }>; closed: boolean }
 
 /** Rows already answered stay on screen even after the snapshot drops them, so the user sees the result and can change it. */
 function withKept(items: AttentionItem[], kept: ReadonlyMap<string, KeptChoice>): AttentionItem[] {
@@ -54,18 +54,18 @@ function mergeStored(stored: ReadonlyMap<string, KeptChoice>, session: ReadonlyM
 /** Everything that needs the user, across every <leader>: one line per item, most urgent first. */
 export function AttentionBlock({ s, data, nowMs, openAgent = null }: { s: Styles; data: BoardSnapshot; nowMs: number; openAgent?: OpenAgent }) {
   const [session, setKept] = useState<ReadonlyMap<string, KeptChoice>>(new Map());
-  const [held, setHeld] = useState<ReadonlyMap<string, HeldClose>>(new Map());
+  const { held, note: noteClose } = usePanelClosedRows<Extract<AttentionItem, { kind: "decision" }>>(data);
   const rows = data.supervisorPanel.rows.filter((row) => !isPausedProject(row.project, data.pausedProjects));
   const kept = useMemo(() => mergeStored(storedAttention(data, rows), session), [data, rows, session]);
   const openItems = withKept(attentionItems(rows, data.supervisorPanel.details ?? [], data.decisions, nowMs), kept);
   const openKeys = new Set(openItems.map((item) => item.key));
-  const extras = [...held.values()].filter((entry) => !openKeys.has(entry.item.key));
-  const items = [...openItems, ...extras.map((entry) => entry.item)];
-  const closedKeys = new Set([...held.values()].filter((entry) => entry.closed).map((entry) => entry.item.key));
+  const extras = [...held.values()].filter((entry) => !openKeys.has(entry.row.key));
+  const items = [...openItems, ...extras.map((entry) => entry.row)];
+  const closedKeys = new Set([...held.values()].filter((entry) => entry.closed).map((entry) => entry.row.key));
   const activeCount = items.filter((item) => !closedKeys.has(item.key)).length;
   const note = (item: AttentionItem, message: ReplyMessage) => {
     if (item.kind === "decision" && message.chosen) setKept((prev) => new Map(prev).set(item.key, { item, chosen: message.chosen as ChosenState }));
-    if (item.kind === "decision" && (message.panelClosed || message.panelRestored)) setHeld((prev) => new Map(prev).set(item.key, { item, closed: message.panelClosed === true }));
+    if (item.kind === "decision") noteClose(item.decision.id, item, message);
   };
   return (
     <View style={[s.card, { gap: 0 }]}>
