@@ -7,13 +7,14 @@ manifest 声明 Paseo **daemon 和 app** `>=0.11.0 <0.12.0`。daemon 兼容不�
 | 项目 | 要求或证据边界 |
 |---|---|
 | Paseo | daemon/app 均匹配范围，全局及单插件开关启用；CLI `--version` 只报告 CLI。 |
-| Node | daemon 实际 Node >=22.13.0 且 `node:sqlite` 可用。 |
+| Node | daemon 实际 Node >=24.21.0 且 `node:sqlite` 可用。 |
 | npm／Git | 位于 daemon PATH，用于 Git 下载／准备；代码卡及 workspace 也需要 Git。客户端可用不证明远端宿主就绪。 |
 | Provider | 用户自行安装、认证；发现不证明登录、额度或请求成功。 |
 | 审查 | 两个明确非空实际 model，trim/lower 后比较。同 family 不同 model 可审；同 model 跨 provider/mode/effort 仍拒绝。 |
 
 | 平台／检查 | 当前证据边界 |
 |---|---|
+| Paseo 下限 | 另行实测 rc.4 在官方 daemon/Web app 0.11.0、Node 24.21.0 下安装 running、RPC／Board 挂载及 13/13 本机门通过；不代表整合 rc.5 生命周期已认证。 |
 | macOS | 隔离 arm64、Node 24.21.0/npm 12.1.0：本地 Git 准备、CLI／编译、生命周期／失败恢复及 Edge 中官方 0.11.2 Web app 已测。不认证所有 macOS／工具版本或已认证首卡。 |
 | Linux | 首发目标，本文未认证完整原生流程；keychain/screen 不可用。 |
 | WSL2 | 须单独记录 Linux 环境验证。 |

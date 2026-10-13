@@ -7,13 +7,14 @@ The manifest declares Paseo **daemon and app** `>=0.11.0 <0.12.0`. A compatible 
 | Component | Requirement or evidence boundary |
 |---|---|
 | Paseo | Daemon and app in the declared range; global and individual plugin switches on. CLI `--version` reports only the CLI. |
-| Node | >=22.13.0 with usable `node:sqlite` in the daemon host's actual Node environment. |
+| Node | >=24.21.0 with usable `node:sqlite` in the daemon host's actual Node environment. |
 | npm / Git | Available on the daemon PATH for Git acquisition/preparation; Git is also needed for code cards/workspaces. Client-machine availability does not prove remote host readiness. |
 | Providers | User-installed/authenticated local providers. Discovery is not proof of login, quota or a successful request. |
 | Review | Two confirmed nonempty actual models, compared after trim/lower normalization. Different models in one family are allowed; identical models across provider/mode/effort are refused. |
 
 | Platform or check | Current evidence boundary |
 |---|---|
+| Paseo minimum | Separately measured rc.4 on official daemon/Web app 0.11.0 with Node 24.21.0: installation/running, RPC and Board mounting, and 13/13 local gates. This does not certify the integrated rc.5 lifecycle. |
 | macOS | Isolated arm64, Node 24.21.0/npm 12.1.0: local Git preparation, CLI/compiler, lifecycle/failure recovery and official 0.11.2 web app in Edge. This does not certify all macOS/tool versions or an authenticated first card. |
 | Linux | Initial target; a complete native workflow has not been certified here. Keychain/screen features are unavailable. |
 | WSL2 | Requires its own Linux-environment record. |

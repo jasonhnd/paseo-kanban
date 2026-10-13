@@ -197,13 +197,13 @@ fixture success is not reported as real secret-scanner acceptance.
 No supported Linux runner was accessible in the isolated environment. The
 installed Docker client could not connect to its default daemon socket. No daemon
 was started, system package installed, VM operated or Fly resource changed.
-Case-sensitive paths, Linux SQLite/process behavior, supported Node minimum,
+Case-sensitive paths, Linux SQLite/process behavior, other Node versions,
 actual Linux host mount and provider capability reporting remain unverified.
 
-Reconcile the existing Kanban `>=22.5` and Fleet `>=22.13` engine declarations
-against tested APIs and host support; the tested Node 24 point is not proof for
-every version in either range. Preserve platform capability refusal and run the
-real Linux/default test entry before claiming platform support.
+The integrated rc.5 package now requires Node `>=24.21.0` based on separate
+minimum-version measurements. That measured point does not certify every higher
+version or platform. Preserve platform capability refusal and run the real
+Linux/default test entry before claiming platform support.
 
 Next-stage gates include the public Fleet language fixture replacement, actual
 model admission, one canonical schema and lock, equivalent internal gates after

@@ -1,6 +1,26 @@
 # 变更记录
 
-单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.4` 是当前待独立审查的候选。`0.1.0-rc.3` 仍冻结、未公开，已裁定不得发布。`0.1.0-rc.2` 仍冻结且未公开。`0.1.0-rc.1` 只在本地准备过，没有公开。本文不宣布任一 GitHub Release，也没有 npm 发布或官方目录收录。
+单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.5` 是当前待独立审查的候选；rc.4 原 commit 与 tag 不变。`0.1.0-rc.3` 仍冻结、未公开，已裁定不得发布。`0.1.0-rc.2` 仍冻结且未公开。`0.1.0-rc.1` 只在本地准备过，没有公开。本文不宣布任一 GitHub Release，也没有 npm 发布或官方目录收录。
+
+## 0.1.0-rc.5 — 待审查与发布
+
+本地候选 tag 为 `v0.1.0-rc.5`，本卡只准备、不发布。只有匹配的 GitHub prerelease 指向[发布记录](RELEASE.md)中的独立审查完整 commit 后，才从 GitHub 安装。冻结的 rc.1 至 rc.4 tag 绝不挪动。
+
+### 修复（Fixed）
+
+- 成功的新执行／审查 run、resume 和 lost-create adoption 清理 quota／rate_limit 失败留下的过时当前 blocked/cooldown 字段。历史 events/runs 保留；创建或发送失败仍保留原原因。
+- 默认过期策略诊断正确说明仍遵守停池与矩阵暂停；已有 `preserveStops`／`matrixPaused` 语义及显式旧格式兼容路径不变。
+
+### 变更（Changed）
+
+- 看板侧栏改用受支持的 header contribution 与宿主 `SidebarRow`，保留原 board screen 和侧栏偏好身份。global Command Center 动作打开同一 screen；使用专用中英文文案键，随所选语言更新。
+- 中英文 README 上手入口精简，OVERVIEW 区分已测 Web UI 和未验证的 native／provider 流程。加入匿名已安装 Board／quota 截图、原创看板图标及 manifest media；截图原有范围见[媒体说明](../MEDIA.md)。
+- **Node 下限从 22.13.0 提到 24.21.0**：另行对冻结 rc.4 的 Node 22.13.0 实测只通过 **12/13 门**，CLI JSON 错误输出被 SQLite 实验警告污染；同一源码在 Node 24.21.0 为 13/13 门。未认证中间 Node 版本。package／根 lock engines 与当前中英文要求统一为 `>=24.21.0`。
+
+### 注意（Notes）
+
+- package／lock 元数据为 `0.1.0-rc.5`。Paseo daemon/app 范围仍为 `>=0.11.0 <0.12.0`；官方 0.11.0 配 Node 24.21.0 已另在 rc.4 上实测。依赖、schema 和契约版本不变。
+- 精确 rc.5 门禁及出站 annotated tag 须有新回执；此前分组件或 rc.4 结果不代表整合候选通过。GitHub tag／完整 SHA 安装、生命周期重放、原生 app、真实手机、已认证 provider、Linux/WSL2 与生产恢复仍是独立未验证工作。既有依赖告警未解决。
 
 ## 0.1.0-rc.4 — 待审查与发布
 

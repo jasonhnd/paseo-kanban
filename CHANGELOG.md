@@ -1,7 +1,27 @@
 # Changelog
 
 The single plugin has one version and CHANGELOG. Distribution is through Git.
-Four release candidates are recorded here. `0.1.0-rc.4` is the current candidate, pending independent review. `0.1.0-rc.3` remains frozen, unpublished and rejected for publication. `0.1.0-rc.2` remains frozen and unpublished. `0.1.0-rc.1` was local preparation only and was not published. No GitHub Release is declared by this document. There is no npm publication or official registry listing.
+Five release candidates are recorded here. `0.1.0-rc.5` is the current candidate, pending independent review. rc.4 retains its original commit and tag. `0.1.0-rc.3` remains frozen, unpublished and rejected for publication. `0.1.0-rc.2` remains frozen and unpublished. `0.1.0-rc.1` was local preparation only and was not published. No GitHub Release is declared by this document. There is no npm publication or official registry listing.
+
+## 0.1.0-rc.5 — pending review and publication
+
+Local candidate tag: `v0.1.0-rc.5`. This candidate is prepared only; install it from GitHub only after its matching prerelease targets the independently reviewed full commit in the [release record](docs/RELEASE.md). Frozen rc.1 through rc.4 tags are never moved.
+
+### Fixed
+
+- Successful new executor/reviewer runs, resumes and lost-create adoption clear obsolete current blocked/cooldown fields left by quota or rate-limit failures. Historical events and runs remain; failed creation or sending retains the previous reason.
+- Default stale-policy diagnostics correctly describe retained pool stops and matrix pauses. The existing `preserveStops`/`matrixPaused` behavior and explicit legacy compatibility path are unchanged.
+
+### Changed
+
+- The board sidebar uses the supported header contribution and host `SidebarRow`, keeping the existing board screen and sidebar preference identity. A global Command Center action opens the same screen; its dedicated English/Chinese translation updates with the selected language.
+- English/Chinese README entry guidance is shorter, and OVERVIEW distinguishes measured Web UI evidence from unverified native/provider flows. Anonymous installed Board and quota screenshots and an original board icon are included with manifest media metadata; their capture scope remains in [media details](docs/MEDIA.md).
+- The Node minimum rises from **22.13.0 to 24.21.0**. The separate rc.4 minimum-version measurement on Node 22.13.0 passed only **12/13 gates**, and a SQLite experimental warning contaminated CLI JSON error output. The same frozen source passed 13/13 gates on Node 24.21.0. This does not certify intermediate Node versions. Package/root-lock engines and current English/Chinese requirements now agree on `>=24.21.0`.
+
+### Notes
+
+- Package and lock metadata are `0.1.0-rc.5`. Paseo daemon/app requirements remain `>=0.11.0 <0.12.0`; official 0.11.0 with Node 24.21.0 was measured separately on rc.4. Dependencies, schemas and contract versions are unchanged.
+- Exact rc.5 verification and outgoing annotated-tag gates require new receipts. Earlier component or rc.4 results do not pass this integrated candidate. GitHub tag/full-SHA installs, lifecycle replay, native app, physical phones, authenticated provider cycles, Linux/WSL2 and production recovery remain separate unverified work. Existing dependency alerts remain unresolved.
 
 ## 0.1.0-rc.4 — pending review and publication
 
