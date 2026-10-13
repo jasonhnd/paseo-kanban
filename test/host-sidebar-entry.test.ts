@@ -1,15 +1,7 @@
 /// <reference types="node" />
-// Registers the real client on the installed public Paseo host and opens its standard sidebar row.
-// Desktop and compact widths share that row. This does not exercise a physical phone.
-//
-// Public Paseo 0.11.2 source, not the minified web bundle:
-// packages/app/src/plugins/sidebar-items/index.tsx returns LegacyPluginSidebarRow for a legacy
-// standard item before the custom host is built. renderNothing is the custom item's
-// SurfaceErrorBoundary fallback, and that custom host returns null when it has no runtime client.
-// packages/app/src/components/left-sidebar.tsx renders SidebarNavRows from MobileSidebar and from
-// DesktopSidebar. Compact is useIsCompactFormFactor (unistyles breakpoint xs or sm), which follows
-// matchMedia("(min-width: Npx)") change events. It is not an innerWidth branch inside the legacy row.
-// A missing name in the minified bundle is not evidence, and that bundle is not phone source.
+// Registers the real client on the public Paseo 0.11.2 host. Desktop and compact
+// layouts mount its SidebarRow, preserving the old sidebar/surface deep links.
+// This mounted host harness complements the separate actual Edge validation.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
@@ -37,7 +29,8 @@ type HostPlugin = {
   cleanup: () => Promise<void>;
   surfaces: Array<{ id: string; title: string }>;
   settingsScreens: Array<{ id: string; title: string; icon: string }>;
-  sidebarItems: { header: unknown[]; footer: unknown[] };
+  sidebarItems: { header: Array<{ id: string; title: string; Component: unknown }>; footer: unknown[] };
+  commandCenterItems: Array<{ id: string; title: string; context: string; onSelect: (context: unknown) => void }>;
   legacySidebarItems: Array<{ id: string; title: string; icon: string; surface: string }>;
   workspacePanels: Array<{ id: string; title: string; icon: string; context: string }>;
 };
@@ -118,6 +111,7 @@ type NavItem = { kind: string; key: string; visible: boolean };
 type CatalogPlugin = {
   id?: string;
   legacySidebarItems?: unknown[];
+  sidebarItems?: { header: unknown[]; footer: unknown[] };
   workspacePanels?: Array<{ id?: string; context?: string }>;
 };
 
@@ -160,6 +154,7 @@ type Shell = {
   Screen: unknown;
   StoreContext: unknown;
   SafeAreaProvider: unknown;
+  ToastApiProvider: unknown;
   useIsCompactFormFactor: () => boolean;
   getHostRuntimeStore: () => { controllers: Map<string, HostController> };
   push: (href: string) => unknown;
@@ -177,6 +172,8 @@ type HostRuntime = {
   nav: (input: { section: string; pluginGroups: SidebarGroup[]; preferences: unknown[] }) => NavItem[];
   route: (serverId: string, pluginId: string, identity: { kind: string; id: string }) => string;
   currentScreen: (plugin: unknown, pathname: string, params: object) => { screenId: string; params: object } | null;
+  target: (group: SidebarGroup, hostId: string | null) => { plugin: { serverId: string } };
+  rememberHost: (key: string, hostId: string) => void;
   pageErrors: string[];
   shell: Shell;
   clientBundle: string;
@@ -342,6 +339,7 @@ function bootHost(): Omit<HostRuntime, "clientBundle"> {
   const domClient = require!(Number(reactDomId[1])) as { createRoot?: HostRuntime["createRoot"] };
   assert.equal(typeof domClient.createRoot, "function");
   const grouped = load("e.groupPluginSidebarItems=function") as { groupPluginSidebarItems: HostRuntime["group"] };
+  const remembered = load("e.rememberPluginContributionHost=function");
   const navigation = load("e.resolveSidebarNavItems=function") as { resolveSidebarNavItems: HostRuntime["nav"] };
   const routes = load("e.buildPluginSurfaceRoute=") as { buildPluginSurfaceRoute: HostRuntime["route"] };
   const screens = load("e.currentPluginScreen=function") as { currentPluginScreen: HostRuntime["currentScreen"] };
@@ -359,6 +357,7 @@ function bootHost(): Omit<HostRuntime, "clientBundle"> {
   const screenMod = load("e.Group=e.Screen=void 0");
   const storeContextMod = load("e.StoreContext=");
   const safeMod = load('const e=["children","initialMetrics","initialSafeAreaInsets","style"]');
+  const toastMod = load("e.useToast=function");
   const compactMod = load("e.useIsCompactFormFactor=");
   const hostStoreMod = load("e.getHostRuntimeStore=");
   const queueMod = load("e.routingQueue=") as { push: Shell["push"]; routingQueue: Shell["routingQueue"] };
@@ -380,6 +379,7 @@ function bootHost(): Omit<HostRuntime, "clientBundle"> {
     Screen: exportFrom(screenMod, "Screen"),
     StoreContext: exportFrom(storeContextMod, "StoreContext"),
     SafeAreaProvider: exportFrom(safeMod, "SafeAreaProvider"),
+    ToastApiProvider: exportFrom(toastMod, "ToastApiProvider"),
     useIsCompactFormFactor: exportFrom(compactMod, "useIsCompactFormFactor"),
     getHostRuntimeStore: exportFrom(hostStoreMod, "getHostRuntimeStore"),
     push: queueMod.push,
@@ -397,6 +397,8 @@ function bootHost(): Omit<HostRuntime, "clientBundle"> {
     run: runModule.runPluginClientBundle, react, createRoot: domClient.createRoot!, window: view,
     group: grouped.groupPluginSidebarItems, nav: navigation.resolveSidebarNavItems,
     route: routes.buildPluginSurfaceRoute, currentScreen: screens.currentPluginScreen, pageErrors, shell,
+    target: exportFrom(grouped, "selectPluginSidebarTarget"),
+    rememberHost: exportFrom(remembered, "rememberPluginContributionHost"),
   };
 }
 
@@ -520,13 +522,12 @@ before(async () => {
 }, { timeout: 60_000 });
 
 describe("installed host sidebar entry", () => {
-  it("registers one standard nav item and the board surface on the public host", async () => {
+  it("registers one sidebar-kit item, command and the board surface on the public host", async () => {
     const registered = host.run(PLUGIN_ID, "(function(){return {default: globalThis.__kanbanContribute}})", {}, () => {});
     try {
-      assert.deepEqual(registered.legacySidebarItems, [{
-        id: SCREEN_ID, title: "Paseo Kanban", icon: "SquareKanban", surface: SCREEN_ID,
-      }]);
-      assert.deepEqual(registered.sidebarItems.header, []);
+      assert.deepEqual(registered.legacySidebarItems, []);
+      assert.deepEqual(registered.sidebarItems.header.map(item => [item.id, item.title, typeof item.Component]), [[SCREEN_ID, "Paseo Kanban", "function"]]);
+      assert.deepEqual(registered.commandCenterItems.map(item => [item.id, item.context]), [["open-board", "global"]]);
       assert.deepEqual(registered.sidebarItems.footer, []);
       assert.deepEqual(registered.surfaces.map((screen) => [screen.id, screen.title]), [[SCREEN_ID, "Paseo Kanban"]]);
       assert.equal(registered.settingsScreens.length, 1);
@@ -541,15 +542,17 @@ describe("installed host sidebar entry", () => {
       const plugin = { ...registered, serverId: "local", id: PLUGIN_ID };
       const groups = host.group([plugin], "header");
       assert.equal(groups.length, 1);
-      assert.equal(groups[0]!.kind, "legacy");
+      assert.equal(groups[0]!.kind, "item");
       assert.equal(groups[0]!.pluginId, PLUGIN_ID);
       assert.equal(groups[0]!.contributionId, SCREEN_ID);
       assert.equal(groups[0]!.title, "Paseo Kanban");
-      assert.equal(groups[0]!.icon, "SquareKanban");
+
       const items = host.nav({ section: "header", pluginGroups: groups, preferences: [] });
       assert.deepEqual(items.filter((item) => item.kind === "plugin").map((item) => ({
         kind: item.kind, key: item.key, visible: item.visible,
       })), [{ kind: "plugin", key: "plugin:paseo-kanban:board", visible: true }]);
+      const hidden = host.nav({ section: "header", pluginGroups: groups, preferences: [{ key: "plugin:paseo-kanban:board", visible: false }] });
+      assert.equal(hidden.find(item => item.key === "plugin:paseo-kanban:board")?.visible, false);
       assert.deepEqual(items.filter((item) => item.kind === "builtin").map((item) => item.key), [
         "new-workspace", "history", "search", "schedules",
       ]);
@@ -586,7 +589,8 @@ describe("installed host sidebar entry", () => {
     const catalog = () => shell.registry.getSnapshot().find((row) => row.id === PLUGIN_ID);
     const registered = catalog();
     assert.ok(registered, "catalog registration");
-    assert.equal(registered.legacySidebarItems?.length, 1);
+    assert.equal(registered.legacySidebarItems?.length, 0);
+    assert.equal(registered.sidebarItems?.header.length, 1);
     assert.equal(registered.workspacePanels?.[0]?.id, SCREEN_ID);
     assert.equal(registered.workspacePanels?.[0]?.context, "workspace");
 
@@ -674,7 +678,8 @@ describe("installed host sidebar entry", () => {
       const withSafe = react.createElement(shell.SafeAreaProvider, {
         initialMetrics: { frame: { x: 0, y: 0, width: 1280, height: 800 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } },
       }, withStore);
-      return react.createElement(shell.QueryClientProvider, { client: shell.queryClient }, withSafe);
+      const withToast = react.createElement(shell.ToastApiProvider, { api: { showToast() {} } }, withSafe);
+      return react.createElement(shell.QueryClientProvider, { client: shell.queryClient }, withToast);
     }
 
     const container = host.window.document.createElement("div");
@@ -688,7 +693,7 @@ describe("installed host sidebar entry", () => {
     });
     const fail = (step: string): never => {
       const boundary = container.querySelector("[data-boundary]")?.textContent ?? "";
-      assert.fail(`${step}; path=${host.window.location.pathname}; queue=${shell.routingQueue.queue.length}; errors=${host.pageErrors.length}; boundary=${clientError(boundary)}`);
+      assert.fail(`${step}; path=${host.window.location.pathname}; queue=${shell.routingQueue.queue.length}; errors=${host.pageErrors.map(clientError).join(";")}; boundary=${clientError(boundary)}`);
     };
     const waitFor = async (step: string, ready: () => boolean) => {
       const startedAt = Date.now();
@@ -739,8 +744,8 @@ describe("installed host sidebar entry", () => {
       assert.equal(desktop?.getAttribute("aria-label"), "Paseo Kanban");
       assert.equal(desktop?.getAttribute("role"), "button");
       desktop?.click();
-      await waitFor("desktop entry did not open the board", () => panelReady("sidebar")
-        && host.window.location.pathname === "/h/local/plugin/paseo-kanban/sidebar/board");
+      await waitFor("desktop entry did not open the board", () => panelReady("surface")
+        && host.window.location.pathname === "/h/local/plugin/paseo-kanban/surface/board");
       assert.deepEqual(started, []);
       await showLanguage("desktop settings");
 
@@ -749,8 +754,8 @@ describe("installed host sidebar entry", () => {
       await waitFor("compact entry", () => compact() === "true"
         && container.querySelectorAll(`[data-testid="${SIDEBAR_TEST_ID}"]`).length === 1);
       container.querySelector(`[data-testid="${SIDEBAR_TEST_ID}"]`)?.click();
-      await waitFor("compact entry did not open the board", () => panelReady("sidebar")
-        && host.window.location.pathname === "/h/local/plugin/paseo-kanban/sidebar/board");
+      await waitFor("compact entry did not open the board", () => panelReady("surface")
+        && host.window.location.pathname === "/h/local/plugin/paseo-kanban/surface/board");
       assert.deepEqual(started, ["before"]);
       await showLanguage("compact settings");
 
@@ -785,13 +790,34 @@ describe("installed host sidebar entry", () => {
     assert.equal(first.surfaces.length, 0);
     assert.equal(first.workspacePanels.length, 0);
     assert.equal(first.settingsScreens.length, 0);
+    assert.equal(first.commandCenterItems.length, 0);
     const second = host.run(PLUGIN_ID, "(function(){return {default: globalThis.__kanbanContribute}})", {}, () => {});
     try {
-      assert.equal(second.legacySidebarItems.length, 1);
-      assert.equal(second.sidebarItems.header.length, 0);
+      assert.equal(second.legacySidebarItems.length, 0);
+      assert.equal(second.sidebarItems.header.length, 1);
+      assert.equal(second.commandCenterItems.length, 1);
       assert.equal(second.surfaces.length, 1);
     } finally {
       await second.cleanup();
+    }
+  });
+
+  it("coalesces multiple hosts and uses the current or last selected screen host", async () => {
+    const local = host.run(PLUGIN_ID, host.clientBundle, {}, () => {});
+    const remote = host.run(PLUGIN_ID, host.clientBundle, {}, () => {});
+    try {
+      const groups = host.group([{ ...local, serverId: "local" }, { ...remote, serverId: "remote" }], "header");
+      assert.equal(groups.length, 1);
+      assert.equal(groups[0]!.kind, "item");
+      host.rememberHost(`${PLUGIN_ID}/screens`, "local");
+      assert.equal(host.target(groups[0]!, null).plugin.serverId, "local");
+      assert.equal(host.target(groups[0]!, "remote").plugin.serverId, "remote");
+      host.rememberHost(`${PLUGIN_ID}/screens`, "remote");
+      assert.equal(host.target(groups[0]!, null).plugin.serverId, "remote");
+      assert.equal(host.target(groups[0]!, "local").plugin.serverId, "local");
+    } finally {
+      await local.cleanup(); await remote.cleanup();
+      host.rememberHost(`${PLUGIN_ID}/screens`, "local");
     }
   });
 
