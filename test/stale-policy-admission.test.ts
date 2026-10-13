@@ -17,7 +17,7 @@ import type { Profile } from "../server/profiles";
 import { routeProfile } from "../server/routing";
 import { createTask, getTask } from "../server/store";
 import type { UsagePlan, UsageWindow } from "../shared/fleet/usage";
-import { setLanguage } from "../shared/i18n";
+import { setLanguage, translate } from "../shared/i18n";
 
 const root = mkdtempSync(join(tmpdir(), "stale-policy-"));
 const saved = { ...process.env };
@@ -150,6 +150,23 @@ test("stale originally open none pool remains allowed without a matrix pause, ev
   assert.equal(result.observed.state, "stale"); assert.equal(result.observed.dispatchable, true);
   assert.equal(result.observed.routeOk, true); assert.equal(result.observed.creates, 1); assert.equal(result.observed.status, "running");
 });
+for (const language of ["en", "zh-CN"] as const) {
+  test(`stale default policy diagnostic retains stops and matrix pauses in ${language}`, async () => {
+    setLanguage(language);
+    publish(plan(NOW - STALE));
+    const snapshot = readPoolSnapshot();
+    const matrix = loadDispatchMatrix();
+    const route = routeProfile({ profiles: [profile], role: "reader", review: false, project: "demo", byPool: {}, poolLimits: {}, snapshot,
+      matrix: matrix.state === "ok" ? matrix.matrix : null, tier: "L1" });
+    const expected = translate(language, "pools.stalePolicyMessage", { minutes: 46 });
+    assert.equal(snapshot.message, expected);
+    assert.ok(route.ok); assert.ok(route.reason.includes(expected));
+    assert.notEqual(snapshot.message, translate(language, "pools.staleMessage", { minutes: 46 }));
+    publish(plan(NOW - STALE, { dispatch: false }), NOW - STALE, true);
+    assert.equal(readPoolSnapshot().message, expected);
+    await rejected("stale diagnostic keeps hard stops");
+  });
+}
 test("legacy 99 percent stop still closes an originally open old-schema policy entry", async () => {
   const at = NOW - STALE;
   const { input } = publish(plan(at, { quotaProtection: undefined, windows: [window(at, { usedPct: 99 })] }), at);
