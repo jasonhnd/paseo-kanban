@@ -27,6 +27,9 @@ function snapshotAge(nextAt: string, heldAt: string): SnapshotAge {
  * A restored row is dropped when a newer snapshot no longer lists its id.
  * An unconfirmed local close keeps Undo until a snapshot of the same generation
  * or newer reads the close back; anything older is ignored.
+ * A confirmed close records each newer omission as its watermark. An open
+ * snapshot releases Undo only at that watermark or later, so a late open
+ * cannot discard a newer omission. An invalid time does not move the watermark.
  */
 export function reconcilePanelClosedRows<Row>(
   prev: ReadonlyMap<string, PanelClosedRow<Row>>,
@@ -48,6 +51,12 @@ export function reconcilePanelClosedRows<Row>(
       (next ??= new Map(prev)).set(id, {
         ...entry,
         confirmed: true,
+        generatedAt: data.generatedAt,
+        decisions: data.decisions,
+      });
+    } else if (entry.closed && entry.confirmed && !listed && age === "newer") {
+      (next ??= new Map(prev)).set(id, {
+        ...entry,
         generatedAt: data.generatedAt,
         decisions: data.decisions,
       });
