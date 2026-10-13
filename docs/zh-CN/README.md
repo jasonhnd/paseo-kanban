@@ -4,9 +4,25 @@
 
 [English](../../README.md)
 
-> **实验性 RC `0.1.0-rc.4` — 在 GitHub Release 记录出现之前未发布。** 只有该 tag 的 GitHub Release 存在、标为 prerelease，且目标 commit 等于[发布记录](RELEASE.md)中的已审 commit 时，才安装 `--ref v0.1.0-rc.4`。Release 记录不存在时，本候选未发布，这个 tag 不是 GitHub 安装目标。`v0.1.0-rc.1` 只是 `22958ff54c955c1a90683f786d3ebb8b9ae88470` 的本地准备，没有公开，也不挪动。`v0.1.0-rc.2` 仍冻结在 `8be11b6144b6cc7b81bcf741a360acf18111001f`（annotated object `0e16a0c43de421db583a31b3dee7b6e6b67e6b82`），没有公开。`v0.1.0-rc.3` 仍冻结在 `61cce0d8ba07e8bf01fe7239ddf0ceeaf5983df4`（tree `633c99456b05cdbf7156f5c3ab1149451a767738`，annotated object `7e288e22f42598a651edef407dcdb82871c3d9de`），没有公开；因默认过期策略会重开停派池或忽略矩阵暂停，已裁定不得发布。新候选保留此前修复，并修正这两条默认准入路径；显式旧格式兼容行为不变。当前公开基线是 `integration/single-plugin-reviewed` 上的 c106。该基线已在 macOS 隔离环境通过官方 0.11.2 的 GitHub 安装／恢复及 Microsoft Edge Web UI 验证。这些结果，以及任一修复单独的精确运行，都不是本整合 RC 的最终通过。Release 记录存在后，再重放 GitHub 安装。物理手机、原生 app 和已认证 provider 首卡仍未验证。不宣布稳定版、npm 发布、官方目录收录或响应时间承诺。
+> **实验性 RC `0.1.0-rc.4`，尚未发布。** 只有对应 GitHub prerelease 存在，且目标为[发布记录](RELEASE.md)中的独立审查提交时，才能安装该 tag。已在 macOS 的 Microsoft Edge 验证隔离官方 **0.11.2 Web UI**；原生 app、真实手机及已认证 provider 首卡仍未验证。不宣布稳定版、npm 发布、官方目录收录或响应时间承诺。
 
-唯一插件 id 为 `paseo-kanban`，只有一个标准侧栏入口。看板与 Fleet 共用 `board` 画面、`/plugin/paseo-kanban/board` 深链与 workspace 项目筛选。package 与 lock 元数据为 `@jasonhnd/paseo-kanban`、版本 `0.1.0-rc.4`。官方 0.11.2 以完整 revision 标识 Git 安装，不使用 manifest 版本字段；元数据不代表已发布。
+唯一插件 id 为 `paseo-kanban`，一个侧栏入口打开看板、Fleet 和设置，保留看板深链与 workspace 项目筛选。
+
+## 界面
+
+以下是隔离官方 Paseo 0.11.2 宿主中，本机 Microsoft Edge 截取的实际插件页面。卡片、项目、档案和额度均为合成数据；图片证明 Web UI 挂载，不证明真实 provider 闭环或原生设备兼容。[截图说明](../MEDIA.md)。
+
+![合成代码 agent 卡片的看板](../../assets/board.png)
+
+![显示合成额度套餐的 Fleet 页面](../../assets/quota.png)
+
+## 从这里开始
+
+1. **准备：** Paseo daemon 和 app `>=0.11.0 <0.12.0`，Node `>=22.13.0` 且 `node:sqlite` 可用，另需 Git、npm。只在目标宿主启用受信任插件，先阅读下方访问说明。真实自动首卡需要自行登录的本地 provider／档案，且两个实际 model 已确认、非空、不同。见[前置要求](#前置要求)。
+2. **安装：** 按[GitHub 安装](#从-github-安装)明确指定已公开基线。RC tag 要等对应 Release 存在才能用；评估未公开候选时，在隔离开发 daemon 按[本地 directory 流程](#开发者-directory-流程)操作。
+3. **首次可见成功：** `paseo plugin ls paseo-kanban --json` 报告 `running` 且无加载错误；同一宿主侧栏的 **Paseo Kanban** 能打开看板与 Fleet。再按[首卡配置](#配置并完成首卡)核对 commit、独立审查和 leader 验收。截图不代表 provider 首卡已通过。
+
+旧 RC 的提交、tag 身份和拒绝发布历史保留在[变更记录](CHANGELOG.md)与[发布记录](RELEASE.md)。
 
 ## 前置要求
 

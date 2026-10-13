@@ -1,0 +1,9 @@
+# Interface media
+
+`assets/board.png` and `assets/quota.png` are screenshots of the actual Paseo Kanban client contribution and RPC responses in an isolated, unmodified official Paseo **0.11.2** Web UI on macOS, using local Microsoft Edge. The plugin source is the reviewed rc.4 baseline plus documentation and media metadata changes. A local directory installation is used; this is not a GitHub tag-install receipt.
+
+The fresh daemon has an isolated home, data root, cache and loopback port. Built-in providers, provider executables, relay, browser tools and optional quota adapters are disabled or absent. All project names, cards, profiles, models and manual quota readings are invented demo fixtures. No production database, real project, provider login or personal quota is used. The shots contain the page viewport only, with no browser chrome, host paths or account details. No UI or data is painted over the screenshots.
+
+Fixture text and the page's visible text are scanned before capture. The resulting PNGs are checked visually and their OCR text, metadata and package bytes are scanned afterwards. The icon is an original geometric board mark; it does not substitute for interface screenshots. All three PNGs are committed with the manifest, and `assets/` is included in the package files whitelist.
+
+These images show Board and Fleet quota mounting. They do not certify native app or physical-phone behavior, Linux/WSL2, authenticated provider execution, a completed first-card cycle, real quota collection, publication or registry approval. The declared host range remains `>=0.11.0 <0.12.0`; this capture does not prove every version in it. See [compatibility](COMPATIBILITY.md), [data access](DATA.md) and [release gates](RELEASE.md).

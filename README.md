@@ -4,9 +4,25 @@ A [Paseo](https://github.com/getpaseo/paseo) plugin that combines a cross-projec
 
 [Simplified Chinese](docs/zh-CN/README.md)
 
-> **Experimental RC `0.1.0-rc.4` — unpublished until its GitHub Release record exists.** Install `--ref v0.1.0-rc.4` only when that GitHub Release exists, is a prerelease, and its target commit equals the reviewed commit in the [release record](docs/RELEASE.md). While the Release record is absent, this candidate is unpublished and the tag is not a GitHub install target. `v0.1.0-rc.1` was local preparation for `22958ff54c955c1a90683f786d3ebb8b9ae88470` only; it was not published and is not moved. `v0.1.0-rc.2` remains frozen at `8be11b6144b6cc7b81bcf741a360acf18111001f` (annotated object `0e16a0c43de421db583a31b3dee7b6e6b67e6b82`), unpublished. `v0.1.0-rc.3` remains frozen at `61cce0d8ba07e8bf01fe7239ddf0ceeaf5983df4` (tree `633c99456b05cdbf7156f5c3ab1149451a767738`, annotated object `7e288e22f42598a651edef407dcdb82871c3d9de`), unpublished and rejected for publication because stale default policy could reopen a stopped pool or ignore a matrix pause. This candidate retains the prior fixes and corrects those default admission paths; explicit legacy compatibility behavior is unchanged. The current public baseline is c106 on `integration/single-plugin-reviewed`. That baseline passed isolated official 0.11.2 GitHub installation/recovery and Web UI checks in Microsoft Edge on macOS. Those checks, and any exact run of one fix by itself, are not the final pass for this integrated RC. After the Release record exists, replay the GitHub install. Physical phones, the native app and an authenticated provider first-card cycle remain unverified. No stable release, npm publication, official registry listing or response-time commitment is declared.
+> **Experimental RC `0.1.0-rc.4`, unpublished.** Install its tag only after the matching GitHub prerelease targets the independently reviewed commit in the [release record](docs/RELEASE.md). Isolated official **0.11.2 Web UI** has been checked in Microsoft Edge on macOS; native app, physical phones and an authenticated provider first-card cycle remain unverified. No stable release, npm publication, official registry listing or response-time commitment is declared.
 
-There is one plugin id, `paseo-kanban`, and one standard sidebar entry. The board and Fleet share the `board` screen, `/plugin/paseo-kanban/board` deep link and workspace project filtering. Package and lock metadata are `@jasonhnd/paseo-kanban` version `0.1.0-rc.4`. Official 0.11.2 identifies a Git install by its full revision; it does not use a manifest version field. Metadata alone is not publication.
+One plugin id, `paseo-kanban`, opens Board, Fleet and Settings from one sidebar entry. The board deep link and workspace project filtering are preserved.
+
+## Interface
+
+Actual plugin pages in an isolated official Paseo 0.11.2 host, captured with local Microsoft Edge. All cards, projects, profiles and quota values are synthetic. These images show Web UI mounting, not a real provider workflow or native-device certification. [Capture details](docs/MEDIA.md).
+
+![Board with synthetic coding-agent cards](assets/board.png)
+
+![Fleet quota page with synthetic usage plans](assets/quota.png)
+
+## Start here
+
+1. **Prepare:** Paseo daemon and app `>=0.11.0 <0.12.0`, Node `>=22.13.0` with `node:sqlite`, Git and npm. Enable trusted plugins only on the intended host; read the access warning below. A real automatic card needs authenticated local profiles with two confirmed, different actual models. [Requirements](#requirements).
+2. **Install:** follow [GitHub installation](#install-from-github) for the explicitly pinned public baseline. The RC tag is unavailable until its matching Release exists. To evaluate the unpublished candidate, use [directory setup](#developer-directory-setup) on an isolated development daemon.
+3. **First visible success:** `paseo plugin ls paseo-kanban --json` reports `running` without a load error, and **Paseo Kanban** opens Board and Fleet on that same host. Then follow [first-card setup](#configure-and-finish-a-first-card) and require a commit, independent review and leader acceptance. The screenshots do not certify that provider cycle.
+
+Prior RC commit/tag identities and rejection history are retained in the [changelog](CHANGELOG.md) and [release record](docs/RELEASE.md).
 
 ## Requirements
 
