@@ -13,7 +13,7 @@ const { JSDOM } = createRequire(import.meta.url)("jsdom");
 
 const createdAt = "2026-06-01T00:00:00.000Z";
 const decision = { id: "demo-item", project: "demo", title: "Demo question", detail: "A: keep; B: wait. Recommend: A", blocking: true, kind: "decide", source: "leader", createdAt, agentId: null };
-const snapshot = (decisions = [decision], recentChoices: unknown[] = []) => ({ generatedAt: "2026-06-01T12:00:00.000Z", decisions, recentChoices, decisionMaint: { enabled: false }, pausedProjects: [], alerts: [], supervisorPanel: { rows: [], details: [], tasks: [], handoffs: [] } });
+const snapshot = (decisions = [decision], recentChoices: unknown[] = [], generatedAt = "2026-06-01T12:00:00.000Z") => ({ generatedAt, decisions, recentChoices, decisionMaint: { enabled: false }, pausedProjects: [], alerts: [], supervisorPanel: { rows: [], details: [], tasks: [], handoffs: [] } });
 
 test("mounted close, undo and cross-region refresh settle counts, styles and controls in both languages", async () => {
   const dir = await mkdtemp(join(tmpdir(), "decision-mount-"));
@@ -66,8 +66,8 @@ test("mounted close, undo and cross-region refresh settle counts, styles and con
       }
     }
     // A registered project bypasses the unregistered Decisions list entirely.
-    const registered = (decisions = [decision]) => {
-      const data = snapshot(decisions);
+    const registered = (decisions = [decision], generatedAt = "2026-06-01T12:00:00.000Z") => {
+      const data = snapshot(decisions, [], generatedAt);
       return { ...data, supervisorPanel: { ...data.supervisorPanel, rows: [{ project: "demo", code: "DEMO", agentId: "demo-leader" }] } };
     };
     for (const lang of ["en", "zh-CN"] as const) for (const surface of ["attention", "details"]) {
@@ -162,6 +162,72 @@ test("mounted close, undo and cross-region refresh settle counts, styles and con
       // controls, rather than keeping their first-render closed flag forever.
       mounted.update(registered()); await tick(); assertOpen("attention"); assertOpen("details");
       assert.ok(!mounted.container.querySelector('[aria-label="' + label("decisions.actions.dismissUndoLabel") + '"]'));
+      mounted.unmount(); mounted = null;
+    }
+
+    // Undo, then close the other region, without inserting an open snapshot.
+    // A newer omission must drop the restored row. The unconfirmed close keeps Undo.
+    for (const lang of ["en", "zh-CN"] as const) for (const first of ["attention", "details"] as const) {
+      const openedAt = "2026-06-01T12:00:00.000Z";
+      const omittedAt = "2026-06-01T12:00:05.000Z";
+      mounted = mount(lang, "both", registered([decision], openedAt)); await tick();
+      const area = (name: string) => mounted.container.querySelector('[data-area="' + name + '"]');
+      const label = (key: Parameters<typeof tIn>[1]) => tIn(lang, key);
+      const click = async (name: string, buttonLabel: string) => {
+        const button = [...area(name).querySelectorAll("[aria-label]")].find((node: any) => node.getAttribute("aria-label") === buttonLabel) as any;
+        assert.ok(button, `${lang} ${first} ${buttonLabel}`); button.click(); await tick();
+      };
+      const close = async (name: string) => {
+        if (name === "attention" && !area(name).querySelector('[aria-label="' + label("decisions.actions.dismiss") + '"]')) await click(name, `${label("leader.attention.decide")} DEMO`);
+        await click(name, label("decisions.actions.dismiss")); await click(name, label("decisions.actions.dismissYesLabel"));
+      };
+      const second = first === "attention" ? "details" : "attention";
+      await close(first);
+      await click(first, label("decisions.actions.dismissUndoLabel"));
+      await close(second);
+      mounted.update(registered([], omittedAt)); await tick();
+      const text = () => mounted.container.textContent as string;
+      assert.ok(!text().includes(label("leader.ui.blockingWork")), text());
+      assert.ok(!area("attention").textContent.includes(tIn(lang, "leader.attention.headingCount", { count: 1 })), area("attention").textContent);
+      assert.ok(area("details").textContent.includes(tIn(lang, "leader.ui.itemCount", { count: 0 })), area("details").textContent);
+      assert.ok(area(second).querySelector(`[aria-label="${label("decisions.actions.dismissUndoLabel")}"]`));
+      assert.equal(area(first).querySelector(`[aria-label="${label("decisions.actions.dismissUndoLabel")}"]`), null);
+      assert.ok(!area(first).textContent.includes(decision.title), area(first).textContent);
+      mounted.update(registered([], "2026-06-01T12:00:06.000Z")); await tick();
+      assert.ok(!text().includes(label("leader.ui.blockingWork")), text());
+      assert.ok(!area(first).textContent.includes(decision.title), area(first).textContent);
+      assert.ok(area(second).querySelector(`[aria-label="${label("decisions.actions.dismissUndoLabel")}"]`));
+      mounted.unmount(); mounted = null;
+    }
+
+    // An older omission must not confirm a local close. The open snapshot from
+    // that earlier generation keeps Undo instead of turning the row back into Needs you.
+    for (const lang of ["en", "zh-CN"] as const) for (const surface of ["attention", "details"] as const) {
+      const openedAt = "2026-06-01T12:00:00.000Z";
+      mounted = mount(lang, "both", registered([decision], openedAt)); await tick();
+      const area = (name: string) => mounted.container.querySelector('[data-area="' + name + '"]');
+      const label = (key: Parameters<typeof tIn>[1]) => tIn(lang, key);
+      const click = async (name: string, buttonLabel: string) => {
+        const button = [...area(name).querySelectorAll("[aria-label]")].find((node: any) => node.getAttribute("aria-label") === buttonLabel) as any;
+        assert.ok(button, `${lang} ${surface} ${buttonLabel}`); button.click(); await tick();
+      };
+      const close = async (name: string) => {
+        if (name === "attention" && !area(name).querySelector('[aria-label="' + label("decisions.actions.dismiss") + '"]')) await click(name, `${label("leader.attention.decide")} DEMO`);
+        await click(name, label("decisions.actions.dismiss")); await click(name, label("decisions.actions.dismissYesLabel"));
+      };
+      const undo = `[aria-label="${label("decisions.actions.dismissUndoLabel")}"]`;
+      const blocking = () => [...area(surface).querySelectorAll("div,span")].find((node: any) => node.textContent.trim() === (surface === "attention" ? label("leader.ui.blockingWork") : `${label("leader.ui.blockingWork")} · ${decision.id}`));
+      await close(surface);
+      mounted.update(registered([], "2026-06-01T11:00:00.000Z")); await tick();
+      mounted.update(registered([decision], openedAt)); await tick();
+      assert.ok(area(surface).querySelector(undo), area(surface).textContent);
+      assert.equal(blocking(), undefined);
+      mounted.update(registered([], "2026-06-01T12:00:05.000Z")); await tick();
+      assert.ok(area(surface).querySelector(undo), area(surface).textContent);
+      assert.equal(blocking(), undefined);
+      mounted.update(registered([decision], "2026-06-01T12:00:06.000Z")); await tick();
+      assert.equal(area(surface).querySelector(undo), null);
+      assert.ok(blocking(), area(surface).textContent);
       mounted.unmount(); mounted = null;
     }
 
