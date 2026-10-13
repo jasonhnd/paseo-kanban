@@ -77,3 +77,30 @@ test("a different decisions array does not make an older snapshot fresh", () => 
   assert.equal(second.get(row.id)?.confirmed, false);
   assert.equal(second.get(row.id)?.closed, true);
 });
+
+test("a newer omission advances the close watermark so a late open keeps Undo", () => {
+  const confirmedAt = "2026-06-01T12:00:05.000Z";
+  const confirmed = reconcilePanelClosedRows(held(true), decisions([], confirmedAt));
+  assert.equal(confirmed.get(row.id)?.confirmed, true);
+  assert.equal(confirmed.get(row.id)?.generatedAt, confirmedAt);
+  const sameTime = reconcilePanelClosedRows(confirmed, decisions([], confirmedAt));
+  assert.equal(sameTime.get(row.id)?.generatedAt, confirmedAt);
+  assert.equal(sameTime.get(row.id)?.confirmed, true);
+  const invalid = reconcilePanelClosedRows(sameTime, decisions([], "not-a-time"));
+  assert.equal(invalid.get(row.id)?.generatedAt, confirmedAt);
+  assert.equal(invalid.get(row.id)?.closed, true);
+  assert.equal(invalid.get(row.id)?.confirmed, true);
+  const omittedAt = "2026-06-01T12:00:10.000Z";
+  const omitted = reconcilePanelClosedRows(invalid, decisions([], omittedAt));
+  assert.equal(omitted.get(row.id)?.closed, true);
+  assert.equal(omitted.get(row.id)?.confirmed, true);
+  assert.equal(omitted.get(row.id)?.generatedAt, omittedAt);
+  const sameGenerationOpen = reconcilePanelClosedRows(omitted, decisions([row.id], omittedAt));
+  assert.equal(sameGenerationOpen.has(row.id), false);
+  const lateOpen = reconcilePanelClosedRows(omitted, decisions([row.id], "2026-06-01T12:00:07.000Z"));
+  assert.equal(lateOpen.get(row.id)?.closed, true);
+  assert.equal(lateOpen.get(row.id)?.confirmed, true);
+  assert.equal(lateOpen.get(row.id)?.generatedAt, omittedAt);
+  const reopened = reconcilePanelClosedRows(lateOpen, decisions([row.id], "2026-06-01T12:00:11.000Z"));
+  assert.equal(reopened.has(row.id), false);
+});
