@@ -352,6 +352,7 @@
   "cli.unknownArgument": "Unknown argument: {argument}",
   "cli.unknownCommand": "Unknown command: {command}",
   "client.panel.title": "Board",
+  "client.commandCenter.openBoard": "Open project board",
   "common.colon": ": ",
   "common.comma": ", ",
   "common.listSep": ", ",

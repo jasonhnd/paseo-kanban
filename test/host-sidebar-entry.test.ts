@@ -528,6 +528,7 @@ describe("installed host sidebar entry", () => {
       assert.deepEqual(registered.legacySidebarItems, []);
       assert.deepEqual(registered.sidebarItems.header.map(item => [item.id, item.title, typeof item.Component]), [[SCREEN_ID, "Paseo Kanban", "function"]]);
       assert.deepEqual(registered.commandCenterItems.map(item => [item.id, item.context]), [["open-board", "global"]]);
+      assert.equal(registered.commandCenterItems[0]!.title, t("client.commandCenter.openBoard"));
       assert.deepEqual(registered.sidebarItems.footer, []);
       assert.deepEqual(registered.surfaces.map((screen) => [screen.id, screen.title]), [[SCREEN_ID, "Paseo Kanban"]]);
       assert.equal(registered.settingsScreens.length, 1);

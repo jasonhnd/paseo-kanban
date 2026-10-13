@@ -2,7 +2,7 @@ import type { PluginClientContext, PluginSidebarItemProps, PluginWorkspacePanelP
 import { useWorkspace } from "@getpaseo/plugin/client";
 import { SidebarRow } from "@getpaseo/plugin/client/ui";
 import { Application, ApplicationSettings } from "./client/application";
-import { getLanguage, languageChosen, resolveLanguage, setLanguage, t } from "./shared/i18n";
+import { languageChosen, resolveLanguage, setLanguage, t } from "./shared/i18n";
 import { registerBoardPanel, rememberedLanguage, resetBoardPanel } from "./client/panel-title";
 
 /** Screen and sidebar item share this id, so saved `/plugin/paseo-kanban/board` links keep opening the board. */
@@ -41,7 +41,7 @@ export default function contribute(client: PluginClientContext) {
     Component: WorkspaceBoard,
   }), () => ({
     id: "open-board",
-    title: [t("cardDrawer.runs.open"), t("board.intake.projectPlaceholder"), t("client.panel.title")].join(getLanguage() === "zh-CN" ? "" : " "),
+    title: t("client.commandCenter.openBoard"),
     icon: "SquareKanban",
     keywords: ["kanban", "board", "project"],
     context: "global",

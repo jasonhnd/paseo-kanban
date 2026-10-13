@@ -86,15 +86,20 @@ describe("client entry", () => {
     setLanguage("en");
     const cleanup = contribute(client);
     try {
-      assert.equal(calls.find(call => call.method === "addCommandCenterItem")!.input.title, "Open Project Board");
+      assert.equal(calls.find(call => call.method === "addCommandCenterItem")!.input.title, "Open project board");
       setLanguage("zh-CN"); adoptPanelLanguage("zh-CN");
       const commands = calls.filter(call => call.method === "addCommandCenterItem");
       assert.equal(commands.length, 2);
-      assert.equal(commands[1]!.input.title, zhCN("cardDrawer.runs.open") + zhCN("board.intake.projectPlaceholder") + zhCN("client.panel.title"));
+      assert.equal(commands[1]!.input.title, zhCN("client.commandCenter.openBoard"));
       assert.equal(removed.filter(method => method === "addCommandCenterItem").length, 1);
       adoptPanelLanguage("zh-CN");
       assert.equal(calls.filter(call => call.method === "addCommandCenterItem").length, 2);
+      setLanguage("en"); adoptPanelLanguage("en");
+      const restored = calls.filter(call => call.method === "addCommandCenterItem");
+      assert.equal(restored.length, 3);
+      assert.equal(restored[2]!.input.title, "Open project board");
+      assert.equal(removed.filter(method => method === "addCommandCenterItem").length, 2);
     } finally { cleanup(); setLanguage(original); }
-    assert.equal(removed.filter(method => method === "addCommandCenterItem").length, 2);
+    assert.equal(removed.filter(method => method === "addCommandCenterItem").length, 3);
   });
 });
