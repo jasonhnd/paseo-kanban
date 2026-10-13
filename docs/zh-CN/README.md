@@ -16,6 +16,12 @@
 
 ![显示合成额度套餐的 Fleet 页面](../../assets/quota.png)
 
+## Paseo 0.11.2 的 Command Center 与图标
+
+macOS 按 **⌘K**（Windows／Linux 为 Ctrl+K）搜索 **打开项目看板**；标题随插件的中英文语言设置更新。官方 **0.11.2 Web UI** 只在当前页面具有本安装的宿主上下文时显示该动作，例如已打开的插件页或活动工作区。没有宿主上下文的空首页**不显示**该动作；离开插件页回到空首页后也不会显示。先点侧栏 **Paseo Kanban** 打开看板。在 Settings 选择宿主，并不代表每个页面都有该上下文。见[兼容性](COMPATIBILITY.md#command-center-与-manifest-图标)。
+
+`assets/icon.png` 是用于未来可能的 registry 展示的 manifest 元数据。官方 0.11.2 的 **Settings -> Plugins** 列表不显示 manifest 图标；它与侧栏／命令的 contribution 图标不同。不声明已获 registry 收录。见[媒体说明](../MEDIA.md)。
+
 ## 从这里开始
 
 1. **准备：** Paseo daemon 和 app `>=0.11.0 <0.12.0`，Node `>=24.21.0` 且 `node:sqlite` 可用，另需 Git、npm。只在目标宿主启用受信任插件，先阅读下方访问说明。真实自动首卡需要自行登录的本地 provider／档案，且两个实际 model 已确认、非空、不同。见[前置要求](#前置要求)。

@@ -13,9 +13,14 @@
 
 ### 变更（Changed）
 
-- 看板侧栏改用受支持的 header contribution 与宿主 `SidebarRow`，保留原 board screen 和侧栏偏好身份。global Command Center 动作打开同一 screen；使用专用中英文文案键，随所选语言更新。
+- 看板侧栏改用受支持的 header contribution 与宿主 `SidebarRow`，保留原 board screen 和侧栏偏好身份。以 `context: global` 注册的 Command Center 动作，在具有本安装宿主上下文的页面打开同一 screen；使用专用中英文文案键，随所选语言更新。官方 0.11.2 Web 的空首页没有该上下文，不显示动作；离开插件页回首页后也一样。先用侧栏打开看板。
 - 中英文 README 上手入口精简，OVERVIEW 区分已测 Web UI 和未验证的 native／provider 流程。加入匿名已安装 Board／quota 截图、原创看板图标及 manifest media；截图原有范围见[媒体说明](../MEDIA.md)。
 - **Node 下限从 22.13.0 提到 24.21.0**：另行对冻结 rc.4 的 Node 22.13.0 实测只通过 **12/13 门**，CLI JSON 错误输出被 SQLite 实验警告污染；同一源码在 Node 24.21.0 为 13/13 门。未认证中间 Node 版本。package／根 lock engines 与当前中英文要求统一为 `>=24.21.0`。
+
+### 已知宿主限制
+
+- rc.5 把 Command Center 动作描述为全局可用，范围过宽。官方 0.11.2 Web 需要本安装的宿主上下文，空首页不显示插件动作。调整注册不能绕过宿主筛选；本次文档更正没有修复宿主行为。
+- 官方 0.11.2 Settings -> Plugins 列表不读取 manifest `icon`／`media`。包内 PNG 保留作未来可能的 registry 展示元数据，与 contribution 图标不同；不声明 registry 已收录。
 
 ### 注意（Notes）
 

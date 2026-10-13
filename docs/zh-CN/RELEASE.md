@@ -197,3 +197,7 @@ Git 代码回退在 `update --check --ref`／`update --ref` 指已验证旧公�
 项目自行规定：成功日用后另定是否申请目录。称稳定前至少 **14 天、20 张真实需求完整卡**，覆盖工作角色、独立审查、重启、受支持 patch、demo 数据恢复，无未解 P0/P1；不造活凑数。这不是官方直接 Git 安装前置；1.0 需更长证据及另定。
 
 现状每项只留一条有证据的已落地／坏了／未验证／待做／死路，变化时移栏。本机[离线运营演练](OPERATIONS-DEMO.md)不连 GitHub／活 daemon，不替代真实安装和 provider 检查。[English](../RELEASE.md)
+
+## Command Center 与图标的宿主限制
+
+官方 0.11.2 Web 的空首页没有本安装的宿主上下文，不显示「打开项目看板」Command Center 动作；先从侧栏打开 Paseo Kanban。manifest 的 `assets/icon.png` 用于未来可能的 registry 展示，0.11.2 的 Settings -> Plugins 列表不显示它。见[兼容性](COMPATIBILITY.md#command-center-与-manifest-图标)。这不是宿主行为修复，不声明 registry 已收录。

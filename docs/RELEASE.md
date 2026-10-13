@@ -191,7 +191,7 @@ No daemon restart is needed solely to install/update/reload source. Changing sta
 | Categories | Orchestration first, Sidebar second. |
 | Description | Cross-project coding-agent cards with Fleet roles, quota policies, independent review and leader acceptance. |
 | Setup/access/limits | [OVERVIEW](../OVERVIEW.md), host/platform limits, [DATA](DATA.md) and completed release evidence. |
-| Media | Package-relative `assets/board.png` and `assets/quota.png` show actual installed 0.11.2 Web UI with synthetic data; `assets/icon.png` is the listing icon. See [capture details](MEDIA.md). Recheck the assets at the final pinned artifact; these images do not establish registry approval or provider/device validation. |
+| Media | Package-relative `assets/board.png` and `assets/quota.png` show actual installed 0.11.2 Web UI with synthetic data; `assets/icon.png` is manifest metadata for possible future registry display; the official 0.11.2 Web plugin list does not display it. See [capture details](MEDIA.md). Recheck the assets at the final pinned artifact; these images do not establish registry approval or provider/device validation. |
 | Artifact review inputs | Root manifest and both entries, dependency lock/origins, preparation and eight CLI purposes, exact public commit/hash, MIT attribution and access description. |
 
 The current form requires Source and offers categories. Visual interfaces need a suitable image under registry review policy; this is a listing requirement, not a Git install parser requirement. Account login/2FA and author authorization remain under the user's control. No agent submits the draft, publishes private data or guarantees official approval/date. Registry Git updates require another reviewed pin; this direct-Git update guide does not update that listing.
@@ -199,3 +199,7 @@ The current form requires Source and offers categories. Visual interfaces need a
 Project readiness policy schedules a registry request after successful daily use and a separate decision. Before claiming stability, observe at least **14 days and 20 real requested complete cards**, covering worker roles, independent review, restart, supported patch updates and demo-data recovery, with no unresolved P0/P1. Do not invent tasks to reach a count. This project policy is not an official prerequisite for direct Git installation. Longer evidence and a separate decision are needed for 1.0.
 
 Track each evidence-backed item once as landed, broken, unverified, pending or abandoned; move it as status changes. The [offline operations rehearsal](OPERATIONS-DEMO.md) tests issue-to-draft flow without contacting GitHub or a live daemon and does not replace real installation/provider checks.
+
+## Command Center host limitation
+
+The official 0.11.2 Web empty homepage has no installation host context and does not show the Open project board action. Open Paseo Kanban from the sidebar first. See [compatibility](COMPATIBILITY.md#command-center-and-manifest-icon). This documentation correction does not fix the host behavior.

@@ -26,6 +26,14 @@ The manifest declares Paseo **daemon and app** `>=0.11.0 <0.12.0`. A compatible 
 
 These isolated observations do not certify a production switch or other platforms. Record exact commit/source/revision, OS, Node/npm, daemon/app/CLI, provider/model and each tested surface in the [release record](RELEASE.md). Optional macOS probes are not requirements for the core board workflow.
 
+## Command Center and manifest icon
+
+In official Paseo **0.11.2 Web**, ⌘K/Ctrl+K -> **Open project board** requires this installation's host context in the current page. An open plugin page or active workspace supplies that context; an empty homepage does not. Returning from a plugin page to that homepage removes the action. Open **Paseo Kanban** from the sidebar first. The command title follows the plugin's selected language. A selected Settings host is not a guarantee of command context on other pages.
+
+The client catalog is loaded for connected hosts independently of plugin-page mounting. The host's [command registration](https://github.com/getpaseo/paseo/blob/v0.11.2/packages/app/src/plugins/command-center/registration.tsx#L18) chooses the active workspace host or `/h/<host>/...` route and filters plugin items by it. `context: global` removes workspace/agent prerequisites, not this host requirement. See the [official API reference](https://paseo.sh/docs/plugins/reference#command-center-items). Changing plugin registration timing cannot provide the missing homepage context.
+
+The official 0.11.2 [plugin list renderer](https://github.com/getpaseo/paseo/blob/v0.11.2/packages/app/src/screens/settings/plugins-page.tsx#L117) does not read manifest `icon`/`media`. `assets/icon.png` is metadata for possible future registry display; absence in Settings -> Plugins is expected for this host version. Sidebar and command contribution icons are separate. These limits do not establish native app or other host-version behavior.
+
 ## Troubleshooting
 
 Start with the intended host's status and logs:

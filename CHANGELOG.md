@@ -14,9 +14,14 @@ Local candidate tag: `v0.1.0-rc.5`. This candidate is prepared only; install it 
 
 ### Changed
 
-- The board sidebar uses the supported header contribution and host `SidebarRow`, keeping the existing board screen and sidebar preference identity. A global Command Center action opens the same screen; its dedicated English/Chinese translation updates with the selected language.
+- The board sidebar uses the supported header contribution and host `SidebarRow`, keeping the existing board screen and sidebar preference identity. A Command Center action registered with `context: global` opens the same screen on pages with the installation's host context; its dedicated English/Chinese translation updates with the selected language. In official 0.11.2 Web, an empty homepage has no such context and does not show the action, including after leaving a plugin page. Use the sidebar to open the board first.
 - English/Chinese README entry guidance is shorter, and OVERVIEW distinguishes measured Web UI evidence from unverified native/provider flows. Anonymous installed Board and quota screenshots and an original board icon are included with manifest media metadata; their capture scope remains in [media details](docs/MEDIA.md).
 - The Node minimum rises from **22.13.0 to 24.21.0**. The separate rc.4 minimum-version measurement on Node 22.13.0 passed only **12/13 gates**, and a SQLite experimental warning contaminated CLI JSON error output. The same frozen source passed 13/13 gates on Node 24.21.0. This does not certify intermediate Node versions. Package/root-lock engines and current English/Chinese requirements now agree on `>=24.21.0`.
+
+### Known host limitations
+
+- The rc.5 description of the Command Center action as globally available was too broad. In official 0.11.2 Web it requires the installation's host context; an empty homepage does not expose plugin actions. Registration changes cannot bypass the host's filter. This documentation correction does not fix the host behavior.
+- The official 0.11.2 Settings -> Plugins list does not consume manifest `icon`/`media`. The packaged PNG remains metadata for possible future registry display, separate from contribution icons; no registry listing is claimed.
 
 ### Notes
 

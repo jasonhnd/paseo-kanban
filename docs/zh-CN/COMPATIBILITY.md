@@ -26,6 +26,14 @@ manifest 声明 Paseo **daemon 和 app** `>=0.11.0 <0.12.0`。daemon 兼容不�
 
 隔离观察不认证生产切换或其他平台。[发布记录](RELEASE.md)须写精确 commit/source/revision、OS、Node/npm、daemon/app/CLI、provider/model 和逐项画面。可选 macOS 探针不是核心看板前置。
 
+## Command Center 与 manifest 图标
+
+官方 Paseo **0.11.2 Web** 中，⌘K／Ctrl+K -> **打开项目看板** 需要当前页面具有本安装的宿主上下文。已打开的插件页或活动工作区提供该上下文；空首页没有。离开插件页回到空首页后，动作消失。先点侧栏 **Paseo Kanban**。命令标题随插件所选语言更新。Settings 中选择宿主，并不保证其他页面具有命令上下文。
+
+客户端目录按已连接宿主加载，不依赖插件页是否挂载。宿主的[命令注册](https://github.com/getpaseo/paseo/blob/v0.11.2/packages/app/src/plugins/command-center/registration.tsx#L18) 从活动工作区或 `/h/<host>/...` 路由取宿主，再按该宿主筛选插件动作。`context: global` 免去工作区／agent 前置条件，不免去宿主条件。见[官方 API 说明](https://paseo.sh/docs/plugins/reference#command-center-items)。调整插件注册时机无法补出首页缺失的宿主上下文。
+
+官方 0.11.2 的[插件列表渲染器](https://github.com/getpaseo/paseo/blob/v0.11.2/packages/app/src/screens/settings/plugins-page.tsx#L117) 不读取 manifest `icon`／`media`。`assets/icon.png` 是用于未来可能的 registry 展示的元数据；该宿主版本的 Settings -> Plugins 不显示它。侧栏和命令 contribution 图标是另一机制。这些限制不代表原生 app 或其他宿主版本的行为已验证。
+
 ## 排错
 
 先查目标宿主状态和日志：

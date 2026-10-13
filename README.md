@@ -16,6 +16,12 @@ Actual plugin pages in an isolated official Paseo 0.11.2 host, captured with loc
 
 ![Fleet quota page with synthetic usage plans](assets/quota.png)
 
+## Command Center and icon in Paseo 0.11.2
+
+On macOS, press **⌘K** (Ctrl+K on Windows/Linux) and search **Open project board**; the title follows the plugin's English/Chinese language setting. In the official **0.11.2 Web UI**, this action appears only when the current page has this installation's host context, such as an open plugin page or active workspace. An empty homepage has no host context and does **not** show the action, even after leaving an open plugin page. Open **Paseo Kanban** from the sidebar first. Selecting a host in Settings alone does not make every page carry that context. See [compatibility](docs/COMPATIBILITY.md#command-center-and-manifest-icon).
+
+`assets/icon.png` is manifest metadata for possible future registry display. The official 0.11.2 **Settings -> Plugins** list does not display manifest icons; this is separate from the sidebar/command contribution icons. No current registry listing is claimed. [Media details](docs/MEDIA.md).
+
 ## Start here
 
 1. **Prepare:** Paseo daemon and app `>=0.11.0 <0.12.0`, Node `>=24.21.0` with `node:sqlite`, Git and npm. Enable trusted plugins only on the intended host; read the access warning below. A real automatic card needs authenticated local profiles with two confirmed, different actual models. [Requirements](#requirements).
