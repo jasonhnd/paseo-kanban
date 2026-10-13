@@ -758,19 +758,18 @@ function matrixRank(profile: Profile | null, snapshot: PoolSnapshot, avoid: Set<
 }
 
 /**
- * AFC writes the matrix and the pool snapshot together, so a stale snapshot means the matrix
- * pauses are just as old. They are ignored then, and so are the pauses of a matrix export that
- * is stale on its own; the stop lines in staleEntry still apply.
+ * Immutable admission retains matrix pauses across expiry. Explicit compatibility snapshots
+ * keep the legacy stale fallback, including matrices that are stale on their own.
  */
 function matrixPaused(item: MatrixItem, snapshot: PoolSnapshot, matrix: DispatchMatrix | null | undefined): boolean {
-  return item.paused && snapshot.state !== "stale" && matrix?.stale !== true;
+  return item.paused && (snapshot.policy != null || (snapshot.state !== "stale" && matrix?.stale !== true));
 }
 
 /** Said once in the reason when only the matrix is stale (a stale snapshot already says so). */
 function matrixStaleNote(matrix: DispatchMatrix | null | undefined, snapshot: PoolSnapshot): string | null {
   if (matrix?.stale !== true || snapshot.state === "stale") return null;
   const minutes = matrix.ageMs != null ? staleMinutes(matrix.ageMs) : null;
-  return `dispatch matrix is ${minutes != null ? `${minutes} minutes ` : ""}stale: its paused marks are ignored`;
+  return `dispatch matrix is ${minutes != null ? `${minutes} minutes ` : ""}stale: its paused marks are ${snapshot.policy ? "retained" : "ignored"}`;
 }
 
 function ghost(name: string, role: string): Profile {

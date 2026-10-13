@@ -277,6 +277,8 @@ export function staleEntry(pool: string, entry: PoolEntry, stops: Readonly<Recor
 interface SnapshotInput {
   /** Configured quota bindings close any named pool missing from the contract export. */
   quotaConfigured?: boolean;
+  /** Immutable policy expiry may narrow admission, but cannot reopen a producer stop. */
+  preserveStops?: boolean;
   now: number;
   pools: Record<string, RawPool>;
   generatedAt: string | null;
@@ -293,7 +295,10 @@ function buildSnapshot(input: SnapshotInput): PoolSnapshot {
     const expiry = entry.readingExpiresAt ? Date.parse(entry.readingExpiresAt) : Number.NaN;
     const protectedReadingExpired = entry.quotaProtection === "pause" && (!Number.isFinite(expiry) || input.now >= expiry);
     // Fresh snapshots follow dispatchable unless a protected reading has expired.
-    parsed[name] = input.stale ? staleEntry(name, entry, input.stops) : protectedReadingExpired ? expiredEntry(entry) : entry;
+    const effective = input.stale ? staleEntry(name, entry, input.stops) : protectedReadingExpired ? expiredEntry(entry) : entry;
+    parsed[name] = input.stale && input.preserveStops && !entry.dispatchable
+      ? { ...effective, dispatchable: false, reason: entry.reason ?? effective.reason }
+      : effective;
   }
   const known = new Set(Object.keys(parsed));
   const entryOf = (pool: string | null): PoolEntry => (
@@ -371,7 +376,7 @@ function readAfcPoolSnapshot(now: number, stops: Readonly<Record<string, number>
       return { ...snapshot, dispatchable: () => false, entry: closed };
     }
     const value = policy.snapshot.pools;
-    return { ...buildSnapshot({ now, quotaConfigured: true, pools: value.pools, generatedAt: value.generatedAt, updatedAt: value.generatedAt, ageMs: envelopeAgeSeconds(value, new Date(now))*1000, stale: classifyFreshness(value,new Date(now)) === "stale", stops }),
+    return { ...buildSnapshot({ now, quotaConfigured: true, preserveStops: true, pools: value.pools, generatedAt: value.generatedAt, updatedAt: value.generatedAt, ageMs: envelopeAgeSeconds(value, new Date(now))*1000, stale: classifyFreshness(value,new Date(now)) === "stale", stops }),
       policy: Object.freeze({ revision: policy.snapshot.revision, digest: policy.snapshot.policyDigest }) };
   }
   const source = poolSource(now);
