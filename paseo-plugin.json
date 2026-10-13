@@ -10,5 +10,10 @@
       "node",
       "server/prepare.mjs"
     ]
+  ],
+  "icon": "assets/icon.png",
+  "media": [
+    "assets/board.png",
+    "assets/quota.png"
   ]
 }
