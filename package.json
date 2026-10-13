@@ -1,6 +1,6 @@
 {
   "name": "@jasonhnd/paseo-kanban",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "A single Paseo plugin for boards, roles, quota policies and decisions, with review by a different actual model.",
   "license": "MIT",
   "author": "jasonhnd",

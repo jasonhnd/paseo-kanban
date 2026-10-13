@@ -4,9 +4,9 @@
 
 [English](../../README.md)
 
-> **实验性 RC `0.1.0-rc.1` — 待发布。** 拟用不可移动 Git tag 为 `v0.1.0-rc.1`，目前不能作为可用安装目标。当前公开基线是 `integration/single-plugin-reviewed` 上的 c106。该基线已在 macOS 隔离环境通过官方 0.11.2 的 GitHub 安装／恢复及 Microsoft Edge Web UI 验证；新 RC 仍须独立核对精确候选并在发布后重放 GitHub。物理手机、原生 app 和已认证 provider 首卡仍未验证。不宣布稳定版、npm 发布、官方目录收录或响应时间承诺。
+> **实验性 RC `0.1.0-rc.2` — 在 GitHub Release 记录出现之前未发布。** 只有该 tag 的 GitHub Release 存在、标为 prerelease，且目标 commit 等于[发布记录](RELEASE.md)中的已审 commit 时，才安装 `--ref v0.1.0-rc.2`。Release 记录不存在时，本候选未发布，这个 tag 不是 GitHub 安装目标。`v0.1.0-rc.1` 只是 `22958ff54c955c1a90683f786d3ebb8b9ae88470` 的本地准备，没有公开，也不挪动。当前公开基线是 `integration/single-plugin-reviewed` 上的 c106。该基线已在 macOS 隔离环境通过官方 0.11.2 的 GitHub 安装／恢复及 Microsoft Edge Web UI 验证。这些结果，以及任一修复单独的精确运行，都不是本整合 RC 的最终通过。Release 记录存在后，再重放 GitHub 安装。物理手机、原生 app 和已认证 provider 首卡仍未验证。不宣布稳定版、npm 发布、官方目录收录或响应时间承诺。
 
-唯一插件 id 为 `paseo-kanban`，只有一个标准侧栏入口。看板与 Fleet 共用 `board` 画面、`/plugin/paseo-kanban/board` 深链与 workspace 项目筛选。package 与 lock 元数据为 `@jasonhnd/paseo-kanban`、版本 `0.1.0-rc.1`。官方 0.11.2 以完整 revision 标识 Git 安装，不使用 manifest 版本字段；元数据不代表已发布。
+唯一插件 id 为 `paseo-kanban`，只有一个标准侧栏入口。看板与 Fleet 共用 `board` 画面、`/plugin/paseo-kanban/board` 深链与 workspace 项目筛选。package 与 lock 元数据为 `@jasonhnd/paseo-kanban`、版本 `0.1.0-rc.2`。官方 0.11.2 以完整 revision 标识 Git 安装，不使用 manifest 版本字段；元数据不代表已发布。
 
 ## 前置要求
 
@@ -19,12 +19,12 @@ Paseo 插件是**受信任、无沙箱的代码**。server 和准备命令可以
 
 ## 从 GitHub 安装
 
-先核对 CLI、daemon、app 版本及 daemon 的 Node 环境。`paseo --version` 只报告 CLI 版本，不证明 daemon/app 版本。**下列 RC 命令只在 tag 和 prerelease 发布、并在[发布记录](RELEASE.md)确认完整 SHA 后执行；目前不能安装这个待发布本地 RC。**
+先核对 CLI、daemon、app 版本及 daemon 的 Node 环境。`paseo --version` 只报告 CLI 版本，不证明 daemon/app 版本。**只有 `v0.1.0-rc.2` 的 GitHub Release 记录存在，且目标 commit 等于[发布记录](RELEASE.md)中的已审完整 SHA 时，才执行下面的 tag 命令。该记录不存在时，候选未发布，这个 tag 不是 GitHub 安装目标。**
 
 ```sh
 paseo --version
 node --version
-paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.1
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.2
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -34,7 +34,7 @@ paseo plugin ls paseo-kanban --json
 paseo plugin install github:jasonhnd/paseo-kanban --ref c106efb88a659931d01f40a236001823473561a8 --json
 ```
 
-该基线包元数据为 `0.1.0`，不是准备中的 `0.1.0-rc.1` tag。[RC 变更记录](CHANGELOG.md)列出源码变化与未解决的依赖告警。
+该基线包元数据为 `0.1.0`。它不是 `0.1.0-rc.2`，也不是未公开的本地准备 `0.1.0-rc.1`。[RC 变更记录](CHANGELOG.md)列出源码变化与未解决的依赖告警。
 
 1. 在目标宿主 **Settings -> Plugins** 打开 **Enable plugins** 和单独的 `paseo-kanban` 开关。全局开关也会启动其他单独启用的插件。全局开关开启后可运行 `paseo plugin enable paseo-kanban --json` 启用本插件。
 2. 再运行 `paseo plugin ls paseo-kanban --json`，确认 `running` 且无加载错误。从该宿主的侧栏打开 **Paseo Kanban**；看板、Fleet、Settings 应共用这一个入口。必须打开真实页面；只有 `running` 不证明 client 挂载成功。窄视口不证明真实手机。
@@ -64,10 +64,12 @@ paseo plugin install github:jasonhnd/paseo-kanban --ref c106efb88a659931d01f40a2
 先备份状态，并记录当前完整 revision、来源、安装路径与 enabled 状态。确认 RC 已发布后，**每次明确 ref**，先预览再更新：
 
 ```sh
-paseo plugin update paseo-kanban --check --ref v0.1.0-rc.1 --json
-paseo plugin update paseo-kanban --ref v0.1.0-rc.1 --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.2 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.2 --json
 paseo plugin ls paseo-kanban --json
 ```
+
+这两条更新命令同样只在 GitHub Release 记录允许 `v0.1.0-rc.2` 时使用，见[从 GitHub 安装](#从-github-安装)。托管更新后，看板和 Fleet 信息导出仍可能在约 600 秒内保留已删除 checkout 的路径，这是现有导出周期。命令用当前安装路径，两份导出都一致后再恢复派活。本 RC 不认证、也不修复导出路径的即时新鲜度。
 
 `--check` 只预览。`--ref` 只选择这次操作；以后不带 ref 更新会跟随远端默认 HEAD。完整审过的 SHA 可精确指定目标。更新后核对 revision／路径和真实 UI，托管目录可能变化，因此更新 `BOARD_INSTALL`。不要在托管 checkout 里改代码或构建。[发布与恢复](RELEASE.md)提供备份、精确 SHA 回退和待重放清单。
 

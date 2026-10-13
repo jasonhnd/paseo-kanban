@@ -1,7 +1,29 @@
 # Changelog
 
 The single plugin has one version and CHANGELOG. Distribution is through Git.
-The release candidate below is prepared locally; its tag and GitHub prerelease are **pending publication**. There is no npm publication or official registry listing.
+Two release candidates are recorded here. `0.1.0-rc.2` is the integrated candidate. `0.1.0-rc.1` was local preparation only and was not published. Neither GitHub Release is declared by this document. There is no npm publication or official registry listing.
+
+## 0.1.0-rc.2 — pending publication
+
+Planned immutable tag: `v0.1.0-rc.2`. This is an experimental prerelease, not a stable release. Local tag `v0.1.0-rc.1` already names `22958ff54c955c1a90683f786d3ebb8b9ae88470` and is not moved. When this candidate was prepared, the remote tag list and GitHub Releases did not include `v0.1.0-rc.1` or `v0.1.0-rc.2`; the publishing owner checks the GitHub Release record again before any install. The public code baseline remains [c106efb88a659931d01f40a236001823473561a8](https://github.com/jasonhnd/paseo-kanban/commit/c106efb88a659931d01f40a236001823473561a8). Install `--ref v0.1.0-rc.2` only when the GitHub Release for that tag exists, is a prerelease, and its target commit equals the reviewed commit in the release record. While that Release record is absent, this candidate is unpublished and the tag is not a GitHub install target. This heading does not claim that the Release exists. A UTC publication date belongs in the release record.
+
+### Changed
+
+- Package and lock metadata agree on `0.1.0-rc.2`. English and Chinese setup, Git installation and recovery name that tag only inside the GitHub Release condition above. `v0.1.0-rc.1` remains the unpublished local preparation in the next section.
+
+### Fixed
+
+- Artifact acceptance records a detached HEAD and the card pull request without landing the local branch. A pull-request artifact must use lowercase `https://github.com/`. An uppercase host such as `https://GITHUB.COM/` is rejected. Owner and repository comparison stays case-insensitive.
+- Decision panels share one close cache. A newer omission drops a restored row, and a newer close omission advances the close watermark, so region counts stay aligned after undo and a close from another region.
+- Undo still exists only while its panel stays mounted. Leaving the panel or reloading removes Undo. The stored done state and the zero count remain. That limit is unchanged.
+
+### Notes
+
+- This candidate contains both reviewed fixes. It is not a metadata-only change from c106. Schema, contract versions and dependency selections are unchanged. Dependencies were not upgraded and `npm audit fix` was not applied. Existing dependency deprecation and audit warnings remain unresolved. Passing build or privacy gates does not clear them.
+- Board and Fleet information exports can keep command paths from a removed checkout for about 600 seconds, their existing export period. Use the current installed path, and wait until both exports match it before resuming dispatch. This candidate does not certify or fix immediate export freshness.
+- Physical phones, the native app, and an authenticated provider first-card, review, acceptance and cleanup cycle remain unverified. A compact browser viewport is not a phone test. Linux, WSL2 and production recovery remain unverified.
+- A GitHub tag or full-SHA cold install of this RC is not claimed. Repeat that check only after the GitHub Release record exists. A local `file://` check does not pass that row.
+- The final pass is the gate record for this integrated commit. Exact results from `0.1.0-rc.1`, or from either fix by itself, are not that pass.
 
 ## 0.1.0-rc.1 — pending publication
 

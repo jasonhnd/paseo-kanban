@@ -1,6 +1,28 @@
 # 变更记录
 
-单插件使用一个版本与 CHANGELOG，通过 Git 分发。下列 RC 已在本地准备，tag 和 GitHub prerelease **待发布**；没有 npm 发布或官方目录收录。
+单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.2` 是整合候选。`0.1.0-rc.1` 只在本地准备过，没有公开。本文不宣布任一 GitHub Release，也没有 npm 发布或官方目录收录。
+
+## 0.1.0-rc.2 — 待发布
+
+拟用不可移动 tag：`v0.1.0-rc.2`。这是实验性预发布，不是稳定版。本地 tag `v0.1.0-rc.1` 已经指向 `22958ff54c955c1a90683f786d3ebb8b9ae88470`，不挪动。准备本候选时，远端 tag 列表和 GitHub Releases 都没有 `v0.1.0-rc.1` 或 `v0.1.0-rc.2`；安装前由发布主责再查 GitHub Release 记录。公开代码基线仍是 [c106efb88a659931d01f40a236001823473561a8](https://github.com/jasonhnd/paseo-kanban/commit/c106efb88a659931d01f40a236001823473561a8)。只有当该 tag 的 GitHub Release 存在、标为 prerelease，且目标 commit 等于发布记录中的已审 commit 时，才用 `--ref v0.1.0-rc.2` 安装。该 Release 记录不存在时，本候选未发布，这个 tag 不是 GitHub 安装目标。这个标题不表示 Release 已存在。UTC 发布日期只写在发布记录里。
+
+### 变更（Changed）
+
+- package 与 lock 元数据统一为 `0.1.0-rc.2`。中英文上手、Git 安装和恢复只在上述 GitHub Release 条件下使用该 tag。`v0.1.0-rc.1` 仍是下一节的未公开本地准备。
+
+### 修复（Fixed）
+
+- 产物验收记下游离 HEAD 和卡的 pull request，不把本地分支合回。pull request 产物必须使用小写 `https://github.com/`。大写主机名如 `https://GITHUB.COM/` 会被拒绝。所有人和仓库的比较仍不区分大小写。
+- 决定面板共用同一份关闭缓存。更新的遗漏会丢掉已恢复的行，更新的关闭遗漏会推进关闭水位，因此撤销后从另一区域关闭时，各区域计数保持一致。
+- Undo 仍只在当前已挂载的面板里存在。离开该面板或重新加载后，Undo 消失。已保存的 done 状态和零计数保留。这个限制没有改。
+
+### 注意（Notes）
+
+- 本候选包含两组成品修复，相对 c106 不是只改元数据。schema、契约版本和依赖选择不变。不升级依赖，不运行 `npm audit fix`。既有依赖 deprecated／audit 告警仍在。构建或隐私门通过不消除这些告警。
+- 看板和 Fleet 信息导出可能把已删除 checkout 的命令路径保留约 600 秒，这是现有导出周期。命令用当前安装路径，两份导出都与该路径一致后再恢复派活。本候选不认证、也不修复导出路径的即时新鲜度。
+- 物理手机、原生 app，以及已认证 provider 的首卡、审查、验收和清理仍未验证。浏览器窄视口不是手机测试。Linux、WSL2 和生产恢复仍未验证。
+- 不声称本 RC 已做 GitHub tag 或完整 SHA 冷安装。GitHub Release 记录存在之后才重做该项。本地 `file://` 检查不能算通过该行。
+- 最终通过指本整合 commit 的门禁记录。`0.1.0-rc.1` 或任一修复单独的精确结果都不是这次最终通过。
 
 ## 0.1.0-rc.1 — 待发布
 

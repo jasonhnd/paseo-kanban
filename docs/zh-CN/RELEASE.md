@@ -1,28 +1,28 @@
 # Git 发布与恢复清单
 
-本批准备单插件的 **Git-only 预发布 `0.1.0-rc.1`**。不可移动 tag `v0.1.0-rc.1` 与 GitHub prerelease **待发布**。公开仓库为 `https://github.com/jasonhnd/paseo-kanban`，分支 `integration/single-plugin-reviewed`；当前公开准备基线是 `c106efb88a659931d01f40a236001823473561a8`，tree `581ff56cbd944b6d4244129c80a8aeb3bd8c01e2`。RC 相对该基线只改元数据／文档；本文不宣布或授权稳定版、npm 发布、官方目录收录或生产切换。
+本批准备单插件的 **Git-only 预发布 `0.1.0-rc.2`**。不可移动 tag `v0.1.0-rc.2` 与 GitHub prerelease 在 **GitHub Release 记录出现之前未发布**。公开仓库为 `https://github.com/jasonhnd/paseo-kanban`，分支 `integration/single-plugin-reviewed`；已验证公开代码基线是 `c106efb88a659931d01f40a236001823473561a8`，tree `581ff56cbd944b6d4244129c80a8aeb3bd8c01e2`。`v0.1.0-rc.1` 是 `22958ff54c955c1a90683f786d3ebb8b9ae88470` 的本地准备 tag，不挪动；那次准备只改元数据和文档，没有公开。`0.1.0-rc.2` 加上已审的产物验收修复，以及已审的决定面板计数、遗漏和关闭水位修复。本文不宣布或授权稳定版、npm 发布、官方目录收录或生产切换。
 
 ## 版本及证据规则
 
 单插件只有一个 package／version／CHANGELOG，id 为 `paseo-kanban`。0.x 兼容修复升 patch，新增或配置／行为破坏升 minor；1.x 按 SemVer。契约/schema 版本独立；兼容新增保留，破坏须明确迁移／恢复方案。
 
-Git 分支可变。本 RC 计划要求不可移动 tag 与 GitHub prerelease，和 package／lock／CHANGELOG 对齐。保存完整审过的 commit/tree 及 tag object／元数据，审查并扫描 annotated tag 的身份与内容。绝不挪动、覆盖或复用 tag，即使修正发版也不例外。若 `v0.1.0-rc.1` 已存在，检查其 commit 并选下一个未用 RC 号，同步元数据／文档、重跑最终门。准备时远端 tags／releases 为空；发布主责须再查。保留 c106 作为已验证公开代码基线，不称前一个版本化 release。
+Git 分支可变。本 RC 计划要求不可移动 tag 与 GitHub prerelease，和 package／lock／CHANGELOG 对齐。保存完整审过的 commit/tree 及 tag object／元数据，审查并扫描 annotated tag 的身份与内容。绝不挪动、覆盖或复用 tag，即使修正发版也不例外。本地 `v0.1.0-rc.1` 已指向 `22958ff54c955c1a90683f786d3ebb8b9ae88470`，不挪动。本候选选用的下一个未用号是 `0.1.0-rc.2`。准备时远端 tag 和 GitHub Releases 都没有这两个 RC；发布主责须再查 GitHub Release 记录。保留 c106 作为已验证公开代码基线，不称前一个版本化 release。
 
 准备中的 RC 可用明确标注**待发布**的版本标题；验证发布前不写发布日期、不称 tag 可用。写明宿主范围、数据／契约变更、既有依赖告警及真测限制。官方 0.11.2 Git 下载使用 revision／`--ref`，manifest schema 不消费插件版本字段；package.json、package-lock.json 顶层及根 package 版本必须一致，不虚构 manifest 字段。不把源码检查写成 app/provider 认证。
 
 ## RC 发布计划 — 待发布
 
-Release 标题为 **Paseo Kanban v0.1.0-rc.1**，GitHub Release 必须标 **prerelease**。正文写精确审过的公开 RC commit/tree，链接英中 CHANGELOG，说明兼容／访问／数据风险，区分前版 c106 证据与 RC 验证。正文先准备供审查，不含私有路径、身份、配置、凭证或证据仓。
+Release 标题为 **Paseo Kanban v0.1.0-rc.2**，GitHub Release 必须标 **prerelease**。正文写精确审过的公开 RC commit/tree，链接英中 CHANGELOG，说明兼容／访问／数据风险，区分前版 c106 证据与 RC 验证。正文先准备供审查，不含私有路径、身份、配置、凭证或证据仓。
 
 不同实际 model 审查、leader 亲看验收后，只有另获授权的发布主责可以公开批准的 commit／tag 并创建 prerelease。主责须重跑精确出站 branch／tag 的隐私／历史／身份门，确认远端 peeled tag 等于已审 commit，确认 GitHub Release 使用该 tag 且 prerelease=true。本计划不包含 force、替换 tag、npm 发布或 registry 提交。
 
 **以下命令在远端确认后执行，不是待发布 tag 已存在的证据：**
 
 ```sh
-paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.1 --json
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.2 --json
 paseo plugin ls paseo-kanban --json
-paseo plugin update paseo-kanban --check --ref v0.1.0-rc.1 --json
-paseo plugin update paseo-kanban --ref v0.1.0-rc.1 --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.2 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.2 --json
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -36,7 +36,43 @@ paseo plugin ls paseo-kanban --json
 
 发布交接记录精确 CLI/daemon/app 版本、命令／退出码、前后 source/revision/path/enabled/version、代码与数据保留、清理和限制。tag 安装及新 RC GitHub／UI 重放通过前仍为待做。公开前用本卡本地 `file://` Git 源核精确候选，不能证明未来 GitHub tag。daemon 与 app 均须 `>=0.11.0 <0.12.0`；macOS arm64 官方 0.11.2 为实测基线，Node 要求 >=22.13.0。声明范围不认证其他 patch／平台或已认证 provider。
 
-RC 相对 c106 不改运行代码／schema／契约／依赖，没有自动数据迁移／导入。切换代码／来源前保持统一根、停派活与写者、备份一致状态及宿主设置。代码回退保留当前写入；另行兼容数据恢复可能丢失新写入。新装 enabled=true，全局插件开启时可能立即启动。插件开发／准备及官方宿主的既有依赖 audit／deprecated 告警未解决，交接保留精确观察。门通过不等于修复告警或稳定版证据。
+相对 c106，本 RC 改了已审的产物验收和决定面板行为，以及 package／lock 元数据和文档。schema、契约版本和依赖选择不变，没有自动数据迁移／导入。切换代码／来源前保持统一根、停派活与写者、备份一致状态及宿主设置。代码回退保留当前写入；另行兼容数据恢复可能丢失新写入。新装 enabled=true，全局插件开启时可能立即启动。插件开发／准备及官方宿主的既有依赖 audit／deprecated 告警未解决，交接保留精确观察。门通过不等于修复告警或稳定版证据。
+
+## 仍保留的限制
+
+`0.1.0-rc.2` 继续保留这些限制：
+
+- 信息导出可能在约 600 秒内仍指向已删除的 checkout。命令用当前安装路径，两份导出一致后再恢复派活。
+- 已关闭决定的 Undo 只在当前挂载的面板里。离开或重新加载后 Undo 消失。已保存的 done 和零计数保留。
+- pull request 产物只接受小写 `https://github.com/`。`https://GITHUB.COM/` 会被拒绝。
+- 依赖 deprecated 和 audit 告警未解决。构建或隐私门通过不是 audit 修复。
+- 物理手机、原生 app 和已认证 provider 闭环仍未验证。
+- `0.1.0-rc.1` 或任一修复单独的精确结果，不是本整合 commit 的最终通过。
+- 本 RC 的 GitHub 冷安装要等 GitHub Release 记录存在。不要用本地 `file://` 探针编造该结果。
+
+## 发布正文的替换
+
+双语发布正文先供审查。下面的记号只整段替换：
+
+| 记号 | 替换成 |
+|---|---|
+| `{{RC_VERSION}}` | `0.1.0-rc.2` |
+| `{{RC_TAG}}` | `v0.1.0-rc.2` |
+| `{{RC_COMMIT}}` | 已审完整 commit |
+| `{{RC_TREE}}` | 该 commit 的 tree |
+| `{{UTC_DATE}}` | 准备正文时的 UTC 日历日期，格式 `YYYY-MM-DD` |
+
+`{{INSTALL_STATUS}}` 只能是下面两段之一。
+
+已发布，且仅当 `v0.1.0-rc.2` 的 GitHub Release 存在、标为 prerelease、目标 commit 等于 `{{RC_COMMIT}}`：
+
+`The GitHub Release record for v0.1.0-rc.2 on {{UTC_DATE}} targets {{RC_COMMIT}}. Install with --ref v0.1.0-rc.2.`
+
+未发布，即该 Release 记录不存在：
+
+`No GitHub Release record for v0.1.0-rc.2 exists as of {{UTC_DATE}}. The candidate is unpublished. Do not install v0.1.0-rc.2 from GitHub. v0.1.0-rc.1 was local preparation only and was not published.`
+
+准备稿使用未发布那一段。以后的发布者把整段换成已发布那一段。在已发布记录给出自己的日期之前，UTC 日期是准备正文的日期。正文不含私有路径、身份、配置、凭证或证据仓。
 
 ## 候选发布前
 
