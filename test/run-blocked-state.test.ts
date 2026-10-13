@@ -50,7 +50,7 @@ function stamp(id: number) {
 async function failedRun(path: "executor" | "standalone-reviewer" | "automatic-review", kind: "quota" | "rate_limit") {
   const task = createTask({ project: "demo", title: "Anonymous run", role: path === "standalone-reviewer" ? "reviewer" : "executor", tier: "L1", workspacePath: join(root, "work") });
   await startTask(task.id, launcher, "fixture");
-  assert.equal(getTask(task.id).status, "running");
+  assert.equal(getTask(task.id).status, path === "standalone-reviewer" ? "reviewing" : "running");
   if (path === "automatic-review") {
     getDb().prepare("UPDATE runs SET ended_at = ?, end_kind = 'complete' WHERE task_id = ?").run(new Date().toISOString(), task.id);
     getDb().prepare("UPDATE tasks SET status = 'in_review' WHERE id = ?").run(task.id);
@@ -71,7 +71,7 @@ for (const path of ["executor", "standalone-reviewer", "automatic-review"] as co
         return launcher.create(options);
       } }, "fixture");
       assert.notEqual(result.agentId, f.oldAgent);
-      assert.equal(getTask(f.id).status, path === "automatic-review" ? "reviewing" : "running");
+      assert.equal(getTask(f.id).status, path === "executor" ? "running" : "reviewing");
       assertClear(f.id);
       const shown = await runKanban(["show", String(f.id)], {}) as { task: { blockedKind: unknown; blockedReason: unknown; blockedAt: unknown } };
       assert.equal(shown.task.blockedKind, null); assert.equal(shown.task.blockedReason, null); assert.equal(shown.task.blockedAt, null);
@@ -84,7 +84,7 @@ for (const path of ["executor", "standalone-reviewer", "automatic-review"] as co
       const f = await failedRun(path, kind);
       await assert.rejects(startTask(f.id, { ...launcher, async create() { throw new Error("Anonymous create failed"); } }, "fixture"), /Anonymous create failed/);
       assert.deepEqual(state(getTask(f.id)), f.before);
-      assert.equal(getTask(f.id).status, path === "automatic-review" ? "in_review" : "ready");
+      assert.equal(getTask(f.id).status, path === "executor" ? "ready" : "in_review");
     });
   }
 }
@@ -104,7 +104,8 @@ for (const role of ["executor", "reviewer"] as const) {
     getDb().prepare("UPDATE tasks SET status = ?, agent_id = NULL WHERE id = ?").run(role === "reviewer" ? "reviewing" : "running", f.id);
     appendEvent(f.id, "agent_creating", null, null, "fixture", { role, profile: role === "reviewer" ? reviewer.name : executor.name, provider: "demo", model: role === "reviewer" ? "demo-b" : "demo-a", family: "demo" }, claimedAt);
     const id = `recovered-${f.id}`;
-    writeFileSync(join(root, "agents", `${id}.json`), JSON.stringify({ id, cwd: join(root, "work"), labels: { kanban: "1", kanban_task: String(f.id), role }, archivedAt: null, createdAt: new Date().toISOString(), provider: "demo" }));
+    const bucket = join(root, "agents", id.slice(0, 2)); mkdirSync(bucket, { recursive: true });
+    writeFileSync(join(bucket, `${id}.json`), JSON.stringify({ id, cwd: join(root, "work"), labels: { kanban: "1", kanban_task: String(f.id), role }, archivedAt: null, createdAt: new Date().toISOString(), provider: "demo" }));
     invalidateAgentIndex();
     assert.equal(recoverLostCreate(f.id, new Date()), "adopted");
     assert.equal(getTask(f.id).agent_id, id); assertClear(f.id);
