@@ -1,4 +1,4 @@
-import { useRpc } from "@getpaseo/plugin/client";
+import { useRpc } from "../rpc";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";

@@ -1,4 +1,4 @@
-import { useRpc } from "@getpaseo/plugin/client";
+import { useRpc } from "../rpc";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { leaderReplyRpc } from "../../shared/fleet/board";

@@ -1,7 +1,7 @@
 // Paseo settings screen for kanban.config.json. Leaders are shown and not edited.
 // The screen title is fixed when the plugin registers; this form's own strings follow setLanguage.
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
-import { useRpc } from "@getpaseo/plugin/client";
+import { useRpc } from "../rpc";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { deriveProjectCode, uniqueProjectCode } from "../../shared/card-code";

@@ -1,4 +1,4 @@
-import { useRpc } from "@getpaseo/plugin/client";
+import { useRpc } from "../rpc";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { clipError } from "../../shared/fleet/clip-error";

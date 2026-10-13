@@ -1,4 +1,5 @@
-import { useRpc } from "@getpaseo/plugin/client";
+import { useRpc } from "./rpc";
+import { PluginUpdateError } from "./rpc-policy";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useDeferredValue } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
@@ -34,6 +35,7 @@ export function HistoryPanel({
     queryFn: ({ pageParam }) =>
       loadHistory({ project: project || undefined, query: search || undefined, offset: pageParam, limit: HISTORY_PAGE }),
     initialPageParam: 0,
+    retry: (count, error) => !(error instanceof PluginUpdateError) && count < 3,
     getNextPageParam: (last, pages) => {
       const loaded = pages.reduce((sum, page) => sum + page.items.length, 0);
       return last.items.length > 0 && loaded < last.total ? loaded : undefined;

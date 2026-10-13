@@ -1,5 +1,5 @@
 import { Component, useEffect, useSyncExternalStore, type ReactNode } from "react";
-import { useRpc } from "@getpaseo/plugin/client";
+import { useRpc } from "./rpc";
 import { getLanguage, isLanguageSetting, resolveLanguage, setLanguage, type Language } from "../shared/i18n";
 import { configReadRpc } from "../shared/rpc";
 import { adoptPanelLanguage } from "./panel-title";

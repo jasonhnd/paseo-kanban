@@ -8,6 +8,7 @@ import { FleetSettings } from "./fleet/settings";
 import { paletteFromTheme } from "../shared/palette";
 import { t } from "../shared/i18n";
 import { useI18n } from "./i18n";
+import { RpcUpdateNotice } from "./rpc";
 import { PANEL_TAB_IDS, panelTabLabel, type PanelTab } from "../shared/fleet/panel-tabs";
 
 type Tab = "board" | PanelTab | "settings";
@@ -30,5 +31,5 @@ export function Application(props: PluginSurfaceProps & { lockedProject?: string
   </View>;
 }
 export function ApplicationSettings(props: PluginSurfaceProps) {
-  return <View style={{ flex: 1 }}><SettingsScreen {...props} /><FleetSettings {...props} integrated /></View>;
+  return <View style={{ flex: 1 }}><RpcUpdateNotice style={{ color: paletteFromTheme(props.theme).text, padding: 12 }} /><SettingsScreen {...props} /><FleetSettings {...props} integrated /></View>;
 }

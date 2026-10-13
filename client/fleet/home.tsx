@@ -1,4 +1,4 @@
-import { useRpc } from "@getpaseo/plugin/client";
+import { useRpc } from "../rpc";
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { rankAlerts, splitAlerts } from "../../shared/fleet/alert-groups";

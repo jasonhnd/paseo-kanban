@@ -1,6 +1,7 @@
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
-import { useRpc } from "@getpaseo/plugin/client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { RpcUpdateNotice, useRpc } from "./rpc";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "./query";
 import { useEffect, useRef, useState } from "react";
 import { Linking, ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { attentionGroups, boardTabBadges, quietAttention, systemAlerts } from "../shared/board-view";
@@ -129,7 +130,7 @@ export function KanbanBoard({ theme, layout, navigation, lockedProject, refresh:
   function chooseTab(next: BoardTab) {
     setTabOverride(next);
     queryClient.setQueryData(["kanban", "board-tab"], { tab: next });
-    void tabRpc({ tab: next }).catch(() => undefined);
+    void tabRpc({ tab: next }).catch((error: unknown) => setNotice(String(error)));
   }
 
   useRefreshOnVisible(refresh);
@@ -236,6 +237,7 @@ export function KanbanBoard({ theme, layout, navigation, lockedProject, refresh:
         {data && !data.schedulerReady ? <Banner s={s} tone="danger" text={t("boardView.alert.schedulerNotReady")} /> : null}
         {data?.schedulerIdle ? <Banner s={s} tone="danger" text={data.schedulerIdle} /> : null}
         {notice ? <Banner s={s} tone="warning" text={notice} /> : null}
+        <RpcUpdateNotice style={s.muted} />
         {board.isError ? <Text style={s.bad}>{t("cardDrawer.load.failed", { error: String(board.error) })}</Text> : null}
         {ready ? <BoardTabs s={s} tab={tab} tabs={visibleTabs} badges={badges} onChange={chooseTab} /> : <BoardSkeleton s={s} tabs={visibleTabs} />}
         {locked || !ready ? null : (

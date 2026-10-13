@@ -1,5 +1,6 @@
-import { useRpc } from "@getpaseo/plugin/client";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRpc } from "../rpc";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "../query";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { BoardModel } from "../../shared/fleet/board";

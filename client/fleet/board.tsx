@@ -1,6 +1,8 @@
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
-import { useRpc } from "@getpaseo/plugin/client";
-import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { RpcUpdateNotice, useRpc } from "../rpc";
+import { PluginUpdateError } from "../rpc-policy";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQuery } from "../query";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { Linking, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { accessRpc } from "../../shared/fleet/access";
@@ -51,6 +53,7 @@ export function RoleBoard({ theme, layout, navigation, tab, onTabChange, integra
         {!integrated ? <PanelTabs s={board.s} tab={board.tab} badges={board.badges} onChange={(next) => { board.selectTab(next); board.contentScroll.current?.scrollTo({ y: 0, animated: false }); }} /> : null}
         {TAB_HINT[board.tab] ? <Text style={board.s.muted}>{TAB_HINT[board.tab]}</Text> : null}
         {board.notice ? <Text style={board.s.yellow}>{board.notice}</Text> : null}
+        <RpcUpdateNotice style={board.s.muted} />
         {board.snapshot.isError ? <Text style={board.s.red}>{t("board.readFailed", { error: String(board.snapshot.error) })}</Text> : null}
         <WarningFold s={board.s} warnings={board.warnings} />
         <BoardBody s={board.s} tab={board.tab} snap={board.snap} mounted={board.mounted} insights={board.insights.data} openAgent={board.openAgent} selectTab={board.selectTab} />
@@ -96,9 +99,9 @@ function usePanelChrome(theme: PluginSurfaceProps["theme"], layout: PluginSurfac
         queryClient.setQueryData(["afc", "prefs"], parsePanelPrefs(saved));
         if (prefsRev.current === id) dispatch({ type: "saved", saved });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (prefsRev.current === id) dispatch({ type: "save-failed", loaded: queryClient.getQueryData<PanelPrefs>(["afc", "prefs"]) });
-        setNotice(prefsSaveFailed());
+        setNotice(error instanceof PluginUpdateError ? error.message : prefsSaveFailed());
       });
   };
   return { prefs, s, savePrefs, notice, setNotice, queryClient, contentScroll, lang };

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
-import { useRpc } from "@getpaseo/plugin/client";
-import { useQuery } from "@tanstack/react-query";
+import { useRpc } from "./rpc";
+import { PluginUpdateError } from "./rpc-policy";
+import { useQuery } from "./query";
 import { t, type Language, type MessageKey } from "../shared/i18n";
 import { leaderOptionsRpc, leaderPreviewRpc, leaderRecoverRpc, leaderStartRpc, leaderStatusRpc, type LeaderStartState } from "../shared/leader-start";
 import { Button, Chip, type Styles } from "./ui";
@@ -29,14 +30,14 @@ export function LeaderStartPanel({ project, s, onOpen }: { project: string; s: S
   const [preview, setPreview] = useState<Awaited<ReturnType<typeof previewRpc>> | null>(null);
   const [start, setStart] = useState<LeaderStartState | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setPreview(null);
     setStart(null);
     setProfileId("");
     setWorkspaceId("");
-    setError(false);
+    setError(null);
   }, [project]);
 
   const data = options.data;
@@ -50,11 +51,11 @@ export function LeaderStartPanel({ project, s, onOpen }: { project: string; s: S
   const invoke = async (work: () => Promise<void>) => {
     if (busy) return;
     setBusy(true);
-    setError(false);
+    setError(null);
     try {
       await work();
-    } catch {
-      setError(true);
+    } catch (error) {
+      setError(error instanceof PluginUpdateError ? error.message : t("leaderStart.error"));
     } finally {
       setBusy(false);
     }
@@ -133,7 +134,7 @@ export function LeaderStartPanel({ project, s, onOpen }: { project: string; s: S
       )}
       {error || options.isError ? (
         <>
-          <Text style={s.muted}>{t("leaderStart.error")}</Text>
+          <Text style={s.muted}>{error ?? (options.error instanceof PluginUpdateError ? options.error.message : t("leaderStart.error"))}</Text>
           <Button s={s} disabled={busy} label={t("leaderStart.refresh")} onPress={() => void invoke(async () => { setStart(await statusRpc({ project })); await options.refetch(); })} />
         </>
       ) : null}

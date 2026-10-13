@@ -1,6 +1,6 @@
-import { useRpc } from "@getpaseo/plugin/client";
+import { useRpc } from "./rpc";
 import { copyText as hostCopyText } from "@getpaseo/plugin/client/react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery } from "./query";
 import { type ReactNode, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { handlingGuide, handoffDigest, holdRoundBlocks, recentEvents, type HandlingGuide } from "../shared/board-view";
