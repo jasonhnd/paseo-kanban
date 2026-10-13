@@ -47,10 +47,10 @@ export interface PoolSnapshot {
   /** Immutable admission revision; absent only on explicitly injected compatibility snapshots. */
   policy?: Readonly<{ revision: number; digest: string }>;
   /**
-   * stale: older than 30 minutes. Its pauses, prefer and deprioritize are dropped and work goes
-   * in the base matrix order; legacy entries stop at the last usedPct reading (stop lines above).
-   * quotaProtection pause always stops stale pools; none keeps them open.
-   * missing: no file or unreadable. Other pools are treated as open.
+   * stale: older than three contract TTLs (or STALE_MS for legacy files). Default policy keeps
+   * existing pool stops and matrix pauses; explicit compatibility snapshots retain legacy fallback.
+   * Both drop prefer/deprioritize, stop protected pools and enforce legacy usedPct stop lines.
+   * missing: absent or invalid policy closes default admission; explicit compatibility stays open.
    * A family configured with requirePoolSeen refuses a missing pool or a stale
    * snapshot without a usage reading.
    */
@@ -311,7 +311,7 @@ function buildSnapshot(input: SnapshotInput): PoolSnapshot {
   const note = restrictionNote(parsed);
   return {
     state: input.stale ? "stale" : "fresh",
-    message: `${input.stale ? t("pools.staleMessage", { minutes: staleMinutes(input.ageMs) }) : t("pools.freshMessage")}${note}`,
+    message: `${input.stale ? t(input.preserveStops ? "pools.stalePolicyMessage" : "pools.staleMessage", { minutes: staleMinutes(input.ageMs) }) : t("pools.freshMessage")}${note}`,
     generatedAt: input.generatedAt,
     updatedAt: input.updatedAt,
     ageMs: input.ageMs,

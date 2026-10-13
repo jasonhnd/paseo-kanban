@@ -1275,6 +1275,7 @@
   "pools.onlyFor": "{pool} 只给{roles}用",
   "pools.readingExpired": "额度读数已过期，请更新读数或明确关闭额度保护。",
   "pools.staleMessage": "额度快照过期 {minutes} 分钟，按基础顺序派活（忽略矩阵暂停）",
+  "pools.stalePolicyMessage": "额度快照过期 {minutes} 分钟，已有额度池停止标记和矩阵暂停仍然生效",
   "pools.staleStopped": "额度快照过期，最后读数 {used}% 已到停派线 {stop}%",
   "pools.unmarked": "未标池",
   "pools.unreadable": "额度快照无法读取，按都可派处理",

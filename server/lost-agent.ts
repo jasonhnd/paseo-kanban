@@ -152,11 +152,15 @@ function adopt(task: TaskRow, agent: LostAgent, role: string, claim: CreatingCla
   const profile = claim?.profile ?? null;
   const family = claim?.family ?? null;
   const bound = role === "reviewer"
-    ? db.prepare("UPDATE tasks SET agent_id = ?, updated_at = ? WHERE id = ? AND status = ? AND agent_id IS NULL").run(agent.id, ts, task.id, task.status)
+    ? db.prepare(`UPDATE tasks SET agent_id = ?, updated_at = ?, hold_reason = NULL, nudge_count = 0,
+        blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, cooldown_until = NULL
+        WHERE id = ? AND status = ? AND agent_id IS NULL`).run(agent.id, ts, task.id, task.status)
     : db
         .prepare(
           `UPDATE tasks SET agent_id = ?, executor_agent_id = ?,
-             executor_profile = COALESCE(?, executor_profile), executor_family = COALESCE(?, executor_family), updated_at = ?
+             executor_profile = COALESCE(?, executor_profile), executor_family = COALESCE(?, executor_family), updated_at = ?,
+             hold_reason = NULL, nudge_count = 0, blocked_kind = NULL, blocked_reason = NULL,
+             blocked_from = NULL, blocked_at = NULL, cooldown_until = NULL
            WHERE id = ? AND status = ? AND agent_id IS NULL`,
         )
         .run(agent.id, agent.id, profile, family, ts, task.id, task.status);

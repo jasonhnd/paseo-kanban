@@ -1020,7 +1020,11 @@ export async function startTask(
       throw new KanbanError("send_failed", err instanceof Error ? err.message : String(err));
     }
     if (getTask(id).status !== "running") throw lostClaim(id, "running");
-    setHold(id, null);
+    // Keep the old failure through claim/send; clear it only once the worker resumes.
+    const resumed = getDb().prepare(`UPDATE tasks SET hold_reason = NULL,
+      blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, cooldown_until = NULL
+      WHERE id = ? AND status = 'running' AND agent_id = ?`).run(id, task.executor_agent_id);
+    if (resumed.changes !== 1) throw lostClaim(id, "running");
     openExecutorRun(id);
     appendEvent(id, "resumed", "rework", "running", actor, { agentId: task.executor_agent_id,
       ...(resumedTarget ? { reviewTarget: resumedTarget, reviewerRunId: deliveryRun(getTask(id))?.id ?? null } : {}),
@@ -1280,11 +1284,14 @@ export async function startTask(
     }
     const bound = review
       ? getDb()
-          .prepare("UPDATE tasks SET agent_id = ?, hold_reason = NULL, nudge_count = 0, updated_at = ? WHERE id = ? AND status = ?")
+          .prepare(`UPDATE tasks SET agent_id = ?, hold_reason = NULL, nudge_count = 0, updated_at = ?,
+            blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, cooldown_until = NULL
+            WHERE id = ? AND status = ?`)
           .run(created.id, now, id, to)
       : getDb()
           .prepare(
-            `UPDATE tasks SET agent_id = ?, executor_agent_id = ?, executor_profile = ?, executor_family = ?, hold_reason = NULL, nudge_count = 0, updated_at = ?
+            `UPDATE tasks SET agent_id = ?, executor_agent_id = ?, executor_profile = ?, executor_family = ?, hold_reason = NULL, nudge_count = 0, updated_at = ?,
+             blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, cooldown_until = NULL
              WHERE id = ? AND status = ?`,
           )
           .run(created.id, created.id, chosen.name, actualFamily(chosen), now, id, to);

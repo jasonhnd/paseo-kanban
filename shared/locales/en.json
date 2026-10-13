@@ -1275,6 +1275,7 @@
   "pools.onlyFor": "{pool} is only for {roles}",
   "pools.readingExpired": "Quota reading expired. Update the reading or explicitly disable quota protection.",
   "pools.staleMessage": "Quota snapshot is {minutes} minutes stale; dispatching in the base order (matrix pauses ignored)",
+  "pools.stalePolicyMessage": "Quota snapshot is {minutes} minutes stale; existing pool stops and matrix pauses remain in effect",
   "pools.staleStopped": "Quota snapshot is stale; the last reading {used}% has reached the stop line {stop}%",
   "pools.unmarked": "no pool set",
   "pools.unreadable": "Quota snapshot cannot be read; treating every pool as dispatchable",
