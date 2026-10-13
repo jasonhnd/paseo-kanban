@@ -1,7 +1,27 @@
 # Changelog
 
 The single plugin has one version and CHANGELOG. Distribution is through Git.
-Five release candidates are recorded here. `0.1.0-rc.5` is the current candidate, pending independent review. rc.4 retains its original commit and tag. `0.1.0-rc.3` remains frozen, unpublished and rejected for publication. `0.1.0-rc.2` remains frozen and unpublished. `0.1.0-rc.1` was local preparation only and was not published. No GitHub Release is declared by this document. There is no npm publication or official registry listing.
+Six release candidates are recorded here. `0.1.0-rc.6` is the current unpublished candidate, pending independent review. Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
+
+## 0.1.0-rc.6 — pending review and publication
+
+Local candidate tag: `v0.1.0-rc.6`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.5 tags are never moved.
+
+### Fixed
+
+- Correct the English/Chinese Board bookmark guidance and a client comment for the official 0.11.2 Web UI: copy the sidebar's host-qualified `/h/<host-id>/plugin/paseo-kanban/surface/board` URL. The old host-less `/plugin/paseo-kanban/board` path remains invalid; no route alias is added.
+- Audited idempotent reads retry temporary “Plugin not available” failures during update/reload, with up to five backoff retries in a 15-second retry window. Mounted panels retain their last data and show “Plugin is updating…”. Exhaustion asks the user to refresh later. Saves, actions and unknown RPCs are never automatically retried; other errors remain visible.
+
+### Documentation corrections and known limitations
+
+- The official Paseo 0.11.2 Web UI Command Center action **Open project board** needs the current page's plugin-installation host context. It is absent on an empty homepage, including after leaving a plugin page; open **Paseo Kanban** from the sidebar first. `context: global` does not bypass host selection. This corrects the earlier “globally available” description and does not fix homepage behavior.
+- Official 0.11.2 **Settings -> Plugins** does not display manifest icons. The bundled PNG remains metadata for possible future registry display; no registry listing is claimed.
+- The recorded dependency audit retains **20 affected packages: 5 moderate and 15 high**, all in dev/build dependency chains. These are used during build preparation, and Git installation's `npm ci --include=dev` installs them on the daemon user's machine. The two root advisories (`braces` and `sprintf-js`) had no published upstream patched version in that audit; non-force `npm audit fix` changed nothing. Dependency selections are unchanged. Runtime exploitability was not tested; passing local gates is not a dependency fix.
+
+### Notes
+
+- Package and root lock versions agree on `0.1.0-rc.6`; Node remains `>=24.21.0`, and Paseo daemon/app requirements remain `>=0.11.0 <0.12.0`. Schema and contract versions are unchanged; no automatic data migration/import is introduced.
+- Exact rc.6 local verification and outgoing annotated-tag gates require rc.6 receipts. Earlier rc.5 or component results do not pass this integrated candidate. New GitHub cold installs, real-browser update/reload recovery and installed-host lifecycle replay remain separate verification; native app, phones, authenticated provider cycles, other platforms and production recovery remain unverified.
 
 ## 0.1.0-rc.5 — pending review and publication
 

@@ -1,6 +1,26 @@
 # 变更记录
 
-单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.5` 是当前待独立审查的候选；rc.4 原 commit 与 tag 不变。`0.1.0-rc.3` 仍冻结、未公开，已裁定不得发布。`0.1.0-rc.2` 仍冻结且未公开。`0.1.0-rc.1` 只在本地准备过，没有公开。本文不宣布任一 GitHub Release，也没有 npm 发布或官方目录收录。
+单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.6` 是当前未公开、待独立审查的候选。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
+
+## 0.1.0-rc.6 — 待审查与发布
+
+本地候选 tag 为 `v0.1.0-rc.6`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.5 tag 绝不挪动。
+
+### 修复（Fixed）
+
+- 更正官方 0.11.2 Web UI 的中英文看板书签说明及一处客户端注释：复制侧栏打开后带宿主的 `/h/<host-id>/plugin/paseo-kanban/surface/board` URL。旧的不带宿主 `/plugin/paseo-kanban/board` 仍无效，没有新增路由别名。
+- 升级／reload 期间，已确认幂等的读取遇到暂时性 “Plugin not available” 会在 15 秒重试窗口内最多退避重试 5 次。已挂载面板保留上次数据并显示“插件正在更新…”，耗尽后提示稍后刷新。保存、操作及未知 RPC 绝不自动重试；其他错误仍正常显示。
+
+### 文档更正及已知限制
+
+- 官方 Paseo 0.11.2 Web UI 的 Command Center **打开项目看板**动作需要当前页面的插件安装宿主上下文。空首页不显示；离开插件页回首页后也一样，请先从侧栏 **Paseo Kanban** 打开。`context: global` 不能绕过宿主选择。本次更正此前“全局可用”的描述，没有修复首页行为。
+- 官方 0.11.2 **Settings -> Plugins** 不显示 manifest 图标。包内 PNG 仍用于未来可能的 registry 展示，不代表目前已获收录。
+- 保留依赖审计的 **20 个受影响包：5 moderate、15 high**，全部属于开发／构建依赖链，构建 preparation 会使用它们。Git 安装的 `npm ci --include=dev` 也会把它们装到 daemon 用户机器上。该审计中两个根因通告（`braces`、`sprintf-js`）均无已发布的上游修复版本；不加 force 的 `npm audit fix` 没有改动。依赖选择保持原样；未测试运行时可利用性，本机门禁通过不表示依赖已修复。
+
+### 注意（Notes）
+
+- package／根 lock 版本统一为 `0.1.0-rc.6`；Node 仍为 `>=24.21.0`，Paseo daemon/app 仍要求 `>=0.11.0 <0.12.0`。schema 和契约版本不变，没有新增自动数据迁移／导入。
+- 精确 rc.6 本机门禁与出站 annotated tag 必须使用 rc.6 回执，此前 rc.5 或分组件成绩不代表整合候选通过。新 GitHub 冷安装、真实浏览器升级／reload 恢复与已安装宿主生命周期须另行验证；原生 app、手机、已认证 provider、其他平台及生产恢复仍未验证。
 
 ## 0.1.0-rc.5 — 待审查与发布
 
