@@ -6,6 +6,7 @@ import { acceptanceTone, elapsedLabel, groupLeaderCards, leaderCardGroups, proje
 import { isUnownedDecision } from "../../shared/fleet/unowned-decisions";
 import { DecisionActions } from "./decision-actions";
 import { LeaderReplyBox } from "./leader-reply";
+import { usePanelClosedRows } from "./panel-closed-rows";
 import { pressed, type Styles } from "./ui";
 
 /** The contents remain visible by default; on a phone every band can be folded independently. */
@@ -27,12 +28,10 @@ export function Excerpt({ s, text, lines = 4 }: { s: Styles; text: string; lines
   </View>;
 }
 
-interface HeldDecision { row: BoardSnapshot["decisions"][number]; closed: boolean }
-
 /** `reply` adds the long reply box; the compact card has its own reply line, so only paused projects use it. */
 export function LeaderDetails({ s, project, detail, data, paused = false, reply = paused }: { s: Styles; project: string; detail?: LeaderDetail; data: BoardSnapshot; paused?: boolean; reply?: boolean }) {
   const openDecisions = projectDecisions(data.decisions, project).filter(d => !isUnownedDecision(d));
-  const [held, setHeld] = useState<ReadonlyMap<string, HeldDecision>>(new Map());
+  const { held, note: noteClose } = usePanelClosedRows<BoardSnapshot["decisions"][number]>(data);
   const openIds = new Set(openDecisions.map((row) => row.id));
   const extras = [...held.values()].filter((entry) => !openIds.has(entry.row.id));
   const decisions = [...openDecisions, ...extras.map((entry) => entry.row)];
@@ -48,9 +47,7 @@ export function LeaderDetails({ s, project, detail, data, paused = false, reply 
         {d.owner ? <Text style={s.muted}>{t("leader.ui.owner", { owner: d.owner })}{d.forceOpen ? ` · ${t("leader.ui.forceOpen")}` : ""}</Text> : null}
         <Text style={[s.text,{fontWeight:"600"}]}>{d.title}</Text>
         {d.detail ? <Excerpt s={s} text={d.detail} lines={6} /> : null}
-        <DecisionActions s={s} id={d.id} title={d.title} detail={d.detail} initialPanelClosed={closedIds.has(d.id)} onResult={(message) => {
-          if (message.panelClosed || message.panelRestored) setHeld((prev) => new Map(prev).set(d.id, { row: d, closed: message.panelClosed === true }));
-        }} />
+        <DecisionActions s={s} id={d.id} title={d.title} detail={d.detail} initialPanelClosed={closedIds.has(d.id)} onResult={(message) => noteClose(d.id, d, message)} />
       </View>;})}
     </LeaderSection>
     {detail?.question ? <LeaderSection s={s} title={t("leader.ui.askedUnregistered")} summary={t("leader.ui.ago", { elapsed: elapsedLabel(detail.question.at,now) })}>
