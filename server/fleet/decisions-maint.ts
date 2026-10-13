@@ -27,7 +27,6 @@ import { DECISIONS, logSwallowed, readJson, STATE_DIR, writeJson } from "./util"
 export const KANBAN_CONFIG = kanbanConfigPath();
 export const MAINT_STATE = join(STATE_DIR, "decisions-maint-state.json");
 export const MAINT_LOG = join(STATE_DIR, "decisions-maint.log");
-export const ROLES_BIN = rolesBin();
 
 const LOCK_STALE_MS = 30_000;
 
@@ -241,8 +240,9 @@ export interface OverturnResult {
   message: string;
 }
 
-function runRoles(stateDir: string, kanbanConfig: string, args: string[], rolesBin = ROLES_BIN): { ok: boolean; stdout: string; stderr: string } {
-  const invocation = commandInvocation(rolesBin, ["decide", ...args]);
+function runRoles(stateDir: string, kanbanConfig: string, args: string[], commandPath = rolesBin()): { ok: boolean; stdout: string; stderr: string } {
+  // Keep explicit test overrides; otherwise follow the current managed checkout.
+  const invocation = commandInvocation(commandPath, ["decide", ...args]);
   const result = spawnSync(invocation.command, invocation.args, {
     encoding: "utf8",
     timeout: 20_000,

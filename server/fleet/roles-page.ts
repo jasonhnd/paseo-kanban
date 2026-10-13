@@ -20,7 +20,6 @@ import { type Json, logSwallowed, readJson, runOutcome, type RunOutcome } from "
 import { loadDispatchSettings } from "./dispatch-settings";
 import type { ThinkingCatalog } from "../../shared/fleet/dispatch-overrides";
 
-export const ROLES_BIN = rolesBin();
 const ROLES_SET_TIMEOUT_MS = 90_000;
 
 export interface RolesPageDeps {
@@ -108,7 +107,8 @@ export interface RolesSetDeps {
 }
 
 export function productionRolesSetDeps(): RolesSetDeps {
-  return { bannedProviders: readBannedProviders, profiles: loadProfiles, runRoles: (args) => runOutcome(ROLES_BIN, args, ROLES_SET_TIMEOUT_MS), history: historyStore };
+  // Resolve the command when invoked, after any managed checkout replacement.
+  return { bannedProviders: readBannedProviders, profiles: loadProfiles, runRoles: (args) => runOutcome(rolesBin(), args, ROLES_SET_TIMEOUT_MS), history: historyStore };
 }
 
 const refused = (message: string): RolesSetResult => ({ ok: false, message, before: null, after: null });

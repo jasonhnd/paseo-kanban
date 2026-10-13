@@ -10,7 +10,6 @@ import { readKanbanSupervisors } from "./upgrade-check";
 import { isLeaderTitle, readAgentRecords } from "./records";
 import { BIN, DECISIONS, type Json, readJson, run, sendToAgent } from "./util";
 
-export const ROLES_BIN = rolesBin();
 
 export interface DecideAgent {
   id: string;
@@ -274,7 +273,8 @@ export function productionDecideDeps(): DecideDeps {
   return {
     readOpen: readOpenDecision,
     readRecord: readDecisionRecord,
-    roles: (args) => run(ROLES_BIN, args, 20_000),
+    // Managed updates replace the configured checkout after loading this module.
+    roles: (args) => run(rolesBin(), args, 20_000),
     send: async (agentId, prompt) => {
       await sendToAgent(agentId, prompt);
     },
