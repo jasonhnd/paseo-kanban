@@ -14,6 +14,7 @@ import { setProjectCode } from "../server/config";
 import { closeDb, getDb } from "../server/db";
 import { KanbanError } from "../server/errors";
 import { acceptTask } from "../server/flow";
+import { setGhRunner } from "../server/pr";
 import { appendEvent, createTask, getTask } from "../server/store";
 import { settleTempWorkspace } from "../server/temp-workspace";
 import { tempBranchName } from "../server/workspace";
@@ -100,7 +101,7 @@ function events(id: number): Array<{ kind: string; data_json: string }> {
   return getDb().prepare("SELECT kind, data_json FROM events WHERE task_id = ? ORDER BY id").all(id) as Array<{ kind: string; data_json: string }>;
 }
 
-function artifactEvent(id: number): { sha?: string; tree?: string; evidenceKind?: string; evidence?: string; evidencePath?: string; evidenceSha256?: string; reason?: string; branch?: string; base?: string } {
+function artifactEvent(id: number): { sha?: string; tree?: string; evidenceKind?: string; evidence?: string; evidencePath?: string; evidenceSha256?: string; reason?: string; branch?: string | null; base?: string | null } {
   const row = [...events(id)].reverse().find((item) => item.kind === "artifact_accepted");
   assert.ok(row, "artifact_accepted event");
   return JSON.parse(row.data_json) as { sha?: string; tree?: string; evidenceKind?: string; evidence?: string; evidencePath?: string; evidenceSha256?: string; reason?: string; branch?: string; base?: string };
@@ -118,6 +119,42 @@ async function untouched(card: Card, main: string): Promise<void> {
 function comment(id: number): string {
   const row = getDb().prepare("SELECT body FROM comments WHERE task_id = ? ORDER BY id DESC LIMIT 1").get(id) as { body: string };
   return row.body;
+}
+
+function commentCount(id: number): number {
+  return (getDb().prepare("SELECT COUNT(*) AS n FROM comments WHERE task_id = ?").get(id) as { n: number }).n;
+}
+
+function directoryCard(root: string, title: string): number {
+  const task = createTask({ project: "demo", title, role: "executor", workspacePath: root, brief: "demo fixture" });
+  getDb().prepare("UPDATE tasks SET status = 'acceptance' WHERE id = ?").run(task.id);
+  appendEvent(task.id, "approve", "reviewing", "acceptance", "reviewer", { summary: "checked" });
+  return task.id;
+}
+
+async function detachedPair(name: string): Promise<{ root: string; head: string; tree: string; main: string }> {
+  const root = await initRepo(name);
+  await git(root, ["checkout", "-b", "candidate"]);
+  writeFileSync(join(root, "README"), "candidate\n");
+  await git(root, ["commit", "-am", "candidate"]);
+  const head = (await git(root, ["rev-parse", "HEAD"])).trim();
+  const tree = (await git(root, ["rev-parse", `${head}^{tree}`])).trim();
+  await git(root, ["checkout", "main"]);
+  writeFileSync(join(root, "README"), "main-moved\n");
+  await git(root, ["commit", "-am", "main"]);
+  const main = (await git(root, ["rev-parse", "HEAD"])).trim();
+  await git(root, ["checkout", "--detach", head]);
+  return { root, head, tree, main };
+}
+
+async function detachedUntouched(root: string, head: string, main: string): Promise<void> {
+  assert.equal((await git(root, ["rev-parse", "HEAD"])).trim(), head);
+  assert.equal((await git(root, ["rev-parse", "--abbrev-ref", "HEAD"])).trim(), "HEAD");
+  assert.equal((await git(root, ["rev-parse", "refs/heads/main"])).trim(), main);
+  assert.equal((await git(root, ["status", "--porcelain"])).trim(), "");
+  const common = resolve(root, (await git(root, ["rev-parse", "--git-common-dir"])).trim());
+  assert.equal(existsSync(join(common, "rebase-merge")), false);
+  assert.equal(existsSync(join(common, "MERGE_HEAD")), false);
 }
 
 async function settle(card: Card, now = new Date()): Promise<"settled" | "pending"> {
@@ -398,6 +435,133 @@ describe("artifact acceptance", { concurrency: 1 }, () => {
     });
     assert.equal(getTask(contracted.id).status, "acceptance");
     assert.equal((await git(root, ["rev-parse", `refs/heads/${contractedBranch}`])).trim(), contractedSha);
+  });
+
+  it("binds a detached checkout and refuses a different commit", async () => {
+    const repo = await detachedPair("detached-root");
+    const acceptedId = directoryCard(repo.root, "detached-ok");
+    const refusedId = directoryCard(repo.root, "detached-bad");
+    const fileId = directoryCard(repo.root, "detached-file");
+    const pullId = directoryCard(repo.root, "detached-pr");
+    const before = events(refusedId).map((row) => row.kind);
+    const commentsBefore = commentCount(refusedId);
+    const accepted = (await runKanban(["accept", String(acceptedId), "--artifact", repo.head], {})) as {
+      status: string;
+      artifact?: { sha: string; tree: string; branch: string | null; base: string | null };
+    };
+    assert.equal(accepted.status, "done");
+    assert.equal(accepted.artifact?.sha, repo.head);
+    assert.equal(accepted.artifact?.tree, repo.tree);
+    assert.equal(accepted.artifact?.branch, null);
+    assert.equal(accepted.artifact?.base, null);
+    const recorded = artifactEvent(acceptedId);
+    assert.equal(recorded.sha, repo.head);
+    assert.equal(recorded.tree, repo.tree);
+    assert.equal(recorded.branch, null);
+    assert.equal(recorded.base, null);
+    assert.equal(recorded.evidenceKind, "commit");
+    assert.equal(events(acceptedId).some((row) => row.kind === "landed" || row.kind === "land_conflict" || row.kind === "land_pending"), false);
+    await detachedUntouched(repo.root, repo.head, repo.main);
+    await assert.rejects(
+      () => runKanban(["accept", String(refusedId), "--artifact", repo.main], {}),
+      new RegExp(localePattern(zhCN("artifactAccept.shaMismatch", { sha: repo.head }))),
+    );
+    assert.equal(getTask(refusedId).status, "acceptance");
+    assert.deepEqual(events(refusedId).map((row) => row.kind), before);
+    assert.equal(commentCount(refusedId), commentsBefore);
+    assert.equal(events(refusedId).some((row) => row.kind === "artifact_accepted"), false);
+    await detachedUntouched(repo.root, repo.head, repo.main);
+    const wrongFile = join(dir, "detached-wrong.txt");
+    writeFileSync(wrongFile, `checked\n${repo.main}\n`);
+    await assert.rejects(
+      () => acceptTask(fileId, "supervisor", { artifact: wrongFile }),
+      new RegExp(localePattern(zhCN("artifactAccept.shaMismatch", { sha: repo.head }))),
+    );
+    assert.equal(getTask(fileId).status, "acceptance");
+    const rightFile = join(dir, "detached-right.txt");
+    writeFileSync(rightFile, `checked\n${repo.head}\n`);
+    const filed = await acceptTask(fileId, "supervisor", { artifact: rightFile });
+    assert.equal(filed.status, "done");
+    assert.equal(artifactEvent(fileId).sha, repo.head);
+    assert.equal(artifactEvent(fileId).branch, null);
+    const url = "https://github.com/example/widgets/pull/19";
+    const pulled = await acceptTask(pullId, "supervisor", { artifact: url, reason: "checked the detached tree" });
+    assert.equal(pulled.status, "done");
+    assert.equal(artifactEvent(pullId).sha, repo.head);
+    assert.equal(artifactEvent(pullId).branch, null);
+    assert.equal(artifactEvent(pullId).evidence, url);
+    await detachedUntouched(repo.root, repo.head, repo.main);
+    const missing = directoryCard(join(dir, "not-a-checkout"), "detached-missing");
+    mkdirSync(join(dir, "not-a-checkout"), { recursive: true });
+    const missingBefore = events(missing).map((row) => row.kind);
+    await assert.rejects(
+      () => acceptTask(missing, "supervisor", { artifact: repo.head }),
+      new RegExp(localePattern(zhCN("artifactAccept.noTarget"))),
+    );
+    assert.equal(getTask(missing).status, "acceptance");
+    assert.deepEqual(events(missing).map((row) => row.kind), missingBefore);
+    const unborn = join(dir, "unborn-checkout");
+    mkdirSync(unborn, { recursive: true });
+    await git(unborn, ["init", "-b", "main"]);
+    const unbornId = directoryCard(unborn, "detached-unborn");
+    await assert.rejects(
+      () => runKanban(["accept", String(unbornId), "--artifact", repo.main], {}),
+      new RegExp(localePattern(zhCN("artifactAccept.noTarget"))),
+    );
+    assert.equal(getTask(unbornId).status, "acceptance");
+    assert.equal(events(unbornId).some((row) => row.kind === "artifact_accepted"), false);
+  });
+
+  it("refuses a pull request URL that is not the bound pull request", async () => {
+    const root = await initRepo("pr-identity-root");
+    const card = await addCard(root, "pr-identity", "from-identity-pr\n");
+    const unbound = await addCard(root, "pr-unbound", "from-unbound-pr\n");
+    const main = await moveMain(root, "from-main-identity\n");
+    const bound = "https://github.com/Example/Widgets/pull/11";
+    getDb().prepare("UPDATE tasks SET contract_json = ? WHERE id = ?").run(JSON.stringify({ kind: "github", repo: "Example/Widgets", pr: bound, awaiting: false }), card.id);
+    getDb().prepare("UPDATE tasks SET contract_json = ? WHERE id = ?").run(JSON.stringify({ kind: "github", repo: "Example/Widgets", awaiting: false }), unbound.id);
+    let network = 0;
+    setGhRunner(async () => {
+      network += 1;
+      throw new Error("network");
+    });
+    try {
+      const before = events(card.id).map((row) => row.kind);
+      const commentsBefore = commentCount(card.id);
+      for (const url of [
+        "https://github.com/example/widgets/pull/12",
+        "https://github.com/other/widgets/pull/11",
+        "https://github.com/example/other/pull/11",
+      ]) {
+        await assert.rejects(
+          () => runKanban(["accept", String(card.id), "--artifact", url, "--reason", "checked the diff and the tree"], {}),
+          new RegExp(localePattern(zhCN("artifactAccept.prMismatch"))),
+        );
+        assert.equal(getTask(card.id).status, "acceptance");
+        assert.deepEqual(events(card.id).map((row) => row.kind), before);
+        assert.equal(commentCount(card.id), commentsBefore);
+        await untouched(card, main);
+      }
+      const same = (await runKanban(["accept", String(card.id), "--artifact", "https://github.com/example/widgets/pull/11/", "--reason", "checked the diff and the tree"], {})) as {
+        status: string;
+        artifact?: { sha: string; branch: string | null; base: string | null; evidenceKind: string };
+      };
+      assert.equal(same.status, "done");
+      assert.equal(same.artifact?.sha, card.sha);
+      assert.equal(same.artifact?.branch, card.branch);
+      assert.equal(same.artifact?.base, "main");
+      assert.equal(same.artifact?.evidenceKind, "pull_request");
+      assert.equal(events(card.id).some((row) => row.kind === "landed" || row.kind === "land_conflict"), false);
+      await untouched(card, main);
+      const open = "https://github.com/example/widgets/pull/40";
+      const accepted = await acceptTask(unbound.id, "supervisor", { artifact: open, reason: "checked the diff and the tree" });
+      assert.equal(accepted.status, "done");
+      assert.equal(artifactEvent(unbound.id).sha, unbound.sha);
+      assert.equal(artifactEvent(unbound.id).evidence, open);
+      assert.equal(network, 0);
+    } finally {
+      setGhRunner(null);
+    }
   });
 
   it("keeps the only commit across cleanup, including when a remote base would otherwise delete the branch", async () => {

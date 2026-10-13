@@ -32,6 +32,7 @@
   "artifactAccept.noTarget": "No acceptance commit could be read for this card.",
   "artifactAccept.notFile": "Artifact evidence must name a regular file.",
   "artifactAccept.onlyAcceptance": "Artifact acceptance only applies to a card waiting for acceptance ({status}). Active work and other states stay unchanged.",
+  "artifactAccept.prMismatch": "This pull request does not match the pull request already bound to the card.",
   "artifactAccept.prReason": "A pull request needs a reason that states what was checked.",
   "artifactAccept.reviewRequired": "This card still needs an approving review or a lead pass before artifact acceptance.",
   "artifactAccept.secret": "Artifact evidence was refused because it contains a credential.",

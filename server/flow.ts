@@ -785,7 +785,7 @@ function artifactEventData(record: ArtifactAcceptance): Record<string, unknown> 
 /**
  * Card branch used to identify an artifact. A pull request or GitHub contract skips
  * local landing, but it does not skip this branch. No temporary branch means the
- * workspace checkout is the delivery commit.
+ * checked-out commit is the delivery, including a detached HEAD.
  */
 function artifactBranch(task: TaskRow): { owned: ArtifactBranch | null; checkout: boolean } {
   const created = createdWorktree(task.id);
@@ -818,6 +818,7 @@ async function acceptArtifact(task: TaskRow, actor: string, evidence: string, re
     owned: located.owned,
     checkout: located.checkout,
     checkoutBase: task.workspace_base,
+    boundPullRequest: readContract(task.contract_json).pr,
   });
   const data = artifactEventData(record);
   const next = move(task.id, task.status, "done", actor, "accept", "", [], data);

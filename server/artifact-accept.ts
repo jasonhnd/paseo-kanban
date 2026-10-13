@@ -7,6 +7,7 @@ import { t } from "../shared/i18n";
 import { getDb } from "./db";
 import { KanbanError } from "./errors";
 import { headRef, refOk, runGit, type GitRunner } from "./git";
+import { parsePrUrl } from "./pr";
 
 /** Cleanup keeps a branch when the recorded acceptance commit is outside the local base. */
 export const ARTIFACT_KEEP_BRANCH = "artifact_not_in_base";
@@ -70,6 +71,10 @@ function mismatch(sha: string): never {
   throw new KanbanError("invalid", t("artifactAccept.shaMismatch", { sha }));
 }
 
+function pullMismatch(): never {
+  throw new KanbanError("invalid", t("artifactAccept.prMismatch"));
+}
+
 function hasSecret(value: string): boolean {
   return SECRET.test(value);
 }
@@ -112,6 +117,12 @@ async function verifyCommit(cwd: string, spec: string): Promise<CommitId | null>
   return { sha, tree: treeSha };
 }
 
+async function ownedDelivery(owned: ArtifactBranch): Promise<CheckoutTarget | null> {
+  const commit = await branchTip(owned);
+  if (!commit) return null;
+  return { root: owned.root, branch: owned.branch, base: owned.base, commit };
+}
+
 async function branchTip(owned: ArtifactBranch): Promise<CommitId | null> {
   if (!refOk(owned.branch)) return null;
   const listed = await runGit(owned.root, ["rev-parse", "--verify", "--end-of-options", headRef(owned.branch)]);
@@ -119,20 +130,57 @@ async function branchTip(owned: ArtifactBranch): Promise<CommitId | null> {
   return verifyCommit(owned.root, listed.stdout.trim());
 }
 
-/**
- * Delivery commit for a card that has no temporary branch.
- * The checked-out branch tip is the only local object that can be audited.
- * A detached checkout is not a target.
- */
-async function workspaceCheckout(workspacePath: string | null, base: string | null): Promise<ArtifactBranch | null> {
+interface CheckoutTarget {
+  root: string;
+  branch: string | null;
+  base: string | null;
+  commit: CommitId;
+}
+
+function workspaceRoot(workspacePath: string | null): string | null {
   const root = workspacePath?.trim() ?? "";
   if (!root || root.startsWith("-") || /[\0\r\n]/.test(root)) return null;
-  const head = await runGit(root, ["rev-parse", "--abbrev-ref", "HEAD"]);
-  if (head.code !== 0) return null;
-  const branch = head.stdout.trim();
-  if (!branch || branch === "HEAD" || !refOk(branch)) return null;
+  return root;
+}
+
+/** The commit HEAD names. A missing or unborn checkout is not a target. */
+async function headCommit(cwd: string): Promise<CommitId | null> {
+  const listed = await runGit(cwd, ["rev-parse", "--verify", "--end-of-options", "HEAD^{commit}"]);
+  if (listed.code !== 0) return null;
+  return verifyCommit(cwd, listed.stdout.trim());
+}
+
+/**
+ * Delivery commit for a card that has no temporary branch.
+ * The actual HEAD commit is the target, including a detached checkout.
+ * A branch name is recorded only when that branch tip is this same commit.
+ * An unreadable HEAD is not a target, and no other resolvable commit is used instead.
+ */
+async function workspaceCheckout(workspacePath: string | null, base: string | null): Promise<CheckoutTarget | null> {
+  const root = workspaceRoot(workspacePath);
+  if (!root) return null;
+  const commit = await headCommit(root);
+  if (!commit) return null;
+  const abbrev = await runGit(root, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  const name = abbrev.code === 0 ? abbrev.stdout.trim() : "";
+  const named = name !== "" && name !== "HEAD" && refOk(name);
   const recorded = base?.trim() ?? "";
-  return { root, branch, base: recorded && refOk(recorded) ? recorded : branch };
+  const recordedBase = recorded && refOk(recorded) ? recorded : null;
+  if (named) {
+    const tip = await branchTip({ root, branch: name, base: recordedBase ?? name });
+    if (tip && tip.sha === commit.sha) return { root, branch: name, base: recordedBase ?? name, commit: tip };
+  }
+  return { root, branch: null, base: recordedBase, commit };
+}
+
+/** Owner, repository and number. Case and a trailing slash do not make a different pull request. */
+function samePullRequest(evidenceUrl: string, bound: string): boolean {
+  const left = parsePrUrl(evidenceUrl.trim());
+  const right = parsePrUrl(bound.trim());
+  if (!left || !right) return false;
+  return left.owner.toLowerCase() === right.owner.toLowerCase()
+    && left.repo.toLowerCase() === right.repo.toLowerCase()
+    && left.number === right.number;
 }
 
 function containsSha(text: string, sha: string): boolean {
@@ -216,6 +264,8 @@ export async function resolveArtifactEvidence(input: {
   /** Use the workspace checkout when the card has no temporary branch. */
   checkout?: boolean;
   checkoutBase?: string | null;
+  /** Pull request already stored on the card. Absent means the evidence rules stand alone. */
+  boundPullRequest?: string | null;
 }): Promise<ArtifactAcceptance> {
   const evidence = input.evidence;
   if (evidence.length > INPUT_LIMIT) invalid("artifactAccept.badEvidence");
@@ -223,16 +273,20 @@ export async function resolveArtifactEvidence(input: {
   if (!trimmed || trimmed === "true") invalid("artifactAccept.missing");
   refuseSecret(evidence);
   const reason = storedReason(input.reason);
-  const located = input.owned ?? (input.checkout ? await workspaceCheckout(input.workspacePath, input.checkoutBase ?? null) : null);
-  const cwd = located?.root ?? (input.workspacePath?.trim() || null);
-  const tip = located ? await branchTip(located) : null;
-  if (located && !tip) invalid("artifactAccept.noTarget");
+  const delivery = input.owned
+    ? await ownedDelivery(input.owned)
+    : input.checkout
+      ? await workspaceCheckout(input.workspacePath, input.checkoutBase ?? null)
+      : null;
+  if ((input.owned || input.checkout) && !delivery) invalid("artifactAccept.noTarget");
+  const cwd = delivery?.root ?? (input.workspacePath?.trim() || null);
+  const tip = delivery?.commit ?? null;
 
   const baseRecord = (target: CommitId, kind: ArtifactAcceptance["evidenceKind"], display: string, extra: Partial<ArtifactAcceptance> = {}): ArtifactAcceptance => ({
     sha: target.sha,
     tree: target.tree,
-    branch: located?.branch ?? null,
-    base: located?.base ?? null,
+    branch: delivery?.branch ?? null,
+    base: delivery?.base ?? null,
     evidenceKind: kind,
     evidence: display,
     ...(reason ? { reason } : {}),
@@ -248,6 +302,8 @@ export async function resolveArtifactEvidence(input: {
   }
 
   if (PULL_REQUEST.test(trimmed)) {
+    const bound = input.boundPullRequest?.trim() ?? "";
+    if (bound && !samePullRequest(trimmed, bound)) pullMismatch();
     if (!reason) invalid("artifactAccept.prReason");
     if (!tip) invalid("artifactAccept.noTarget");
     return baseRecord(tip, "pull_request", trimmed);

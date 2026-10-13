@@ -32,6 +32,7 @@
   "artifactAccept.noTarget": "读不到这张卡的验收提交。",
   "artifactAccept.notFile": "产物证据必须是普通文件。",
   "artifactAccept.onlyAcceptance": "产物验收只适用于待验收的卡（{status}）。进行中的工作和其他状态保持不变。",
+  "artifactAccept.prMismatch": "这个 pull request 和卡上已经绑定的不是同一个。",
   "artifactAccept.prReason": "pull request 必须附上核对过什么的理由。",
   "artifactAccept.reviewRequired": "这张卡还没有审查通过或裁定通过，不能做产物验收。",
   "artifactAccept.secret": "产物证据含有凭证，已拒绝。",
