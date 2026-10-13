@@ -10,7 +10,24 @@ export interface PanelClosedRow<Row> {
   generatedAt: string;
 }
 
-/** Keep Undo in this mount, but release restored rows once the snapshot owns them again. */
+type SnapshotAge = "older" | "same" | "newer" | "unknown";
+
+/** Order snapshots by their timestamps. A new object with an earlier time is still stale. */
+function snapshotAge(nextAt: string, heldAt: string): SnapshotAge {
+  const next = Date.parse(nextAt);
+  const held = Date.parse(heldAt);
+  if (!Number.isFinite(next) || !Number.isFinite(held)) return "unknown";
+  if (next < held) return "older";
+  if (next > held) return "newer";
+  return "same";
+}
+
+/**
+ * Release cached rows from snapshots that are not older than the local action.
+ * A restored row is dropped when a newer snapshot no longer lists its id.
+ * An unconfirmed local close keeps Undo until a snapshot of the same generation
+ * or newer reads the close back; anything older is ignored.
+ */
 export function reconcilePanelClosedRows<Row>(
   prev: ReadonlyMap<string, PanelClosedRow<Row>>,
   data: Pick<BoardSnapshot, "decisions" | "generatedAt">,
@@ -19,14 +36,23 @@ export function reconcilePanelClosedRows<Row>(
   let next: Map<string, PanelClosedRow<Row>> | undefined;
   for (const [id, entry] of prev) {
     if (entry.decisions === data.decisions && entry.generatedAt === data.generatedAt) continue;
-    if (open.has(id) && (!entry.closed || entry.confirmed)) {
-      // Undo here, or a reopen elsewhere: an old cached row must not
-      // resurrect a blocker when another region subsequently closes it.
+    const age = snapshotAge(data.generatedAt, entry.generatedAt);
+    if (age === "older") continue;
+    const listed = open.has(id);
+    const fresh = age === "newer" || age === "same";
+    if (!entry.closed && listed) {
       (next ??= new Map(prev)).delete(id);
-    } else if (entry.closed && !open.has(id) && !entry.confirmed) {
-      // Until the close is read back, a stale in-flight open snapshot
-      // must not cancel the successful local close or its Undo control.
-      (next ??= new Map(prev)).set(id, { ...entry, confirmed: true });
+    } else if (!entry.closed && !listed && age === "newer") {
+      (next ??= new Map(prev)).delete(id);
+    } else if (entry.closed && !entry.confirmed && !listed && fresh) {
+      (next ??= new Map(prev)).set(id, {
+        ...entry,
+        confirmed: true,
+        generatedAt: data.generatedAt,
+        decisions: data.decisions,
+      });
+    } else if (entry.closed && entry.confirmed && listed && fresh) {
+      (next ??= new Map(prev)).delete(id);
     }
   }
   return next ?? prev;
