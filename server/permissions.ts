@@ -12,7 +12,7 @@ function allowActionId(actions: AgentPermissionAction[] | undefined): string | u
   return actions?.find((action) => /allow|approve|once/i.test(`${action.id} ${JSON.stringify(action)}`) && !/always|reject|deny/i.test(action.id))?.id;
 }
 
-/** Tools a reviewer may call. Creating, accepting, and archiving are never on this list. */
+/** Tools a reviewer may call. Creating, accepting, and archiving are never on this list. Artifact acceptance is the same kanban_accept tool, so it does not add a bypass. */
 const REVIEWER_TOOLS = new Set(["kanban_show", "kanban_list", "kanban_comment", "kanban_block", "kanban_approve", "kanban_request_changes", "kanban_doctor"]);
 /** Tools a reader, decision, or batch agent may call. */
 const READER_TOOLS = new Set(["kanban_show", "kanban_list", "kanban_comment", "kanban_block", "kanban_complete", "kanban_doctor"]);

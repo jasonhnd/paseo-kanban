@@ -19,6 +19,7 @@ import { deliverStoredReviewHold, notifyAcceptance, notifyTask, wakeKanbanSuperv
 import { reviewRejectCaption, roleLabel, statusLabel, supervisorRejectCaption, type Status } from "../shared/labels";
 import { pendingLand, recordLandPending } from "./land-pending";
 import { noteObservedBranch } from "./branch-observed";
+import { resolveArtifactEvidence, type ArtifactAcceptance } from "./artifact-accept";
 import { landLocalBranch, landPlan, type LandResult } from "./temp-land";
 import { commitWipSync } from "./temp-workspace";
 import { runGitSync } from "./git";
@@ -753,8 +754,66 @@ export function rejectTask(id: number, reason: string, actor = "supervisor"): Ta
   return returnForRework(task, text, "", actor, "rejected", true);
 }
 
-export async function acceptTask(id: number, actor = "supervisor"): Promise<TaskRow & { merged?: string[]; unmerged?: string; pending?: string }> {
+function artifactReviewSatisfied(task: TaskRow): boolean {
+  const own = getDb().prepare("SELECT 1 AS ok FROM events WHERE task_id = ? AND kind IN ('approve', 'leader_pass') LIMIT 1").get(task.id);
+  if (own) return true;
+  const reviewed = getDb()
+    .prepare(
+      `SELECT 1 AS ok FROM events e JOIN tasks t ON t.id = e.task_id
+       WHERE t.review_of = ? AND e.kind IN ('approve', 'leader_pass') LIMIT 1`,
+    )
+    .get(task.id);
+  return Boolean(reviewed);
+}
+
+function artifactEventData(record: ArtifactAcceptance): Record<string, unknown> {
+  return {
+    sha: record.sha,
+    tree: record.tree,
+    branch: record.branch,
+    base: record.base,
+    evidenceKind: record.evidenceKind,
+    evidence: record.evidence,
+    ...(record.evidencePath ? { evidencePath: record.evidencePath } : {}),
+    ...(record.evidenceSha256 ? { evidenceSha256: record.evidenceSha256 } : {}),
+    ...(record.evidenceBytes != null ? { evidenceBytes: record.evidenceBytes } : {}),
+    ...(record.reason ? { reason: record.reason } : {}),
+  };
+}
+
+/**
+ * Explicit artifact acceptance. Ordinary accept is unchanged when no artifact evidence is passed.
+ * This does not fast-forward or rebase, and a missing remote does not select it.
+ */
+async function acceptArtifact(task: TaskRow, actor: string, evidence: string, reason: string | undefined): Promise<TaskRow & { artifact: ArtifactAcceptance }> {
+  if (task.status !== "acceptance") {
+    throw new KanbanError("illegal_transition", t("artifactAccept.onlyAcceptance", { status: task.status }), { from: task.status, to: "done" });
+  }
+  if (taskSubmitsToReview(task) && !artifactReviewSatisfied(task)) {
+    throw new KanbanError("forbidden", t("artifactAccept.reviewRequired"));
+  }
+  const plan = landPlan(task);
+  if (plan.kind === "refuse") throw new KanbanError("conflict", plan.message);
+  const record = await resolveArtifactEvidence({
+    evidence,
+    reason,
+    workspacePath: task.workspace_path,
+    owned: plan.kind === "land" ? plan.owned : null,
+  });
+  const data = artifactEventData(record);
+  const next = move(task.id, task.status, "done", actor, "accept", "", [], data);
+  appendEvent(task.id, "artifact_accepted", null, null, actor, data);
+  addComment(task.id, actor, t("flow.accept.artifact", { sha: record.sha, tree: record.tree }));
+  finishRun(task.id, "accept");
+  promoteChildren(task.id, actor);
+  promoteParents(actor);
+  notifyFinished(next);
+  return { ...next, artifact: record };
+}
+
+export async function acceptTask(id: number, actor = "supervisor", options: { artifact?: string; reason?: string } = {}): Promise<TaskRow & { merged?: string[]; unmerged?: string; pending?: string; artifact?: ArtifactAcceptance }> {
   const task = getTask(id);
+  if (typeof options.artifact === "string") return acceptArtifact(task, actor, options.artifact, options.reason);
   assertTransition(task.status, "done");
   const plan = landPlan(task);
   if (plan.kind === "refuse") throw new KanbanError("conflict", plan.message);

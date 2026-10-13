@@ -4,6 +4,7 @@ import { translate, t } from "../shared/i18n";
 import { invalidateAgentIndex } from "./agent-index";
 import { existsSync, lstatSync, readdirSync, rmSync, rmdirSync, unlinkSync } from "./perf-fs";
 import { agentAttemptDue, DELETE_BRANCH_RETRY_LIMIT, failureCount, agentsInTurnGrace, agentsOpenedBy, CLEANUP_BACKOFF_MS, nextRetryAt, readCleanupEvents, retryReady, waitingOnTurn, waitReason, type CleanupRecord, type RetryAction } from "./archive-book";
+import { ARTIFACT_KEEP_BRANCH, artifactAcceptanceSha, artifactCommitInBase } from "./artifact-accept";
 import { cardMark } from "./card-ref";
 import { DEFAULT_ARCHIVE_DEADLINE_MS, loadConfig } from "./config";
 import { getDb } from "./db";
@@ -1043,7 +1044,20 @@ export async function settleTempWorkspace(input: {
     });
   }
   if (!canContinue()) return "pending";
-  if (!archivedKeep && (landedFlag || pushedFlag) && !committedWip && !recorded(events, "delete_branch")) {
+  const recordedSha = artifactAcceptanceSha(task.id);
+  if (recordedSha && !recorded(events, "delete_branch") && !(await artifactCommitInBase(owned.root, recordedSha, owned.base, run))) {
+    keepBranch = true;
+    if (!events.some((event) => event.action === "keep_branch" && event.reason === ARTIFACT_KEEP_BRANCH)) {
+      record({
+        action: "keep_branch",
+        directory: owned.directory,
+        branch: owned.branch,
+        ok: true,
+        reason: ARTIFACT_KEEP_BRANCH,
+      });
+    }
+  }
+  if (!keepBranch && !archivedKeep && (landedFlag || pushedFlag) && !committedWip && !recorded(events, "delete_branch")) {
     if (!retryReady(events, "delete_branch", owned.directory, input.now)) return "pending";
     const inspectionError = owned.readOnly ? await deleteReadOnlyBranch(task.id, owned, run) : null;
     const deleted = owned.readOnly

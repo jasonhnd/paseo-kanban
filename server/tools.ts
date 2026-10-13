@@ -100,7 +100,7 @@ export function toolDefs(language: Language = getLanguage()): McpTool[] {
   { name: "kanban_unwait", description: text("kanban_unwait.description"), inputSchema: { type: "object", properties: { id: CARD_REF }, required: ["id"] } },
   { name: "kanban_rework", description: text("kanban_rework.description"), inputSchema: { type: "object", properties: { id: CARD_REF, reason: { type: "string" }, agent: { type: "string" }, countRound: { type: "boolean" } }, required: ["id", "reason"] } },
   { name: "kanban_pass", description: text("kanban_pass.description"), inputSchema: { type: "object", properties: { id: CARD_REF, note: { type: "string" } }, required: ["id", "note"] } },
-  { name: "kanban_accept", description: text("kanban_accept.description"), inputSchema: { type: "object", properties: { id: CARD_REF }, required: ["id"] } },
+  { name: "kanban_accept", description: text("kanban_accept.description"), inputSchema: { type: "object", properties: { id: CARD_REF, artifact: { type: "string", description: text("kanban_accept.param.artifact") }, reason: { type: "string", description: text("kanban_accept.param.reason") } }, required: ["id"] } },
   { name: "kanban_reject", description: text("kanban_reject.description"), inputSchema: { type: "object", properties: { id: CARD_REF, reason: { type: "string" } }, required: ["id", "reason"] } },
   {
     name: "kanban_register",
@@ -407,6 +407,9 @@ async function handleAuthenticatedTool(name: string, args: Record<string, unknow
     case "kanban_accept": {
       const id = taskId(identity, args);
       assertSupervisorScope(identity, getTask(id), t("tools.action.accept"));
+      if (typeof args.artifact === "string") {
+        return acceptTask(id, identity.role, { artifact: args.artifact, reason: typeof args.reason === "string" ? args.reason : undefined });
+      }
       return acceptTask(id, identity.role);
     }
     case "kanban_rework": {
