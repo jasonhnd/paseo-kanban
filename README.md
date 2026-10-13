@@ -4,9 +4,9 @@ A [Paseo](https://github.com/getpaseo/paseo) plugin that combines a cross-projec
 
 [Simplified Chinese](docs/zh-CN/README.md)
 
-> **Experimental Git source.** The public source is on `integration/single-plugin-reviewed`. A versioned release, npm publication and official registry listing are not declared here. Isolated macOS tests cover local Git installation/recovery and the official 0.11.2 web app in Microsoft Edge. GitHub replay of the final published commit, physical phones, the native app and an authenticated provider first-card cycle remain unverified. No stability or response-time commitment is made.
+> **Experimental RC `0.1.0-rc.1` — pending publication.** The planned immutable Git tag is `v0.1.0-rc.1`; it is not yet an available install target. The current public baseline is c106 on `integration/single-plugin-reviewed`. That baseline passed isolated official 0.11.2 GitHub installation/recovery and Web UI checks in Microsoft Edge on macOS. The new RC needs its own exact-candidate checks and post-publication GitHub replay. Physical phones, the native app and an authenticated provider first-card cycle remain unverified. No stable release, npm publication, official registry listing or response-time commitment is declared.
 
-There is one plugin id, `paseo-kanban`, and one standard sidebar entry. The board and Fleet share the `board` screen, `/plugin/paseo-kanban/board` deep link and workspace project filtering. The package metadata is `@jasonhnd/paseo-kanban` version `0.1.0`; metadata alone is not a published npm package or Git tag.
+There is one plugin id, `paseo-kanban`, and one standard sidebar entry. The board and Fleet share the `board` screen, `/plugin/paseo-kanban/board` deep link and workspace project filtering. Package and lock metadata are `@jasonhnd/paseo-kanban` version `0.1.0-rc.1`. Official 0.11.2 identifies a Git install by its full revision; it does not use a manifest version field. Metadata alone is not publication.
 
 ## Requirements
 
@@ -19,16 +19,22 @@ Paseo plugins are **trusted, unsandboxed code**. Server and preparation code can
 
 ## Install from GitHub
 
-Check the CLI, daemon and app versions, and the daemon's Node environment first. `paseo --version` reports the CLI version, not proof of the app/daemon versions.
+Check the CLI, daemon and app versions, and the daemon's Node environment first. `paseo --version` reports the CLI version, not proof of the app/daemon versions. **The following RC command is for after the tag and prerelease have been published and their full SHA confirmed in the [release record](docs/RELEASE.md). It cannot install the pending local RC today.**
 
 ```sh
 paseo --version
 node --version
-paseo plugin install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.1
 paseo plugin ls paseo-kanban --json
 ```
 
-This uses the official Paseo CLI's GitHub acquisition path. The branch is a real public ref; its tip can change. For repeatable installation, use a reviewed **full commit SHA** from the [release record](docs/RELEASE.md) as `--ref`. These instructions do not mean the plugin has passed the official registry's review. Do not substitute the bare registry id `jasonhnd/paseo-kanban`, an npm source or an invented tag.
+This uses the official Paseo CLI's GitHub acquisition path. The tag must never move or be reused. Compare the installed full revision with the final reviewed RC SHA; that SHA also works as `--ref` once public. These instructions do not mean the plugin has passed the official registry's review. Do not substitute the bare registry id `jasonhnd/paseo-kanban` or an npm source. While publication is pending, the already-public **pre-RC baseline** can be installed explicitly:
+
+```sh
+paseo plugin install github:jasonhnd/paseo-kanban --ref c106efb88a659931d01f40a236001823473561a8 --json
+```
+
+That baseline has package metadata `0.1.0`; it is not the prepared `0.1.0-rc.1` tag. See [the RC changelog](CHANGELOG.md) for source changes and unresolved dependency alerts.
 
 1. In the intended host's **Settings -> Plugins**, turn on **Enable plugins** and the individual `paseo-kanban` switch. The global switch starts other individually enabled plugins too. You can enable this plugin with `paseo plugin enable paseo-kanban --json` once the global switch is on.
 2. Repeat `paseo plugin ls paseo-kanban --json`; require `running` without a load error. Open **Paseo Kanban** from that host's sidebar. Board, Fleet and Settings should share that entry. Check the actual page; `running` alone does not prove client mounting. A compact viewport does not prove a physical phone.
@@ -55,15 +61,23 @@ Use [workflow](docs/WORKFLOW.md) and [troubleshooting](docs/COMPATIBILITY.md) if
 
 ## Update, disable or remove
 
-Back up state and record the current full revision, source, installed path and enabled state first. Preview and apply an **explicit ref each time**:
+Back up state and record the current full revision, source, installed path and enabled state first. After RC publication is confirmed, preview and apply an **explicit ref each time**:
 
 ```sh
-paseo plugin update paseo-kanban --check --ref integration/single-plugin-reviewed --json
-paseo plugin update paseo-kanban --ref integration/single-plugin-reviewed --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.1 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.1 --json
 paseo plugin ls paseo-kanban --json
 ```
 
 `--check` previews without installing. `--ref` selects this operation only; a later update without it follows the remote's default HEAD. A full reviewed SHA provides an exact target. Check the installed revision/path and actual UI after the update, and refresh `BOARD_INSTALL` because managed paths can change. Do not edit or build inside a managed checkout. See [release and recovery](docs/RELEASE.md) for backup, exact-SHA rollback and the pending verification checklist.
+
+For code rollback to the previously verified public c106 baseline, keep the same data root and use its full SHA on both operations:
+
+```sh
+paseo plugin update paseo-kanban --check --ref c106efb88a659931d01f40a236001823473561a8 --json
+paseo plugin update paseo-kanban --ref c106efb88a659931d01f40a236001823473561a8 --json
+paseo plugin ls paseo-kanban --json
+```
 
 ```sh
 paseo plugin disable paseo-kanban --json

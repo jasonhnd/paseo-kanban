@@ -1,14 +1,42 @@
 # Git 发布与恢复清单
 
-本批**只通过 Git 分发**。公开仓库为 `https://github.com/jasonhnd/paseo-kanban`，分支 `integration/single-plugin-reviewed`。包版本 `0.1.0` 是实验元数据，不证明 npm、tag 或官方目录已发布。每个候选须重跑本清单；下表记录本机已测范围及外部待做项，不宣称发布、生产切换或外部提交完成，也不授权这些操作。
+本批准备单插件的 **Git-only 预发布 `0.1.0-rc.1`**。不可移动 tag `v0.1.0-rc.1` 与 GitHub prerelease **待发布**。公开仓库为 `https://github.com/jasonhnd/paseo-kanban`，分支 `integration/single-plugin-reviewed`；当前公开准备基线是 `c106efb88a659931d01f40a236001823473561a8`，tree `581ff56cbd944b6d4244129c80a8aeb3bd8c01e2`。RC 相对该基线只改元数据／文档；本文不宣布或授权稳定版、npm 发布、官方目录收录或生产切换。
 
 ## 版本及证据规则
 
 单插件只有一个 package／version／CHANGELOG，id 为 `paseo-kanban`。0.x 兼容修复升 patch，新增或配置／行为破坏升 minor；1.x 按 SemVer。契约/schema 版本独立；兼容新增保留，破坏须明确迁移／恢复方案。
 
-Git 分支可变，是否有 tag 都要保存完整审过的公开 commit。该渠道不强制 tag，存在前不写成安装目标。未来使用 tag 时与包／CHANGELOG 对齐、审 tag 元数据，不挪动／覆盖／复用；保留旧验证提交供回退。
+Git 分支可变。本 RC 计划要求不可移动 tag 与 GitHub prerelease，和 package／lock／CHANGELOG 对齐。保存完整审过的 commit/tree 及 tag object／元数据，审查并扫描 annotated tag 的身份与内容。绝不挪动、覆盖或复用 tag，即使修正发版也不例外。若 `v0.1.0-rc.1` 已存在，检查其 commit 并选下一个未用 RC 号，同步元数据／文档、重跑最终门。准备时远端 tags／releases 为空；发布主责须再查。保留 c106 作为已验证公开代码基线，不称前一个版本化 release。
 
-发布确认前保持 Unreleased 的 Added／Changed／Fixed／Security／Notes，写明宿主范围、数据／契约变更、真测限制，不把源码检查写成 app/provider 认证。
+准备中的 RC 可用明确标注**待发布**的版本标题；验证发布前不写发布日期、不称 tag 可用。写明宿主范围、数据／契约变更、既有依赖告警及真测限制。官方 0.11.2 Git 下载使用 revision／`--ref`，manifest schema 不消费插件版本字段；package.json、package-lock.json 顶层及根 package 版本必须一致，不虚构 manifest 字段。不把源码检查写成 app/provider 认证。
+
+## RC 发布计划 — 待发布
+
+Release 标题为 **Paseo Kanban v0.1.0-rc.1**，GitHub Release 必须标 **prerelease**。正文写精确审过的公开 RC commit/tree，链接英中 CHANGELOG，说明兼容／访问／数据风险，区分前版 c106 证据与 RC 验证。正文先准备供审查，不含私有路径、身份、配置、凭证或证据仓。
+
+不同实际 model 审查、leader 亲看验收后，只有另获授权的发布主责可以公开批准的 commit／tag 并创建 prerelease。主责须重跑精确出站 branch／tag 的隐私／历史／身份门，确认远端 peeled tag 等于已审 commit，确认 GitHub Release 使用该 tag 且 prerelease=true。本计划不包含 force、替换 tag、npm 发布或 registry 提交。
+
+**以下命令在远端确认后执行，不是待发布 tag 已存在的证据：**
+
+```sh
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.1 --json
+paseo plugin ls paseo-kanban --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.1 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.1 --json
+paseo plugin ls paseo-kanban --json
+```
+
+tag 和完整 RC SHA 冷安装分别用全新隔离 home/cache。另一个新宿主先装 c106，再预览／更新 RC；断言预览不改 revision/path/settings/data，更新后精确 RC revision/version 一致，八个已安装 bundle／Node 命令可用，数据根／设置／RPC 保留。真 UI 另留证。代码回退到前版公开 c106 后，再明确升级 RC：
+
+```sh
+paseo plugin update paseo-kanban --check --ref c106efb88a659931d01f40a236001823473561a8 --json
+paseo plugin update paseo-kanban --ref c106efb88a659931d01f40a236001823473561a8 --json
+paseo plugin ls paseo-kanban --json
+```
+
+发布交接记录精确 CLI/daemon/app 版本、命令／退出码、前后 source/revision/path/enabled/version、代码与数据保留、清理和限制。tag 安装及新 RC GitHub／UI 重放通过前仍为待做。公开前用本卡本地 `file://` Git 源核精确候选，不能证明未来 GitHub tag。daemon 与 app 均须 `>=0.11.0 <0.12.0`；macOS arm64 官方 0.11.2 为实测基线，Node 要求 >=22.13.0。声明范围不认证其他 patch／平台或已认证 provider。
+
+RC 相对 c106 不改运行代码／schema／契约／依赖，没有自动数据迁移／导入。切换代码／来源前保持统一根、停派活与写者、备份一致状态及宿主设置。代码回退保留当前写入；另行兼容数据恢复可能丢失新写入。新装 enabled=true，全局插件开启时可能立即启动。插件开发／准备及官方宿主的既有依赖 audit／deprecated 告警未解决，交接保留精确观察。门通过不等于修复告警或稳定版证据。
 
 ## 候选发布前
 
@@ -42,15 +70,15 @@ Git 分支可变，是否有 tag 都要保存完整审过的公开 commit。该�
 
 ## 命令重放清单
 
-语法按公开 **Paseo CLI 0.11.2 help 和固定文档**核对，再于 macOS arm64、Node 24.21.0/npm 12.1.0 的真实隔离本地 Git 安装及官方 0.11.2 Web app 重放。隔离验证及最终整合主责须填精确候选／宿主、命令、退出码、前后结果；发布主责在最终 ref 公开后从 GitHub 再重放适用项。日志私密，摘要匿名。
+下表记录**前版 c106 证据**，不是本次未发布 RC 的结果。c106 发布报告确认在 macOS arm64、Node 24.21.0/npm 12.1.0 通过真实 GitHub 分支／完整 SHA 安装、预览／更新／降级／再升级、来源转换、已安装 CLI/RPC 及 Edge 中官方 0.11.2 Web UI；下表也区分更早的本地负例／数据恢复探针。RC 主责须记录本次精确候选／宿主、命令、退出码、前后结果；发布主责在新 RC 公开后重放 tag 和完整 SHA。日志私密，摘要匿名。
 
 child env 使用新测试 home，每条连接命令明确 CLI endpoint，例如 `paseo --host "$PASEO_TEST_HOST" plugin ...`，endpoint 为 `tcp://host:port`。本地 daemon 启动用 `--home "$PASEO_TEST_HOME"`；**不能同时传 --home 与 --host**，0.11.2 target guard 会拒绝。插件／SDK 的 `PASEO_URL` 另用带 `/ws` 的 WebSocket URL，不等于 CLI --host。白名单 env，不继承 agent 身份／token，relay/provider 禁用，可选适配器明确 false；真 provider 只用用户自己建立的隔离登录，不拷生产认证。
 
 | 重放项 | 要求与本文当前状态 |
 |---|---|
 | `paseo --version`、顶层/plugin/install/update help | 已记录 0.11.2 CLI 与真实隔离 daemon，help 已核。 |
-| `install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed --json` | 发布主责须重放最终公开 GitHub revision/path/准备；本地 file:// 证据不算此项通过。 |
-| 最终公开 SHA 安装；先本地 `file://` 精确 SHA | fresh cache、NODE_ENV=production 的隔离完整 SHA Git 准备与八 bundle 已测；审过 SHA 公开后再从 GitHub 重放。 |
+| `install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed --json` | 前版 c106 GitHub 分支重放通过；新 RC tag 待发布。本地 file:// 不算远端 RC 通过。 |
+| 最终公开 SHA 安装；先本地 `file://` 精确 SHA | 前版 c106 本地／GitHub 完整 SHA 安装在 fresh cache、NODE_ENV=production 下通过，八 bundle 可用；精确新 RC 与公开 tag 须重跑。 |
 | `ls paseo-kanban --json`、`logs paseo-kanban --json` | 本机已核真实安装来源/revision/path/enabled/加载状态及脱敏日志。 |
 | 重复同 id／不存在 ref | 本地拒绝后旧 path/revision/enabled/data 及 RPC 保留。 |
 | `update paseo-kanban --check --ref "$REVIEWED_COMMIT" --json` | 本地预览未改 revision/path/state。 |
@@ -65,7 +93,7 @@ child env 使用新测试 home，每条连接命令明确 CLI endpoint，例如 
 | 真 desktop/compact/phone | 本机 Edge 中官方 0.11.2 Web app 的桌面／compact 已测，compact 关闭侧栏后核正文／操作；物理手机、原生 Electron 未验证。 |
 | 真 provider 首卡 | 用户自建隔离登录及真实执行／审查／leader 闭环仍未验证；匿名连续性卡、无 agent workspace 不替代。 |
 
-本机证据区分成功 RPC、预期 stale-save conflict 与非预期错误；只有响应数不能称零 RPC 错误。整套单命令 lab bootstrap 仅做 syntax 检查，组件命令及最终候选关键重放分别真实执行。发布记录保留受测 SHA/tree、安装 revision、版本化日志和原图，每个最终候选重跑所需门。生产切换、GitHub 发布／重放与 registry 提交仍为独立操作。
+前版 c106 Web 观察区分 99 个成功 plugin RPC、1 个预期 stale-save conflict、0 个非预期错误，不证明新 RC UI 已测。只有响应数不能称零 RPC 错误。更早的整套单命令 lab bootstrap 仅做 syntax 检查，组件命令及最终候选关键重放分别真实执行。发布记录保留受测 SHA/tree、安装 revision、版本化日志和原图，每个最终候选重跑所需门。RC 发布／GitHub 重放、生产切换与 registry 提交仍为独立操作。
 
 `REVIEWED_COMMIT`／`PREVIOUS_COMMIT` 取发布记录完整公开 SHA；未公开候选用本地 `file://`，不虚构远端。分支可能在预览／应用间前进；受控发布用预览精确 SHA。坏失败测试 ref 绝不 push。
 

@@ -1,14 +1,42 @@
 # Git release and recovery checklist
 
-This batch distributes the single plugin through **Git only**. The public repository is `https://github.com/jasonhnd/paseo-kanban`, branch `integration/single-plugin-reviewed`. Package version `0.1.0` is experimental metadata, not evidence of an npm release, published tag or official registry listing. Repeat this checklist for each candidate; the table below records measured local scope and it does not declare publication, production switching or external submission complete, and does not authorize those operations.
+This batch prepares the single plugin for **Git-only prerelease `0.1.0-rc.1`**. Its immutable tag `v0.1.0-rc.1` and GitHub prerelease are **pending publication**. The public repository is `https://github.com/jasonhnd/paseo-kanban`, branch `integration/single-plugin-reviewed`; the current public preparation baseline is `c106efb88a659931d01f40a236001823473561a8`, tree `581ff56cbd944b6d4244129c80a8aeb3bd8c01e2`. The RC changes only metadata/docs relative to that baseline. No stable release, npm publication, official registry listing or production switch is declared or authorized here.
 
 ## Version and evidence policy
 
 The combined plugin has one package/version/CHANGELOG and runtime id `paseo-kanban`. In 0.x, use patches for compatible fixes and minors for new features or breaking configuration/behavior. From 1.x, use SemVer. Contract/schema versions are separate; compatible additions retain their version, while breaking changes need an explicit migration/recovery plan.
 
-A Git branch is mutable. Every release record must save a full reviewed public commit, regardless of whether a tag exists. A tag is optional for this channel; do not document one as an install target before it exists. If a tag is later used, align it with package/CHANGELOG version, review its metadata, and never move, overwrite or reuse it. Preserve the previous verified public commit for rollback.
+A Git branch is mutable. This RC plan requires an immutable tag and GitHub prerelease, aligned with package/lock/CHANGELOG. Save the full reviewed commit and tree as well as the tag object/metadata; review and scan annotated tag identity/content. Never move, overwrite or reuse a tag, even to correct a release. If `v0.1.0-rc.1` already exists, inspect its commit and choose the next unused RC number; synchronize metadata/docs and rerun final gates. Remote tags and releases were empty when this RC was prepared; the publishing owner must check again. Preserve c106 as the previous verified public code baseline, not a previous versioned release.
 
-Keep Added, Changed, Fixed, Security and Notes under Unreleased until publication is verified. Notes must state host range, data/contract changes and real test limits. Do not turn source-only checks into app/provider certification.
+Prepared RC notes may use a version heading marked **pending publication**; never add a release date or claim an available tag until verified. Notes must state host range, data/contract changes, existing dependency alerts and real test limits. Official 0.11.2 Git acquisition uses revision/`--ref`; its manifest schema has no consumed plugin version field. Keep package.json, package-lock.json's top level and root package version aligned; do not invent a manifest field. Do not turn source-only checks into app/provider certification.
+
+## RC publication plan — pending
+
+The release title is **Paseo Kanban v0.1.0-rc.1** and the GitHub Release must be a **prerelease**. Its body must identify the exact reviewed public RC commit/tree, link the English/Chinese changelogs, state compatibility/access/data risks and distinguish prior c106 evidence from RC verification. Prepare the body for review before publishing; never include private paths, identities, configuration, credentials or evidence repositories.
+
+Only the separately authorized publishing owner may publish the approved commit/tag and create the prerelease after different-model review and leader acceptance. That owner must rerun the exact outgoing branch/tag privacy/history/identity gates, confirm the remote peeled tag equals the reviewed commit, and verify the GitHub Release uses that tag with prerelease=true. No force, tag replacement, npm publication or registry submission is part of this plan.
+
+**These commands are planned for after that remote confirmation, not evidence that the pending tag exists:**
+
+```sh
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.1 --json
+paseo plugin ls paseo-kanban --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.1 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.1 --json
+paseo plugin ls paseo-kanban --json
+```
+
+Use separate fresh isolated homes/caches for cold tag and full-RC-SHA installs. On another fresh host install c106 first, then preview/update to the RC; assert preview leaves revision/path/settings/data unchanged, update matches exact RC revision/version, all eight installed bundles/Node commands work, and the data root/settings/RPC remain valid. Record the actual UI separately. Test code downgrade to the prior public c106 baseline, then repeat the explicit RC upgrade:
+
+```sh
+paseo plugin update paseo-kanban --check --ref c106efb88a659931d01f40a236001823473561a8 --json
+paseo plugin update paseo-kanban --ref c106efb88a659931d01f40a236001823473561a8 --json
+paseo plugin ls paseo-kanban --json
+```
+
+Record exact CLI/daemon/app versions, commands/exits, before/after source/revision/path/enabled/version, code versus data retention, cleanup and limits in the publication receipt. Tag installation and new RC GitHub/UI replay stay pending until those rows pass. Before publication, use a task-owned local `file://` Git source for exact candidate checks; it cannot certify the future GitHub tag. Both daemon and app must be in `>=0.11.0 <0.12.0`; official 0.11.2 on macOS arm64 is the measured baseline, Node >=22.13.0 is required. Other patches/platforms and authenticated providers are not certified by that range.
+
+There are no RC runtime/schema/contract/dependency changes from c106 and no automatic data migration/import. Keep the same canonical root, pause dispatch/writers and back up consistent state plus host settings before changing code/source. Code rollback preserves current writes; a separate compatible data restore can discard newer writes. New install enabled=true can start immediately with global plugins enabled. Existing plugin development/preparation and official-host dependency audit/deprecation alerts are unresolved; keep exact observations in the receipt. Passing gates is not remediation or stable-release evidence.
 
 ## Before publishing a candidate
 
@@ -44,15 +72,15 @@ Fill the draft with actual evidence before claiming publication:
 
 ## Command replay checklist
 
-Syntax was checked against public **Paseo CLI 0.11.2 help and fixed docs**, then exercised with actual isolated local Git installations and the official 0.11.2 web app on macOS arm64, Node 24.21.0/npm 12.1.0. The isolated-validation and final-integration owners must fill this table with exact candidate/host, command, exit and before/after observations; the publishing owner repeats applicable rows from GitHub after the final ref is public. Keep logs private and summaries anonymous.
+The following table records **prior c106 evidence**, not results for this unpublished RC. The c106 publication receipt confirms actual GitHub branch/full-SHA installation, preview/update/downgrade/re-upgrade, source conversion, installed CLI/RPC and official 0.11.2 Web UI in Edge on macOS arm64, Node 24.21.0/npm 12.1.0. Earlier local negative and data-restore probes are also marked below. The RC owner must record its own exact candidate/host, command, exit and before/after observations; the publishing owner repeats the new RC tag and full-SHA rows from GitHub after publication. Keep logs private and summaries anonymous.
 
 Use a new test home in the child environment and an explicit CLI endpoint on **every** connection command, for example `paseo --host "$PASEO_TEST_HOST" plugin ...`, where the endpoint is `tcp://host:port`. Use `--home "$PASEO_TEST_HOME"` for local daemon startup; **never combine `--home` and `--host`**. The 0.11.2 target guard rejects that combination. Plugin/SDK `PASEO_URL` is a separate WebSocket URL with `/ws`, not the CLI `--host` value. Use a whitelist environment, no inherited agent identity/tokens, disabled relay/providers and explicit `false` optional adapters. A real provider test uses only a user-established isolated login, not copied production authentication.
 
 | Replay | Required result; current document status |
 |---|---|
 | `paseo --version`, top-level/plugin/install/update help | 0.11.2 CLI and live isolated daemon recorded; help checked. |
-| `install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed --json` | Final published GitHub revision/path/preparation must be replayed by the publication owner; local `file://` evidence does not pass this row. |
-| Install full final public SHA; local `file://` full SHA first | Isolated full-SHA local Git preparation passed with fresh cache, NODE_ENV=production and eight working bundles; repeat from GitHub once the reviewed SHA is public. |
+| `install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed --json` | Prior c106 GitHub branch replay passed; the new RC tag remains pending. Local `file://` does not pass the remote RC row. |
+| Install full final public SHA; local `file://` full SHA first | Prior c106 local and GitHub full-SHA installs passed with fresh cache, NODE_ENV=production and eight working bundles; repeat for the exact new RC and public tag. |
 | `ls paseo-kanban --json`, `logs paseo-kanban --json` | Installed source/revision/path/enabled/load state and sanitized logs checked locally. |
 | Repeat same-id install; nonexistent ref | Local refusals retained old path/revision/enabled/data and working RPC. |
 | `update paseo-kanban --check --ref "$REVIEWED_COMMIT" --json` | Local preview left revision/path/state unchanged. |
@@ -67,7 +95,7 @@ Use a new test home in the child environment and an explicit CLI endpoint on **e
 | Real desktop/compact and physical phone | Official 0.11.2 web app in local Edge tested at desktop and compact sizes, with sidebar closed before compact content/actions. Physical phone and native Electron remain unverified. |
 | Real provider first card | User-established isolated login and actual executor/reviewer/leader cycle remain unverified; anonymous continuity cards and agent-free workspaces do not pass this row. |
 
-The local evidence distinguishes successful RPC outputs, the expected stale-save conflict and unexpected errors. A response count alone does not establish zero RPC errors. The assembled one-command lab bootstrap was syntax checked only; component commands and final-candidate key replays were executed separately. Keep the exact tested source SHA/tree, installed revision, versioned logs and images in the release record; rerun required gates on each final candidate. Production switching, GitHub publication/replay and registry submission are still separate operations.
+The prior c106 Web observation distinguished 99 successful plugin RPC replies, one expected stale-save conflict and zero unexpected errors; it does not establish that the new RC UI was tested. A response count alone does not establish zero RPC errors. The assembled earlier one-command lab bootstrap was syntax checked only; component commands and final-candidate key replays were executed separately. Keep the exact tested source SHA/tree, installed revision, versioned logs and images in the release record; rerun required gates on each final candidate. RC publication/GitHub replay, production switching and registry submission remain separate operations.
 
 `REVIEWED_COMMIT` and `PREVIOUS_COMMIT` are full public SHAs from the release record. An unpublished candidate uses a local `file://` source, never an invented remote SHA. Branch refs can move between separate preview/apply operations; use the exact preview SHA for a controlled rollout. Never push deliberately broken failure-test refs.
 

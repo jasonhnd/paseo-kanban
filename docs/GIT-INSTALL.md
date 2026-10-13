@@ -4,29 +4,29 @@
 
 ## Select the host and source
 
-Install to the intended daemon. With the default local home:
+Install to the intended daemon. **RC `0.1.0-rc.1` and its planned immutable tag `v0.1.0-rc.1` are pending publication. Run the following tag commands only after the remote tag and GitHub prerelease match the reviewed full RC commit.** With the default local home, after that confirmation:
 
 ```sh
 paseo --version
 node --version
 git --version
 npm --version
-paseo plugin install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed --json
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.1 --json
 paseo plugin ls paseo-kanban --json
 ```
 
-The current public source is `https://github.com/jasonhnd/paseo-kanban`, branch `integration/single-plugin-reviewed`. The published baseline for this documentation work is `fcf1b97c9db2c610b376ea792c50428fbc8f07f8`; it is an earlier public source snapshot, not the final combined candidate. A branch can move. For an exact repeatable install, choose a reviewed full SHA that is available remotely:
+The current public source is `https://github.com/jasonhnd/paseo-kanban`, branch `integration/single-plugin-reviewed`, at preparation baseline `c106efb88a659931d01f40a236001823473561a8`. That pre-RC source has metadata `0.1.0` and passed the prior isolated official 0.11.2 GitHub replay. It can be installed now with `--ref c106efb88a659931d01f40a236001823473561a8`. A branch can move; the planned RC tag must never move. For an exact repeatable RC install, choose the reviewed full SHA once available remotely:
 
 ```sh
 paseo plugin install github:jasonhnd/paseo-kanban --ref "$REVIEWED_COMMIT" --json
 ```
 
-`REVIEWED_COMMIT` must be the full public commit from the release record. Do not copy a local unpublished candidate SHA into a GitHub install. There is no required tag or npm release for this Git-only channel. The bare `jasonhnd/paseo-kanban` identifier means the official registry, which is a separate review process; it is not this direct Git source.
+`REVIEWED_COMMIT` must be the full public RC commit from the release record. Do not copy a local unpublished candidate SHA into a GitHub install. The RC plan requires an immutable tag and GitHub prerelease, aligned with package/lock/CHANGELOG; it does not include npm publication. The bare `jasonhnd/paseo-kanban` identifier means the official registry, which is a separate review process; it is not this direct Git source.
 
 For another daemon, select its endpoint explicitly for **every** operation:
 
 ```sh
-paseo --host "$PASEO_TARGET" plugin install github:jasonhnd/paseo-kanban --ref integration/single-plugin-reviewed --json
+paseo --host "$PASEO_TARGET" plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.1 --json
 paseo --host "$PASEO_TARGET" plugin ls paseo-kanban --json
 ```
 
@@ -44,7 +44,7 @@ paseo plugin ls paseo-kanban --json
 paseo plugin logs paseo-kanban --json
 ```
 
-Require `running` without a load error. Record the returned source kind, full installed revision, enabled state and actual path. A package version of `0.1.0` alone cannot distinguish two source commits. Do not guess the managed cache path. Open the real sidebar entry and test the board/Fleet page on the same host.
+Require `running` without a load error. Record the returned source kind, full installed revision, enabled state and actual path. Confirm the managed package/lock version is `0.1.0-rc.1` and the installed full revision matches the RC release record; version metadata alone cannot distinguish source commits. Official 0.11.2's Git identity is the revision, not a manifest version field. Do not guess the managed cache path. Open the real sidebar entry and test the board/Fleet page on the same host.
 
 The install does not put plugin commands on PATH. Set `BOARD_INSTALL` to the path from `ls`, then use the generated launchers with the same home/data-root environment as the daemon:
 
@@ -58,11 +58,11 @@ No end-user build is needed after successful Git preparation. Authentication/rol
 
 ## Preview and update an explicit ref
 
-Save current revision/path/enabled state, pause dispatch and other writers, and take consistent [data/settings backups](DATA.md#backup-and-data-restore). Use the desired branch or, for a reproducible target, full reviewed public SHA on **both** commands:
+Save current revision/path/enabled state, pause dispatch and other writers, and take consistent [data/settings backups](DATA.md#backup-and-data-restore). After publication confirmation, use the immutable RC tag or its full reviewed public SHA on **both** commands:
 
 ```sh
-paseo plugin update paseo-kanban --check --ref integration/single-plugin-reviewed --json
-paseo plugin update paseo-kanban --ref integration/single-plugin-reviewed --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.1 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.1 --json
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -90,7 +90,7 @@ paseo plugin update paseo-kanban --ref "$PREVIOUS_COMMIT" --json
 paseo plugin ls paseo-kanban --json
 ```
 
-Set `PREVIOUS_COMMIT` from the saved release record, not from package version alone. Code downgrade does not undo data writes. Data restore needs a separate consistent, compatible backup and can discard newer writes. A directory-to-Git switch needs remove/install rather than Git update; see the [prepared runbook](RELEASE.md#directory-to-git-switch-runbook), which does not declare a production switch complete.
+For this first RC, `PREVIOUS_COMMIT=c106efb88a659931d01f40a236001823473561a8` is the previously verified public pre-RC baseline, not a previous versioned release. Otherwise take it from the saved release record, not from package version alone. Code downgrade does not undo data writes. Data restore needs a separate consistent, compatible backup and can discard newer writes. A directory-to-Git switch needs remove/install rather than Git update; see the [prepared runbook](RELEASE.md#directory-to-git-switch-runbook), which does not declare a production switch complete.
 
 ## Git preparation and local development
 
