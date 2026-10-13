@@ -18,9 +18,10 @@ import { leaderHoldReason, reviewHoldNotice } from "./review-hold";
 import { deliverStoredReviewHold, notifyAcceptance, notifyTask, wakeKanbanSupervisor } from "./wake";
 import { reviewRejectCaption, roleLabel, statusLabel, supervisorRejectCaption, type Status } from "../shared/labels";
 import { pendingLand, recordLandPending } from "./land-pending";
-import { noteObservedBranch } from "./branch-observed";
-import { resolveArtifactEvidence, type ArtifactAcceptance } from "./artifact-accept";
+import { judgedWorktree, noteObservedBranch } from "./branch-observed";
+import { resolveArtifactEvidence, type ArtifactAcceptance, type ArtifactBranch } from "./artifact-accept";
 import { landLocalBranch, landPlan, type LandResult } from "./temp-land";
+import { createdWorktree, ownedWorktree, worktreeOwnershipError } from "./worktree-gc";
 import { commitWipSync } from "./temp-workspace";
 import { runGitSync } from "./git";
 import { presenceIsGone, type AgentPresence } from "./presence";
@@ -782,6 +783,23 @@ function artifactEventData(record: ArtifactAcceptance): Record<string, unknown> 
 }
 
 /**
+ * Card branch used to identify an artifact. A pull request or GitHub contract skips
+ * local landing, but it does not skip this branch. No temporary branch means the
+ * workspace checkout is the delivery commit.
+ */
+function artifactBranch(task: TaskRow): { owned: ArtifactBranch | null; checkout: boolean } {
+  const created = createdWorktree(task.id);
+  if (!created) return { owned: null, checkout: true };
+  const problem = worktreeOwnershipError(task.id, created);
+  if (problem) throw new KanbanError("conflict", problem);
+  if (created.readOnly === true) return { owned: null, checkout: false };
+  const owned = ownedWorktree(task.id, created);
+  if (!owned) throw new KanbanError("conflict", t("tempLand.refuse.notOwned"));
+  const judged = judgedWorktree(task.id, owned);
+  return { owned: { root: judged.root, branch: judged.branch, base: judged.base }, checkout: false };
+}
+
+/**
  * Explicit artifact acceptance. Ordinary accept is unchanged when no artifact evidence is passed.
  * This does not fast-forward or rebase, and a missing remote does not select it.
  */
@@ -792,13 +810,14 @@ async function acceptArtifact(task: TaskRow, actor: string, evidence: string, re
   if (taskSubmitsToReview(task) && !artifactReviewSatisfied(task)) {
     throw new KanbanError("forbidden", t("artifactAccept.reviewRequired"));
   }
-  const plan = landPlan(task);
-  if (plan.kind === "refuse") throw new KanbanError("conflict", plan.message);
+  const located = artifactBranch(task);
   const record = await resolveArtifactEvidence({
     evidence,
     reason,
     workspacePath: task.workspace_path,
-    owned: plan.kind === "land" ? plan.owned : null,
+    owned: located.owned,
+    checkout: located.checkout,
+    checkoutBase: task.workspace_base,
   });
   const data = artifactEventData(record);
   const next = move(task.id, task.status, "done", actor, "accept", "", [], data);

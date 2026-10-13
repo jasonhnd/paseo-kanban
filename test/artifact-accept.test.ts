@@ -209,6 +209,62 @@ describe("artifact acceptance", { concurrency: 1 }, () => {
     await untouched(card, main);
   });
 
+  it("binds a contracted pull request to the card branch and refuses the local base", async () => {
+    const root = await initRepo("contract-root");
+    const card = await addCard(root, "contract-card", "from-contract\n");
+    const plain = await addCard(root, "contract-plain", "from-plain\n");
+    const ordinary = await addCard(root, "contract-ordinary", "from-ordinary-contract\n");
+    const main = await moveMain(root, "from-main-contract\n");
+    const url = "https://github.com/example/widgets/pull/11";
+    const bound = JSON.stringify({ kind: "github", repo: "example/widgets", pr: url, awaiting: false });
+    getDb().prepare("UPDATE tasks SET contract_json = ? WHERE id = ?").run(bound, card.id);
+    getDb().prepare("UPDATE tasks SET contract_json = ? WHERE id = ?").run(JSON.stringify({ kind: "github", repo: "example/widgets", awaiting: false }), plain.id);
+    getDb().prepare("UPDATE tasks SET contract_json = ? WHERE id = ?").run(bound, ordinary.id);
+    const accepted = (await runKanban(["accept", String(card.id), "--artifact", url, "--reason", "checked the diff and the tree"], {})) as {
+      status: string;
+      artifact?: { sha: string; tree: string; branch: string | null; base: string | null; evidenceKind: string };
+    };
+    assert.equal(accepted.status, "done");
+    assert.equal(accepted.artifact?.sha, card.sha);
+    assert.equal(accepted.artifact?.tree, card.tree);
+    assert.equal(accepted.artifact?.branch, card.branch);
+    assert.equal(accepted.artifact?.base, "main");
+    assert.equal(accepted.artifact?.evidenceKind, "pull_request");
+    assert.equal(artifactEvent(card.id).sha, card.sha);
+    assert.equal(events(card.id).some((row) => row.kind === "landed" || row.kind === "land_conflict"), false);
+    await untouched(card, main);
+    await assert.rejects(
+      () => runKanban(["accept", String(plain.id), "--artifact", main], {}),
+      new RegExp(localePattern(zhCN("artifactAccept.shaMismatch", { sha: plain.sha }))),
+    );
+    assert.equal(getTask(plain.id).status, "acceptance");
+    assert.equal(events(plain.id).some((row) => row.kind === "artifact_accepted"), false);
+    await untouched(plain, main);
+    const landed = await acceptTask(ordinary.id, "supervisor");
+    assert.equal(landed.status, "done");
+    assert.equal(landed.artifact, undefined);
+    assert.equal(events(ordinary.id).some((row) => row.kind === "artifact_accepted" || row.kind === "land_conflict" || row.kind === "landed"), false);
+    await untouched(ordinary, main);
+    const directory = createTask({ project: "demo", title: "directory-pr", role: "executor", workspacePath: root, brief: "demo fixture" });
+    getDb().prepare("UPDATE tasks SET status = 'acceptance', contract_json = ? WHERE id = ?").run(bound, directory.id);
+    appendEvent(directory.id, "approve", "reviewing", "acceptance", "reviewer", { summary: "checked" });
+    await assert.rejects(
+      () => acceptTask(directory.id, "supervisor", { artifact: card.sha }),
+      new RegExp(localePattern(zhCN("artifactAccept.shaMismatch", { sha: main }))),
+    );
+    assert.equal(getTask(directory.id).status, "acceptance");
+    const checkedOut = (await runKanban(["accept", String(directory.id), "--artifact", url, "--reason", "checked the diff and the tree"], {})) as {
+      status: string;
+      artifact?: { sha: string; branch: string | null; base: string | null };
+    };
+    assert.equal(checkedOut.status, "done");
+    assert.equal(checkedOut.artifact?.sha, main);
+    assert.equal(checkedOut.artifact?.branch, "main");
+    assert.equal(checkedOut.artifact?.base, "main");
+    assert.equal((await git(root, ["rev-parse", "HEAD"])).trim(), main);
+    assert.equal((await git(root, ["rev-parse", `refs/heads/${card.branch}`])).trim(), card.sha);
+  });
+
   it("keeps ordinary accept on the land path when the repository has no remote", async () => {
     const root = await initRepo("land-root");
     const pending = await addCard(root, "pending-card", "from-pending\n");
@@ -327,6 +383,21 @@ describe("artifact acceptance", { concurrency: 1 }, () => {
     assert.equal(getTask(task.id).status, "acceptance");
     assert.equal((await git(root, ["rev-parse", "HEAD"])).trim(), main);
     assert.equal((await git(root, ["rev-parse", `refs/heads/${branch}`])).trim(), sha);
+    const contracted = createTask({ project: "demo", title: "unowned-contract", role: "executor", workspacePath: root, brief: "demo fixture" });
+    const contractedBranch = tempBranchName(cardMark(contracted.id), "unowned-contract");
+    const contractedDir = join(dir, "outside-contract");
+    await git(root, ["worktree", "add", "-b", contractedBranch, contractedDir, "main"]);
+    rememberTemp(contracted.id, root, contractedBranch, contractedDir);
+    appendEvent(contracted.id, "approve", "reviewing", "acceptance", "reviewer", { summary: "checked" });
+    getDb().prepare("UPDATE tasks SET contract_json = ? WHERE id = ?").run(JSON.stringify({ kind: "github", repo: "example/widgets", pr: "https://github.com/example/widgets/pull/4", awaiting: false }), contracted.id);
+    const contractedSha = (await git(root, ["rev-parse", `refs/heads/${contractedBranch}`])).trim();
+    await assert.rejects(() => acceptTask(contracted.id, "supervisor", { artifact: "https://github.com/example/widgets/pull/4", reason: "checked the diff and the tree" }), (err: unknown) => {
+      assert.ok(err instanceof KanbanError);
+      assert.equal(err.code, "conflict");
+      return true;
+    });
+    assert.equal(getTask(contracted.id).status, "acceptance");
+    assert.equal((await git(root, ["rev-parse", `refs/heads/${contractedBranch}`])).trim(), contractedSha);
   });
 
   it("keeps the only commit across cleanup, including when a remote base would otherwise delete the branch", async () => {

@@ -119,6 +119,22 @@ async function branchTip(owned: ArtifactBranch): Promise<CommitId | null> {
   return verifyCommit(owned.root, listed.stdout.trim());
 }
 
+/**
+ * Delivery commit for a card that has no temporary branch.
+ * The checked-out branch tip is the only local object that can be audited.
+ * A detached checkout is not a target.
+ */
+async function workspaceCheckout(workspacePath: string | null, base: string | null): Promise<ArtifactBranch | null> {
+  const root = workspacePath?.trim() ?? "";
+  if (!root || root.startsWith("-") || /[\0\r\n]/.test(root)) return null;
+  const head = await runGit(root, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  if (head.code !== 0) return null;
+  const branch = head.stdout.trim();
+  if (!branch || branch === "HEAD" || !refOk(branch)) return null;
+  const recorded = base?.trim() ?? "";
+  return { root, branch, base: recorded && refOk(recorded) ? recorded : branch };
+}
+
 function containsSha(text: string, sha: string): boolean {
   return new RegExp(`(?:^|[^0-9a-fA-F])${sha}(?![0-9a-fA-F])`, "i").test(text);
 }
@@ -197,6 +213,9 @@ export async function resolveArtifactEvidence(input: {
   reason?: string;
   workspacePath: string | null;
   owned: ArtifactBranch | null;
+  /** Use the workspace checkout when the card has no temporary branch. */
+  checkout?: boolean;
+  checkoutBase?: string | null;
 }): Promise<ArtifactAcceptance> {
   const evidence = input.evidence;
   if (evidence.length > INPUT_LIMIT) invalid("artifactAccept.badEvidence");
@@ -204,15 +223,16 @@ export async function resolveArtifactEvidence(input: {
   if (!trimmed || trimmed === "true") invalid("artifactAccept.missing");
   refuseSecret(evidence);
   const reason = storedReason(input.reason);
-  const cwd = input.owned?.root ?? (input.workspacePath?.trim() || null);
-  const tip = input.owned ? await branchTip(input.owned) : null;
-  if (input.owned && !tip) invalid("artifactAccept.noTarget");
+  const located = input.owned ?? (input.checkout ? await workspaceCheckout(input.workspacePath, input.checkoutBase ?? null) : null);
+  const cwd = located?.root ?? (input.workspacePath?.trim() || null);
+  const tip = located ? await branchTip(located) : null;
+  if (located && !tip) invalid("artifactAccept.noTarget");
 
   const baseRecord = (target: CommitId, kind: ArtifactAcceptance["evidenceKind"], display: string, extra: Partial<ArtifactAcceptance> = {}): ArtifactAcceptance => ({
     sha: target.sha,
     tree: target.tree,
-    branch: input.owned?.branch ?? null,
-    base: input.owned?.base ?? null,
+    branch: located?.branch ?? null,
+    base: located?.base ?? null,
     evidenceKind: kind,
     evidence: display,
     ...(reason ? { reason } : {}),
