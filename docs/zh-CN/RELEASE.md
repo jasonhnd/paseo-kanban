@@ -4,7 +4,7 @@
 
 rc.6 新增有限暂时性读取重试，更正带宿主看板链接、首页 Command Center 范围与 manifest 图标说明。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，annotated object `44f501a2a6cda150b92d9fa9b5dfa48d03e7af5e`；其观察不认证 rc.6。保留 20 个开发／构建依赖告警（5 moderate、15 high），Git preparation 会安装这些包；记录的审计中两个根因通告均无上游修复版本，不加 force 的 audit fix 没有改动。见当前[变更记录](CHANGELOG.md)。
 
-rc.7 把每张卡的临时目录从系统临时目录移到所配置项目的 `.kanban-work/<卡号>/`，测试不再往真实默认根写卡目录。显式 `KANBAN_TMP_ROOT` 只作为覆盖保留。采用新默认值须移除旧的 `KANBAN_TMP_ROOT`，并重开仍持有旧环境的 worker。本地 rc.6 没有公开，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`，annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`。其观察不认证 rc.7。保留的 20 个开发／构建依赖告警（5 moderate、15 high）不变。见当前[变更记录](CHANGELOG.md)。
+rc.7 把每张卡的临时目录从系统临时目录移到所配置项目的 `.kanban-work/<卡号>/`，测试不再往真实默认根写卡目录。显式 `KANBAN_TMP_ROOT` 只作为覆盖保留。采用新默认值须移除旧的 `KANBAN_TMP_ROOT`，并重开仍持有旧环境的 worker。已公开预发布 rc.6 于 2026-10-13 发布，GitHub Release 存在，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`，annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`。其观察不认证 rc.7。保留的 20 个开发／构建依赖告警（5 moderate、15 high）不变。见当前[变更记录](CHANGELOG.md)。
 
 ## 版本及证据规则
 

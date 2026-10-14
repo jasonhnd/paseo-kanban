@@ -1,7 +1,7 @@
 # Changelog
 
 The single plugin has one version and CHANGELOG. Distribution is through Git.
-Seven release candidates are recorded here. `0.1.0-rc.7` is the current unpublished candidate, pending independent review. The previous local rc.6 candidate remains frozen at `c70df59d8516b7ecc9350ce5833fb177bafc335b` (annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`) and was not published. Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
+Seven release candidates are recorded here. `0.1.0-rc.7` is the current unpublished candidate, pending independent review. Public prerelease rc.6 was published on 2026-10-13 and its GitHub Release exists. It remains frozen at `c70df59d8516b7ecc9350ce5833fb177bafc335b` (annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`). Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
 
 ## 0.1.0-rc.7 — pending review and publication
 
@@ -15,7 +15,7 @@ Local candidate tag: `v0.1.0-rc.7`. This candidate is prepared only. Install it 
 ### Fixed
 
 - Project settings and short-code updates keep the configured work directory, including the legacy `workspace` alias. Chinese worker rules keep the reviewed-card and name restrictions and identify the board as the writer of the local exclude.
-- Full test phases and workers isolate their scratch roots. Tests no longer write card directories on the real default root. The card-tmp guard still refuses a real system card root outside its own fixture, and allows paths inside that fixture when the fixture is nested under the invoking card directory. Default-root name audits reject a phase that leaves a new card directory outside its owned roots.
+- Full test phases and workers isolate their scratch roots. Tests no longer write card directories on the real default root. The card-tmp guard still refuses a real system card root outside its own fixture, and allows paths inside that fixture when the fixture is nested under the invoking card's `.kanban-work/<card code>/` directory. Default-root name audits reject a phase that leaves a new card directory outside its owned roots.
 
 ### Switching an existing installation
 

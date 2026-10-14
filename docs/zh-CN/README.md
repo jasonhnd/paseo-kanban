@@ -4,7 +4,7 @@
 
 [English](../../README.md)
 
-> **实验性 RC `0.1.0-rc.7`，尚未发布。** 只有对应 GitHub prerelease 存在，且目标为[发布记录](RELEASE.md)中的独立审查提交时，才能安装该 tag。已在 macOS 的 Microsoft Edge 验证隔离官方 **0.11.2 Web UI**；原生 app、真实手机及已认证 provider 首卡仍未验证。不宣布稳定版、npm 发布、官方目录收录或响应时间承诺。
+> **实验性 RC `0.1.0-rc.7`，尚未发布。** 已公开预发布 `0.1.0-rc.6` 于 2026-10-13 发布，GitHub Release 存在。只有对应 GitHub prerelease 存在，且目标为[发布记录](RELEASE.md)中的独立审查提交时，才能安装 rc.7 的 tag。已在 macOS 的 Microsoft Edge 验证隔离官方 **0.11.2 Web UI**；原生 app、真实手机及已认证 provider 首卡仍未验证。不宣布稳定版、npm 发布、官方目录收录或响应时间承诺。
 
 唯一插件 id 为 `paseo-kanban`，一个侧栏入口打开看板、Fleet 和设置，看板使用包含宿主 id 的深链，并保留 workspace 项目筛选。
 

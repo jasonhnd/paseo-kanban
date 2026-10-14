@@ -26,10 +26,11 @@ const tmpRoot = join(dir, "tmp-root");
 process.env.KANBAN_DATA_DIR = dir;
 process.env.KANBAN_TMP_ROOT = tmpRoot;
 // A red run against the old default must fail without writing real card roots.
-// The owned fixture may sit inside /tmp/<card> or /private/tmp/<card> when the
-// invoking isolation directory uses that prefix. Those internal paths are the
-// fixture, not an external system card root.
-const realSystemCardRoot = /^\/(?:private\/)?tmp\/[A-Za-z0-9]+_\d+(?:\/|$)/;
+// The owned fixture may sit inside the invoking card's `.kanban-work/<card>/`
+// directory. Paths inside that fixture are the fixture. The same card-shaped
+// path outside it stays refused, including /tmp/<card>, /private/tmp/<card>,
+// and another `.kanban-work/<card>/` directory.
+const realSystemCardRoot = /(?:^\/(?:private\/)?tmp\/[A-Za-z0-9]+_\d+(?:\/|$)|\.kanban-work\/(?:[^/]+\/)?[A-Za-z0-9]+_\d+(?:\/|$))/;
 function ownedFixtureRoots(): string[] {
   const roots = new Set<string>([resolve(dir)]);
   try { roots.add(realpathSync(dir)); } catch { /* the fixture directory exists */ }
@@ -71,6 +72,8 @@ describe("per-card TMPDIR", () => {
   it("refuses a real system card root outside the owned fixture", () => {
     assert.throws(() => mkdirSync("/tmp/TEST_0099/external-card"), /test refused a real system card root/);
     assert.throws(() => mkdirSync("/private/tmp/TEST_0099/external-card"), /test refused a real system card root/);
+    assert.throws(() => mkdirSync("/var/empty/.kanban-work/TEST_0099/external-card"), /test refused a real system card root/);
+    assert.throws(() => mkdirSync("/var/empty/.kanban-work/other-project/TEST_0098/external-card"), /test refused a real system card root/);
     const sibling = resolve(dir, "..", "not-this-fixture");
     if (realSystemCardRoot.test(sibling)) {
       assert.throws(() => mkdirSync(sibling), /test refused a real system card root/);

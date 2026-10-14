@@ -4,7 +4,7 @@ A [Paseo](https://github.com/getpaseo/paseo) plugin that combines a cross-projec
 
 [Simplified Chinese](docs/zh-CN/README.md)
 
-> **Experimental RC `0.1.0-rc.7`, unpublished.** Install its tag only after the matching GitHub prerelease targets the independently reviewed commit in the [release record](docs/RELEASE.md). Isolated official **0.11.2 Web UI** has been checked in Microsoft Edge on macOS; native app, physical phones and an authenticated provider first-card cycle remain unverified. No stable release, npm publication, official registry listing or response-time commitment is declared.
+> **Experimental RC `0.1.0-rc.7`, unpublished.** Public prerelease `0.1.0-rc.6` was published on 2026-10-13 and its GitHub Release exists. Install the rc.7 tag only after the matching GitHub prerelease targets the independently reviewed commit in the [release record](docs/RELEASE.md). Isolated official **0.11.2 Web UI** has been checked in Microsoft Edge on macOS; native app, physical phones and an authenticated provider first-card cycle remain unverified. No stable release, npm publication, official registry listing or response-time commitment is declared.
 
 One plugin id, `paseo-kanban`, opens Board, Fleet and Settings from one sidebar entry. The board uses host-qualified deep links and retains workspace project filtering.
 
