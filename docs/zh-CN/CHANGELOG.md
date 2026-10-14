@@ -1,6 +1,31 @@
 # 变更记录
 
-单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.6` 是当前未公开、待独立审查的候选。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
+单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.7` 是当前未公开、待独立审查的候选。上一本地候选 rc.6 仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`），没有公开。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
+
+## 0.1.0-rc.7 — 待审查与发布
+
+本地候选 tag 为 `v0.1.0-rc.7`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.6 tag 绝不挪动。
+
+### 变更（Changed）
+
+- 每张卡的临时目录从系统临时目录改到所配置项目的 `.kanban-work/<卡号>/`，并由 Git 本地 exclude。项目缺失、不是 Git 仓库或不可写时，回退到 `<plugin-data-root>/work/<项目>/<卡号>/`。不再回退到系统临时目录。已记录路径在设置变化后仍保留 resume generation 与延迟清理。
+- supervisor 的 brief 文件边界，以及通读／决策卡范围，跟随新的工作根。中英文 worker 守则和文档把临时产物放到注入的卡片目录。
+
+### 修复（Fixed）
+
+- 项目设置和短码更新保留已配置的工作目录，包括旧字段 `workspace`。中文 worker 守则保留被审卡和名称限制，并写明看板是本地 exclude 的写入者。
+- 完整测试阶段和 worker 隔离临时根。测试不再往真实默认根写卡目录。默认根名称审计会拒绝在自有根之外留下新卡目录的阶段。
+
+### 现有安装切换
+
+- 要采用新默认值，须移除或改掉旧的显式 `KANBAN_TMP_ROOT`。显式 `KANBAN_TMP_ROOT` 仍然优先，包括有意保留的旧位置。新 worker 守则使用 `KANBAN_TMP`。
+- 已有 worker 若必须换掉旧环境，需要结束并重新打开。已保存的简报和守则，以及正在运行的 agent 环境，不会被改写。第一张新卡核对 `TMPDIR`、`KANBAN_TMP` 和 `card_tmp_prepared`。
+- 没有 prepared-path 记录的旧系统临时根不会进入默认发现。本候选不删除这些目录。
+
+### 注意（Notes）
+
+- package 与根 lock 版本统一为 `0.1.0-rc.7`。Node 仍为 `>=24.21.0`，Paseo daemon/app 仍要求 `>=0.11.0 <0.12.0`。schema 和契约版本不变，没有新增自动数据迁移或导入。依赖选择不变，20 个开发／构建告警仍保留。
+- 精确 rc.7 本机门禁与出站 annotated tag 必须使用 rc.7 回执。此前 rc.6 或分组件成绩不代表整合候选通过。新 GitHub 冷安装、真实浏览器升级／reload 恢复与已安装宿主生命周期须另行验证。原生 app、手机、已认证 provider、其他平台及生产恢复仍未验证。本候选不做生产切换。
 
 ## 0.1.0-rc.6 — 待审查与发布
 

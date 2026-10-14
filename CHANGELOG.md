@@ -1,21 +1,32 @@
 # Changelog
 
 The single plugin has one version and CHANGELOG. Distribution is through Git.
-Six release candidates are recorded here. `0.1.0-rc.6` is the current unpublished candidate, pending independent review. Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
+Seven release candidates are recorded here. `0.1.0-rc.7` is the current unpublished candidate, pending independent review. The previous local rc.6 candidate remains frozen at `c70df59d8516b7ecc9350ce5833fb177bafc335b` (annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`) and was not published. Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
 
-## 0.1.0-rc.7 — unreleased source preparation
+## 0.1.0-rc.7 — pending review and publication
 
-No rc.7 version bump, tag, push or Release is made by this preparation; package metadata remains rc.6.
+Local candidate tag: `v0.1.0-rc.7`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.6 tags are never moved.
 
 ### Changed
 
-- Per-card scratch defaults to the configured project's `.kanban-work/<card code>/`, locally excluded by Git. A missing, non-Git or unwritable project falls back to `<plugin-data-root>/work/<project>/<card code>/`; explicit `KANBAN_TMP_ROOT` remains supported. Recorded paths preserve resume generations and delayed cleanup after settings change.
-- Supervisor brief-file boundaries and reader/decision card scope follow the new work roots. English/Chinese worker protocols and documentation direct temporary artifacts to the card's injected directory.
+- Per-card scratch moves from the system temporary directory to the configured project's `.kanban-work/<card code>/`, and Git locally excludes that directory. A missing, non-Git or unwritable project falls back to `<plugin-data-root>/work/<project>/<card code>/`. There is no system-temporary-directory fallback. Recorded paths keep resume generations and delayed cleanup after a settings change.
+- Supervisor brief-file boundaries and reader/decision card scope follow the new work roots. English/Chinese worker protocols and documentation put temporary artifacts in the card's injected directory.
 
 ### Fixed
 
-- Project settings and short-code updates retain the configured work directory, including the legacy `workspace` alias; Chinese worker rules retain the reviewed-card/name restrictions and identify the board as the local-exclude writer.
-- Full test phases and workers explicitly isolate `KANBAN_TMP_ROOT`, including fake-launcher and CLI children. Default-root name audits reject test phases that leave new card directories outside their owned roots.
+- Project settings and short-code updates keep the configured work directory, including the legacy `workspace` alias. Chinese worker rules keep the reviewed-card and name restrictions and identify the board as the writer of the local exclude.
+- Full test phases and workers isolate their scratch roots. Tests no longer write card directories on the real default root. Default-root name audits reject a phase that leaves a new card directory outside its owned roots.
+
+### Switching an existing installation
+
+- Remove or change an old explicit `KANBAN_TMP_ROOT` to adopt the new default. An explicit `KANBAN_TMP_ROOT` still wins, including a deliberately kept legacy location. New worker protocols use `KANBAN_TMP`.
+- End and recreate an existing worker when its old environment must change. Saved briefs and protocols, and already running agent environments, are not rewritten. On the first new card, check `TMPDIR`, `KANBAN_TMP` and the `card_tmp_prepared` event.
+- Legacy system-temporary roots that have no prepared-path record are not imported into default discovery. This candidate does not delete them.
+
+### Notes
+
+- Package and root lock versions agree on `0.1.0-rc.7`. Node remains `>=24.21.0`, and Paseo daemon/app requirements remain `>=0.11.0 <0.12.0`. Schema and contract versions are unchanged, and no automatic data migration or import is introduced. Dependency selections are unchanged. The 20 dev/build dependency alerts remain.
+- Exact rc.7 local verification and the outgoing annotated-tag gate require rc.7 receipts. Earlier rc.6 or component results do not pass this integrated candidate. New GitHub cold installs, real-browser update/reload recovery and installed-host lifecycle replay remain separate verification. Native app, phones, authenticated provider cycles, other platforms and production recovery remain unverified. This candidate does not perform the production switch.
 
 ## 0.1.0-rc.6 — pending review and publication
 
