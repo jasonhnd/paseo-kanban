@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
 import { closeDb, getDb } from "../server/db";
-import { markRunningMcpStale, readSavedMcpPort, writeSavedMcpPort } from "../server/mcp-port";
+import { markRunningMcpStale, readSavedMcpPort, recordMcpListen, writeSavedMcpPort } from "../server/mcp-port";
 import { startMcpServer } from "../server/mcp";
 import { createTask, listBoard } from "../server/store";
 
@@ -38,7 +38,7 @@ describe("stable mcp port", () => {
     const hold = createServer();
     await new Promise<void>((resolve) => hold.listen(first.port, "127.0.0.1", () => resolve()));
     try {
-    const moved = await startMcpServer([], async () => ({ text: "ok" }), { preferredPort: first.port });
+    const moved = await startMcpServer([], async () => ({ text: "ok" }), { preferredPort: first.port, reclaimMs: 0 });
     try {
     assert.notEqual(moved.port, first.port);
     assert.equal(moved.replaced, true);
@@ -73,6 +73,14 @@ describe("stable mcp port", () => {
       await again.close();
       await new Promise<void>((resolve) => hold.close(() => resolve()));
     }
+  });
+
+  it("keeps the saved port file when a listen had to move", () => {
+    writeSavedMcpPort(41234);
+    recordMcpListen(41235, true);
+    assert.equal(readSavedMcpPort(), 41234);
+    recordMcpListen(41236, false);
+    assert.equal(readSavedMcpPort(), 41236);
   });
 
   it("marks running agents when the port had to change", () => {

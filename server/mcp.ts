@@ -100,10 +100,38 @@ function release(server: Server): Promise<void> {
   });
 }
 
+/** How long startup keeps trying the saved port while the previous plugin process exits. */
+const DEFAULT_MCP_RECLAIM_MS = 2_000;
+const MCP_RECLAIM_STEP_MS = 50;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Retry the saved port. A running agent keeps the URL from agent create, and the
+ * host cannot replace mcpServers on that agent. Only a port that stays taken moves.
+ */
+async function listenPreferred(server: Server, preferred: number, reclaimMs: number): Promise<{ port: number; replaced: boolean }> {
+  const deadline = Date.now() + Math.max(0, reclaimMs);
+  for (;;) {
+    try {
+      return { port: await listenOn(server, preferred), replaced: false };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EADDRINUSE") throw err;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      await sleep(Math.min(MCP_RECLAIM_STEP_MS, remaining));
+    }
+  }
+  console.log(`[paseo-kanban] mcp port ${preferred} in use, binding a new port`);
+  return { port: await listenOn(server, 0), replaced: true };
+}
+
 export function startMcpServer(
   tools: McpTool[],
   call: McpCaller,
-  options?: { preferredPort?: number | null },
+  options?: { preferredPort?: number | null; reclaimMs?: number },
 ): Promise<{ url: string; port: number; replaced: boolean; close: () => Promise<void> }> {
   const server: Server = createServer((req, res) => {
     void handle(req, res, tools, call).catch((err) => {
@@ -117,16 +145,9 @@ export function startMcpServer(
     console.log(`[paseo-kanban] mcp listening ${url}`);
     return { url, port, replaced, close: () => release(server) };
   };
-  if (!preferred) {
-    return listenOn(server, 0).then((port) => finish(port, false));
-  }
-  return listenOn(server, preferred)
-    .then((port) => finish(port, false))
-    .catch((err: NodeJS.ErrnoException) => {
-      if (err.code !== "EADDRINUSE") throw err;
-      console.log(`[paseo-kanban] mcp port ${preferred} in use, binding a new port`);
-      return listenOn(server, 0).then((port) => finish(port, true));
-    });
+  if (!preferred) return listenOn(server, 0).then((port) => finish(port, false));
+  const reclaimMs = options?.reclaimMs ?? DEFAULT_MCP_RECLAIM_MS;
+  return listenPreferred(server, preferred, reclaimMs).then(({ port, replaced }) => finish(port, replaced));
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse, tools: McpTool[], call: McpCaller): Promise<void> {
