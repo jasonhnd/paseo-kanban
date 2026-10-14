@@ -1,15 +1,18 @@
 // Explicit real public host validation. Run in the anonymous test environment with PASEO_SERVER_DIR.
 // Registration/unload and DOM mounting are separate tests. This never attaches to an installed daemon.
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { fork } from "node:child_process";
 import { createRequire } from "node:module";
 import { realpathSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { test } from "node:test";
 import { build } from "esbuild";
+import { BOARD_AGENT_ENV } from "../../server/agent-env";
 import { isolatedEnvironment } from "../../scripts/isolated-environment.mjs";
 import { LIGHT_THEME, DARK_THEME } from "../helpers/theme-fixture";
 import { translate } from "../../shared/i18n";
@@ -202,31 +205,48 @@ test("actual compiled client mounts board/workspace and Fleet tabs, shares setti
   });
 });
 
-test("an open client still calls kanban tools on the same MCP url after reload", async () => {
-  await withRuntime(async ({ runtime, env }) => {
-    const call = async (port: number) => {
-      const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "kanban_ping", arguments: {} } }),
-      });
-      const body = await response.json() as { result?: { content?: Array<{ text?: string }> } };
-      return body.result?.content?.[0]?.text ?? "";
-    };
-    await until(() => runtime.getLogs("paseo-kanban").some((entry: { message?: string }) => String(entry.message).includes("mcp listening")), "MCP started");
+test("the same agent MCP client calls an authenticated read after the official reload", async () => {
+  await withRuntime(async ({ runtime, env, dir }) => {
+    const require = createRequire(pathToFileURL(join(serverRoot, "package.json")));
+    const { Client } = require("@modelcontextprotocol/sdk/client/index.js");
+    const { StreamableHTTPClientTransport } = require("@modelcontextprotocol/sdk/client/streamableHttp.js");
+    const listening = () => runtime.getLogs("paseo-kanban").filter((entry: { message?: string }) => String(entry.message).includes("mcp listening")).length;
+    await until(() => listening() > 0, "MCP started");
     const port = Number(await readFile(join(env.KANBAN_DATA_DIR, "mcp.port"), "utf8"));
-    assert.equal(await call(port), "kanban-pong");
-    // Host reloadPlugin stops the plugin, waits for the process to close, then starts it.
-    // The running agent keeps the URL baked in at create time.
+    const token = randomBytes(32).toString("hex");
+    const db = new DatabaseSync(join(env.KANBAN_DATA_DIR, "kanban.db"));
+    db.prepare("INSERT INTO tokens (token, task_id, role, agent_id, created_at) VALUES (?, NULL, 'reader', NULL, ?)").run(token, new Date().toISOString());
+    db.close();
+    const created = await runtime.before("agent.create", {
+      config: { provider: "codex", cwd: dir },
+      env: { [BOARD_AGENT_ENV]: "1", KANBAN_TOKEN: token, KANBAN_ROLE: "reader" },
+    });
+    const kanban = created.config.mcpServers.kanban;
+    assert.equal(kanban.type, "http");
+    assert.equal(kanban.url, `http://127.0.0.1:${port}/mcp`);
+    assert.equal(typeof kanban.headers.Authorization, "string");
+    const client = new Client({ name: "official-host-mcp-client", version: "0.11.2" });
+    await client.connect(new StreamableHTTPClientTransport(new URL(kanban.url), { requestInit: { headers: kanban.headers } }));
+    const textOf = (result: { isError?: boolean; content?: Array<{ text?: string }> }) => result.content?.[0]?.text ?? "";
+    const before = await client.callTool({ name: "kanban_list", arguments: {} });
+    assert.equal(before.isError, false);
+    assert.doesNotMatch(textOf(before), /unauthorized/i);
+    const heard = listening();
     assert.equal(await runtime.stopPluginById("paseo-kanban"), true);
+    await assert.rejects(() => client.callTool({ name: "kanban_list", arguments: {} }));
     await runtime.startPlugin("paseo-kanban", source);
-    const limit = Date.now() + 15_000;
-    let text = "";
-    while (text !== "kanban-pong") {
-      assert.ok(Date.now() < limit, "original MCP url did not answer after reload");
-      try { text = await call(port); } catch { text = ""; }
-      if (text !== "kanban-pong") await pause();
-    }
+    await until(() => listening() > heard, "MCP started again");
     assert.equal(Number(await readFile(join(env.KANBAN_DATA_DIR, "mcp.port"), "utf8")), port);
+    const after = await client.callTool({ name: "kanban_list", arguments: {} });
+    assert.equal(after.isError, false, textOf(after));
+    assert.equal(textOf(after), textOf(before));
+    const bare = await fetch(kanban.url, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "kanban_list", arguments: {} } }),
+    });
+    const bareBody = await bare.json() as { result?: { isError?: boolean; content?: Array<{ text?: string }> } };
+    assert.equal(bareBody.result?.isError, true);
+    assert.match(bareBody.result?.content?.[0]?.text ?? "", /unauthorized/i);
   });
 });

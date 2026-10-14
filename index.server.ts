@@ -27,7 +27,7 @@ import { createLifecycleHooks } from "./server/lifecycle-hooks";
 import { createHookBinding } from "./server/hook-binding";
 import { hookObjects, refreshHookObjects, watchHookObjects } from "./server/hook-objects";
 import { startMcpServer } from "./server/mcp";
-import { markRunningMcpStale, mcpNoteFor, preferredMcpPort, recordMcpListen } from "./server/mcp-port";
+import { markRunningMcpStale, mcpNoteFor, preferredMcpPort, writeSavedMcpPort } from "./server/mcp-port";
 import { settleOpeningLoginBlip } from "./server/login-blip";
 import { lastUserMessageAtOf, planTurn } from "./server/nudge";
 import { agentLink, agentLiveness, directoryForProject, findAgentFile, listAgentChoices, openAgent } from "./server/open";
@@ -113,7 +113,7 @@ export default function contribute(server: PluginServerContext) {
     baseUrl = mcp.url;
     close = mcp.close;
     try {
-      recordMcpListen(mcp.port, mcp.replaced);
+      writeSavedMcpPort(mcp.port);
     } catch (err) {
       console.error("[paseo-kanban] mcp port file", err instanceof Error ? err.message : err);
     }

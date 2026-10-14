@@ -26,11 +26,6 @@ export function writeSavedMcpPort(port: number): void {
   writeFileSync(portFile(), `${port}\n`, { mode: 0o600 });
 }
 
-/** Keep data/mcp.port when this process had to move. The next start must try the address agents already have. */
-export function recordMcpListen(port: number, replaced: boolean): void {
-  if (!replaced) writeSavedMcpPort(port);
-}
-
 /** Read at plugin startup: a lost config file falls back to the memory copy or data/mcp.port instead of stopping the plugin (DEMO_0001). */
 export function preferredMcpPort(): number | null {
   return loadConfigForReport().mcpPort ?? readSavedMcpPort();
