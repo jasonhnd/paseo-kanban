@@ -1,7 +1,25 @@
 # Changelog
 
 The single plugin has one version and CHANGELOG. Distribution is through Git.
-Seven release candidates are recorded here. `0.1.0-rc.7` is the current unpublished candidate, pending independent review. Public prerelease rc.6 was published on 2026-10-13 and its GitHub Release exists. It remains frozen at `c70df59d8516b7ecc9350ce5833fb177bafc335b` (annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`). Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
+Eight release candidates are recorded here. `0.1.0-rc.8` is the current unpublished candidate, pending independent review. Public prerelease rc.7 was published on 2026-10-14 and its GitHub Release exists. It remains frozen at `2d6942643edb977072f8818b3d0c764b2ce1a057` (annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`). Public prerelease rc.6 was published on 2026-10-13 and remains frozen at `c70df59d8516b7ecc9350ce5833fb177bafc335b` (annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`). Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
+
+## 0.1.0-rc.8 — pending review and publication
+
+Local candidate tag: `v0.1.0-rc.8`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.7 tags are never moved.
+
+### Fixed
+
+- Disabled or unknown providers no longer emit a thinking-catalog warning. The warning is skipped only when the error text says that provider is disabled or unknown. Other failures, including a connection reset, still warn. The check does not hard-code a provider list and does not read banned providers.
+- The host server bundle no longer reads `fs.F_OK` (Node DEP0176). Named imports and named re-exports replace star import and star export of `node:fs` in the filesystem helpers the server bundle includes. The test-data path guard uses those named functions, and its filesystem parameter lists only the methods it calls. This does not rewrite `fs.F_OK` as `fs.constants.F_OK`: a star import still touches those constants when the host packages the server.
+
+### Verified without a listen-policy change
+
+- Reusing a saved MCP port was already rc.7 behavior. The server prefers the port in `data/mcp.port`, binds it when it is free, and binds a different port only when the saved port is in use, then marks running MCP addresses stale. A new integration test on official Paseo 0.11.2 shows that a stop-then-start reload reuses the saved port and that the same host MCP client can read the board again. When the saved port is occupied, the server still switches ports. This candidate does not change that listen policy.
+
+### Notes
+
+- Package and root lock versions agree on `0.1.0-rc.8`. Node remains `>=24.21.0`, and Paseo daemon/app requirements remain `>=0.11.0 <0.12.0`. Schema and contract versions are unchanged, and no automatic data migration or import is introduced. Dependency selections are unchanged. The 20 dev/build dependency alerts remain.
+- Exact rc.8 local verification requires rc.8 receipts. Earlier rc.7 results do not pass this candidate. New GitHub cold installs, real-browser update/reload recovery and installed-host lifecycle replay remain separate verification. Native app, phones, authenticated provider cycles, other platforms and production recovery remain unverified. This candidate does not perform the production switch.
 
 ## 0.1.0-rc.7 — pending review and publication
 

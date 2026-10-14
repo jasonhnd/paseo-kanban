@@ -1,6 +1,24 @@
 # 变更记录
 
-单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.7` 是当前未公开、待独立审查的候选。已公开预发布 rc.6 于 2026-10-13 发布，GitHub Release 存在，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
+单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.8` 是当前未公开、待独立审查的候选。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
+
+## 0.1.0-rc.8 — 待审查与发布
+
+本地候选 tag 为 `v0.1.0-rc.8`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.7 tag 绝不挪动。
+
+### 修复（Fixed）
+
+- 已停用或未知的 provider 不再发出 thinking-catalog 警告。只有错误文本说明该 provider 已停用或未知时才跳过警告。其他失败，包括连接重置，仍然警告。检查不写死 provider 名单，也不读取已禁止的 provider。
+- 宿主 server bundle 不再读取 `fs.F_OK`（Node DEP0176）。server bundle 包含的文件系统辅助改为具名 import 和具名再导出，不再对 `node:fs` 做星号 import 或星号 export。测试数据路径守卫使用这些具名函数，其文件系统参数只列出实际调用的方法。这不是把 `fs.F_OK` 改写成 `fs.constants.F_OK`：星号 import 在宿主打包 server 时仍会碰到这些常量。
+
+### 已核对、未改监听策略
+
+- 复用保存的 MCP 端口已是 rc.7 的行为。服务优先使用 `data/mcp.port`，端口空闲就绑定它；只有保存端口被占用时才改绑其他端口，并把正在使用的 MCP 地址标成失效。官方 Paseo 0.11.2 上的新增集成测试表明，先停后起的 reload 会复用保存端口，同一个宿主 MCP 客户端还能再读看板。保存端口被占时，服务仍会换端口。本候选不改这条监听策略。
+
+### 注意（Notes）
+
+- package 与根 lock 版本统一为 `0.1.0-rc.8`。Node 仍为 `>=24.21.0`，Paseo daemon/app 仍要求 `>=0.11.0 <0.12.0`。schema 和契约版本不变，没有新增自动数据迁移或导入。依赖选择不变，20 个开发／构建告警仍保留。
+- 精确 rc.8 本机门禁必须使用 rc.8 回执。此前 rc.7 成绩不代表本候选通过。新 GitHub 冷安装、真实浏览器升级／reload 恢复与已安装宿主生命周期须另行验证。原生 app、手机、已认证 provider、其他平台及生产恢复仍未验证。本候选不做生产切换。
 
 ## 0.1.0-rc.7 — 待审查与发布
 
