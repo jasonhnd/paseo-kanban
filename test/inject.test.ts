@@ -40,6 +40,9 @@ describe("MCP inject gate", () => {
       // An exact-commit fixture's CLI may itself live in a nested directory named tmp.
       assert.doesNotMatch(rules.replace(displayCliPath(), "$PLUGIN_ROOT/bin/paseo-kanban.mjs"), /\/tmp\//, role);
       assert.match(rules, /\u4e0d\u8981\u53e6\u8d77\u540d\u5b57/, role);
+      assert.match(rules, /\u4e0d\u8981\u7528\u88ab\u5ba1\u5361/, role);
+      assert.match(rules, /kbn0074-after.*xxx-review-\u968f\u673a\u4e32/, role);
+      assert.match(rules, /\u770b\u677f.*exclude.*\u4e0d\u6539\u8ddf\u8e2a.*\u5ffd\u7565\u6587\u4ef6/, role);
       assert.match(rules, /mode=ro&immutable=1/, role);
       assert.match(rules, /\u4e0d\u8981\u590d\u5236\u6574\u5e93/, role);
       assert.match(rules, /\u53ea\u590d\u5236 kanban\.db \u8fd9\u4e00\u4e2a\u6587\u4ef6\u5230 \$KANBAN_TMP\/ \u4e0b/, role);
