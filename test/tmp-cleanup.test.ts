@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { syncBuiltinESMExports } from "node:module";
 import fsPromises from "node:fs/promises";
 import fs from "node:fs";
+import os from "node:os";
 import childProcess from "node:child_process";
 import { join } from "node:path";
 import { after, beforeEach, describe, it, mock, type TestContext } from "node:test";
@@ -14,7 +15,11 @@ import { resetMissingCwdForTests, setMissingCwdHooks } from "../server/missing-c
 import { cleanTmpDirs, flushTmpCleanup, resetTmpCleanupForTests, scheduleTmpCleanup, tmpNamesFor } from "../server/tmp-cleanup";
 import { cardMark } from "../server/card-ref";
 import { cardTmpEnv } from "../server/card-tmp";
+import { unifiedDataRoot } from "../server/storage/root";
 import { createTask } from "../server/store";
+import { loadConfig, saveConfig } from "../server/config";
+import { prepareTaskTmpEnv } from "../server/card-tmp-record";
+import { getTask } from "../server/store";
 
 const dir = mkdtempSync(join(tmpdir(), "tmpclean-data-"));
 process.env.KANBAN_DATA_DIR = dir;
@@ -85,6 +90,38 @@ describe("tmp cleanup", () => {
     for (const p of paths) assert.equal(existsSync(p), false);
     assert.equal(events(c.id).length, 3);
     assert.ok(out.every((o) => o.bytes >= 2048));
+  });
+
+  it("cleans project and fallback roots by default, including a recorded root after configuration changes", async () => {
+    const home = join(root, "home");
+    const repo = join(root, "project");
+    execFileSync("git", ["init", "-q", repo]);
+    const prior = process.env.KANBAN_TMP_ROOT;
+    const homeMock = mock.method(os, "homedir", () => home);
+    syncBuiltinESMExports();
+    delete process.env.KANBAN_TMP_ROOT;
+    setMissingCwdHooks({ listAgents: () => [] });
+    try {
+      saveConfig({ ...loadConfig(), projects: { tmpc: { defaultWorkspace: "dir", baseBranch: "main", worktreeLanes: 1, lanesEnabled: false, workspacePath: repo } } });
+      const a = card("done", T0);
+      const projectEnv = prepareTaskTmpEnv(getTask(a.id), "test");
+      assert.equal(projectEnv.KANBAN_TMP, join(realpathSync(repo), ".kanban-work", a.code));
+      saveConfig({ ...loadConfig(), projects: { tmpc: { defaultWorkspace: "dir", baseBranch: "main", worktreeLanes: 1, lanesEnabled: false, workspacePath: root } } });
+      const b = card("done", T0);
+      const fallbackEnv = prepareTaskTmpEnv(getTask(b.id), "test");
+      assert.equal(fallbackEnv.KANBAN_TMP, join(unifiedDataRoot(process.env, home), "work", "tmpc", b.code));
+      const active = card("running", null);
+      const activeEnv = prepareTaskTmpEnv(getTask(active.id), "test");
+      const out = await cleanTmpDirs({ now: new Date(T0.getTime() + 24 * HOUR) });
+      assert.ok(out.some(row => row.path === projectEnv.KANBAN_TMP));
+      assert.ok(out.some(row => row.path === fallbackEnv.KANBAN_TMP));
+      assert.equal(existsSync(projectEnv.KANBAN_TMP), false);
+      assert.equal(existsSync(fallbackEnv.KANBAN_TMP), false);
+      assert.equal(existsSync(activeEnv.KANBAN_TMP), true);
+    } finally {
+      if (prior === undefined) delete process.env.KANBAN_TMP_ROOT; else process.env.KANBAN_TMP_ROOT = prior;
+      homeMock.mock.restore(); syncBuiltinESMExports(); resetMissingCwdForTests();
+    }
   });
 
   it("cleaning the same card path again folds into one tmp_cleaned summary and keeps every retirement id", async () => {

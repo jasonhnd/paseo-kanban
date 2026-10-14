@@ -6,7 +6,8 @@ import { lstat, readdir, realpath, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { formatCardCode } from "../shared/card-code";
 import { cardMarkOf } from "./card-ref";
-import { cardTmpGeneration } from "./card-tmp";
+import { cardTmpGeneration, cardTmpRoots } from "./card-tmp";
+import { cardTmpTaskContext, preparedCardTmpDir } from "./card-tmp-record";
 import { getDb } from "./db";
 import { upsertSummaryEvent } from "./event-summary";
 import { pathWithin, readCwdAgentList } from "./missing-cwd";
@@ -18,9 +19,8 @@ import { appendEvent, type TaskRow } from "./store";
 export const TMP_KEEP_MS = 24 * 60 * 60_000;
 /** At most this many directories are deleted per round, so one tick never meets a flood of rm -rf. */
 export const TMP_CLEAN_PER_ROUND = 20;
-/** The scan reads /tmp at most this often. */
+/** The scan reads project work roots at most this often. */
 export const TMP_SCAN_EVERY_MS = 5 * 60_000;
-const DEFAULT_ROOTS = ["/tmp", "/private/tmp"];
 
 type TerminalTask = TaskRow & { ended_at: string | null; ended_event_id: number | null };
 // Event id identifies the terminal stretch even if two events have the same timestamp.
@@ -72,7 +72,7 @@ function codeOf(task: TaskRow): string | null {
 }
 
 /** Directory name → card, for cards that have been over for the full keep time. Names claimed by two cards are dropped. */
-function expiredNames(now: number): Map<string, TerminalTask> {
+function expiredNames(now: number, root?: string): Map<string, TerminalTask> {
   const names = new Map<string, TerminalTask>();
   const clash = new Set<string>();
   // One query: each card's start of its current terminal stretch is its latest event into done/archived from a non-terminal state.
@@ -82,6 +82,7 @@ function expiredNames(now: number): Map<string, TerminalTask> {
   for (const task of rows) {
     const code = codeOf(task);
     if (!code) continue;
+    if (root && !taskRoots(task).includes(root)) continue;
     const over = expired(task, now);
     for (const name of tmpNamesFor(code)) {
       if (names.has(name) || clash.has(name)) {
@@ -96,6 +97,25 @@ function expiredNames(now: number): Map<string, TerminalTask> {
   return names;
 }
 
+function taskRoots(task: TaskRow): string[] {
+  const recorded = preparedCardTmpDir(task.id, cardMarkOf(task));
+  return [...cardTmpRoots(cardTmpTaskContext(task)),
+    ...(recorded ? [dirname(recorded)] : [])];
+}
+
+/** Include recorded locations so config/override changes do not strand an older generation. */
+function defaultRoots(): string[] {
+  const tasks = getDb().prepare("SELECT * FROM tasks WHERE code_seq IS NOT NULL").all() as unknown as TaskRow[];
+  const retired = getDb().prepare("SELECT data_json FROM events WHERE kind = 'tmp_retirement_prepared'").all() as Array<{ data_json: string }>;
+  const journals = retired.flatMap(row => {
+    try {
+      const path = JSON.parse(row.data_json).path;
+      return typeof path === "string" && path.startsWith("/") ? [dirname(path)] : [];
+    } catch { return []; }
+  });
+  return [...new Set([...tasks.flatMap(taskRoots), ...journals])];
+}
+
 function sizeOf(path: string): Promise<number> {
   return new Promise((resolve) => {
     execFile("du", ["-sk", path], { timeout: 60_000 }, (err, stdout) => {
@@ -105,11 +125,12 @@ function sizeOf(path: string): Promise<number> {
   });
 }
 
-async function roots(list: string[]): Promise<string[]> {
+async function roots(list: string[], strict: boolean): Promise<string[]> {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const root of list) {
     try {
+      if (strict && !(await lstat(root)).isDirectory()) continue;
       const real = await realpath(root);
       if (seen.has(real)) continue;
       seen.add(real);
@@ -137,7 +158,7 @@ async function realOr(path: string): Promise<string> {
   }
 }
 
-/** True when any agent's cwd is the directory or inside it, comparing real paths so /tmp, /private/tmp and symlinks match. */
+/** Compare real paths so aliases and symlinks cannot bypass an agent's cwd protection. */
 async function agentInside(path: string, cwds: string[]): Promise<boolean> {
   const real = await realOr(path);
   for (const cwd of cwds) {
@@ -307,19 +328,18 @@ async function cleanRoot(root: string, names: Map<string, TerminalTask>, budget:
   }
 }
 
-/** Delete /tmp/<card> directories of cards over for 24 hours. Async; never touches names that are not an exact card code. */
+/** Delete owned card work directories 24 hours after completion; unrelated names stay untouched. */
 export async function cleanTmpDirs(options: TmpCleanOptions = {}): Promise<TmpCleaned[]> {
   const now = (options.now ?? new Date()).getTime();
   const done: TmpCleaned[] = [];
-  const found = await roots(options.roots ?? DEFAULT_ROOTS);
+  const found = await roots(options.roots ?? defaultRoots(), !options.roots);
   // After the first await, so the tick that started this has already returned.
   await new Promise((resolve) => setImmediate(resolve));
-  const names = expiredNames(now);
   const budget = options.limit ?? TMP_CLEAN_PER_ROUND;
   const uid = options.ownerUid ?? (typeof process.getuid === "function" ? process.getuid() : null);
   for (const root of found) {
     if (done.length >= budget) break;
-    await cleanRoot(root, names, budget, done, uid, now);
+    await cleanRoot(root, expiredNames(now, options.roots ? undefined : root), budget, done, uid, now);
   }
   return done;
 }

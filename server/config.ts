@@ -37,6 +37,8 @@ export function retiredDefaultWorktree(): string {
 
 /** How a project's cards work when the creator does not pin a lane. The effective mode is always dir. */
 export interface ProjectWorkspace {
+  /** Project directory used for card scratch, independent of a card's temporary worktree. */
+  workspacePath?: string;
   defaultWorkspace: WorkspaceMode;
   baseBranch: string;
   /** How many long-lived lanes this project may use. Default 1. Changing the count does not open lanes. */
@@ -291,11 +293,14 @@ function projectMap(value: unknown): Record<string, ProjectWorkspace> {
       waitParentPr?: unknown;
       code?: unknown;
       permissionReadRoots?: unknown;
+      workspacePath?: unknown;
+      workspace?: unknown;
     };
     const mode = row.defaultWorkspace === "worktree" || row.defaultWorkspace === "dir" ? row.defaultWorkspace : null;
     if (!mode) continue;
     const base = typeof row.baseBranch === "string" ? row.baseBranch.trim() : "";
     const code = typeof row.code === "string" ? row.code.trim().toUpperCase() : "";
+    const workspace = row.workspacePath ?? row.workspace;
     next[key] = {
       defaultWorkspace: mode,
       baseBranch: branchNameOk(base) ? base : "main",
@@ -305,6 +310,7 @@ function projectMap(value: unknown): Record<string, ProjectWorkspace> {
       ...(row.alwaysTemp === true ? { alwaysTemp: true } : {}),
       ...(row.waitParentPr === false ? { waitParentPr: false } : {}),
       ...(code && isProjectCode(code) ? { code } : {}),
+      ...(typeof workspace === "string" && workspace.trim() ? { workspacePath: workspace.trim() } : {}),
       ...(Array.isArray(row.permissionReadRoots) ? { permissionReadRoots: row.permissionReadRoots.filter((root): root is string => typeof root === "string" && root.startsWith("/")) } : {}),
     };
   }

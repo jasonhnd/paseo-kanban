@@ -1,9 +1,86 @@
 /// <reference types="node" />
 import { randomUUID } from "node:crypto";
-import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { accessSync, closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { loadConfig } from "./config";
+import { unifiedDataRoot } from "./storage/root";
 
 export const TMP_GENERATION_FILE = ".kanban-tmp-generation";
+export const CARD_WORK_DIR = ".kanban-work";
+export interface CardTmpContext {
+  project?: string;
+  workspacePath?: string | null;
+}
+
+function projectSegment(project?: string): string {
+  const name = project?.trim() || "unassigned";
+  return /^\.+$/.test(name) ? name.replaceAll(".", "%2E") : encodeURIComponent(name);
+}
+
+export function cardTmpFallbackRoot(project?: string): string {
+  return join(unifiedDataRoot(), "work", projectSegment(project));
+}
+
+/** Configured project directory wins over a card's disposable checkout. */
+export function cardTmpWorkspace(context: CardTmpContext): string | null {
+  let configured: string | undefined;
+  if (context.project) configured = loadConfig().projects?.[context.project]?.workspacePath;
+  const value = (configured ?? context.workspacePath)?.trim().replace(/^dir:/, "");
+  return value && isAbsolute(value) ? resolve(value) : null;
+}
+
+/** Discovery never creates a directory or changes repository files. */
+export function cardTmpRoots(context: CardTmpContext = {}): string[] {
+  const override = process.env.KANBAN_TMP_ROOT?.trim();
+  const workspace = cardTmpWorkspace(context);
+  return [...new Set([
+    ...(override ? [resolve(override)] : []),
+    ...(workspace ? [join(workspace, CARD_WORK_DIR)] : []),
+    cardTmpFallbackRoot(context.project),
+  ])];
+}
+
+function excludePath(workspace: string): string {
+  // Git resolves the common info/exclude correctly for both normal repos and linked worktrees.
+  const top = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: workspace, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5_000 }).trim();
+  if (realpathSync(top) !== realpathSync(workspace)) throw new Error("project workspace is not a repository root");
+  return execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], {
+    cwd: workspace, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5_000,
+  }).trim();
+}
+
+function writableWorkspace(workspace: string): boolean {
+  try {
+    accessSync(workspace, constants.W_OK);
+    const exclude = excludePath(workspace);
+    const info = lstatSync(exclude, { throwIfNoEntry: false });
+    if (info && (!info.isFile() || info.nlink !== 1)) return false;
+    accessSync(info ? exclude : dirname(exclude), constants.W_OK);
+    return true;
+  } catch { return false; }
+}
+
+/** Add only a local ignore rule, preserving the file's existing contents. Never follow links. */
+function ensureWorkspaceExclude(workspace: string): void {
+  const path = excludePath(workspace);
+  const fd = openSync(path, constants.O_RDWR | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
+  try {
+    const info = fstatSync(fd);
+    if (!info.isFile() || info.nlink !== 1) throw new Error("unsafe repository exclude");
+    const text = readFileSync(fd, "utf8");
+    if (!text.split(/\r?\n/).includes(`${CARD_WORK_DIR}/`)) {
+      writeFileSync(fd, `${text && !text.endsWith("\n") ? "\n" : ""}${CARD_WORK_DIR}/\n`);
+    }
+  } finally { closeSync(fd); }
+}
+
+function makeRealDirectory(path: string): void {
+  const before = lstatSync(path, { throwIfNoEntry: false });
+  if (before && !before.isDirectory()) throw new Error("card work path is not a real directory");
+  mkdirSync(path, { recursive: true, mode: 0o700 });
+  if (!lstatSync(path).isDirectory()) throw new Error("card work path is not a real directory");
+}
 
 /** Missing markers are legacy directories. Unreadable or unsafe markers fail closed. */
 export function cardTmpGeneration(dir: string): string | null {
@@ -21,22 +98,40 @@ export function cardTmpGeneration(dir: string): string | null {
   } finally { closeSync(fd); }
 }
 
-/** Where per-card temp directories live. Tests point this at a temp dir with KANBAN_TMP_ROOT. */
-export function cardTmpRoot(): string {
-  return process.env.KANBAN_TMP_ROOT?.trim() || "/tmp";
+/** Prefer a writable Git project; otherwise use the per-project plugin-data work directory. */
+export function cardTmpRoot(context: CardTmpContext = {}): string {
+  const override = process.env.KANBAN_TMP_ROOT?.trim();
+  if (override) return resolve(override);
+  const workspace = cardTmpWorkspace(context);
+  return workspace && writableWorkspace(workspace) ? join(realpathSync(workspace), CARD_WORK_DIR) : cardTmpFallbackRoot(context.project);
 }
 
 /**
- * Env that sends an agent's temp files into /tmp/<card code>/, the one directory the /tmp cleanup
- * collects 24 hours after the card ends. Cards without a display code get nothing: `#12` is not a safe
- * directory name. A directory that cannot be made must not stop the agent from starting.
+ * Each card gets its own project work directory and atomic generation marker.
+ * An explicit override is authoritative; project failures try the plugin-data work directory.
+ * Resume rotates the recorded directory used by the original agent.
  */
-export function cardTmpEnv(code: string): Record<string, string> {
+export function cardTmpEnv(code: string, context: CardTmpContext = {}, existingDir?: string | null): Record<string, string> {
   if (!/^[A-Za-z0-9]+_\d+$/.test(code)) return {};
-  const dir = join(cardTmpRoot(), code);
+  if (existingDir && (!isAbsolute(existingDir) || basename(existingDir) !== code)) return {};
+  const root = existingDir ? dirname(existingDir) : cardTmpRoot(context);
+  const env = prepare(root, code, context, Boolean(existingDir));
+  if (env.KANBAN_TMP || existingDir || process.env.KANBAN_TMP_ROOT?.trim() || root === cardTmpFallbackRoot(context.project)) return env;
+  return prepare(cardTmpFallbackRoot(context.project), code, context, false);
+}
+
+function prepare(root: string, code: string, context: CardTmpContext, resuming: boolean): Record<string, string> {
+  const dir = join(root, code);
   try {
-    mkdirSync(dir, { recursive: true });
-    if (!lstatSync(dir).isDirectory()) throw new Error("card tmp path is not a real directory");
+    if (!resuming && !process.env.KANBAN_TMP_ROOT?.trim()) {
+      if (root !== cardTmpFallbackRoot(context.project)) {
+        const workspace = cardTmpWorkspace(context);
+        if (!workspace) throw new Error("project workspace missing");
+        ensureWorkspaceExclude(workspace);
+      }
+    }
+    makeRealDirectory(root);
+    makeRealDirectory(dir);
     const marker = join(dir, TMP_GENERATION_FILE);
     const existing = lstatSync(marker, { throwIfNoEntry: false });
     if (existing && !existing.isFile()) throw new Error("unsafe tmp generation marker");

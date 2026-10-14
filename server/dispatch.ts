@@ -17,7 +17,7 @@ import { confirmEffort, effortCatalogHold, effortForOwnRole, effortReason } from
 import { loadDispatchMatrix, type MatrixLoad } from "./matrix";
 import type { EffortSource, RouteInput } from "./routing";
 import { cardMark } from "./card-ref";
-import { cardTmpEnv } from "./card-tmp";
+import { prepareTaskTmpEnv } from "./card-tmp-record";
 import { KanbanError } from "./errors";
 import { avoidedPools } from "./failures";
 import { AGENT_CREATING, createRecoverAfterMs, findLostCardAgents, type CreatingRecord } from "./lost-agent";
@@ -1013,7 +1013,7 @@ export async function startTask(
         : t("dispatch.reworkIntro", { phrase: returnPhrase(id), round: task.review_round });
     try {
       // Resume reuses the original agent's TMPDIR; rotate its generation before sending work.
-      cardTmpEnv(cardMark(id));
+      prepareTaskTmpEnv(getTask(id), actor);
       await launcher.send(task.executor_agent_id, `${intro}\n\n${note}`);
     } catch (err) {
       revert(id, "rework", "running");
@@ -1242,7 +1242,7 @@ export async function startTask(
         KANBAN_TOKEN: token,
         KANBAN_TASK: String(id),
         KANBAN_ROLE: role,
-        ...cardTmpEnv(cardMark(id)),
+        ...prepareTaskTmpEnv(getTask(id), actor),
         ...((task.workspace_kind === "worktree" || task.workspace_kind === "lane") && role === "executor" ? { KANBAN_WORKTREE: "1" } : {}),
       },
       config,

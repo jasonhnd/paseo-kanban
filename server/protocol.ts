@@ -9,7 +9,7 @@ export const PROTOCOL_VERSION = "kanban/v1";
 // - progress-note: the leader is woken by the board, so ending its turn to wait is normal for it.
 // - no-wait-rule: workers are never woken again once their turn ends (Codex background sessions and
 //   Claude ScheduleWakeup do not wake them), so ending the turn to wait is the main cause of nudged cards.
-// - tmp-home: dispatch sets TMPDIR and KANBAN_TMP to /tmp/<card>/; the cleanup collects it 24 hours after the card ends.
+// - tmp-home: dispatch sets TMPDIR and KANBAN_TMP to the project’s .kanban-work/<card>/; the cleanup collects it 24 hours after the card ends.
 // - db-readonly: open the production database in place with ro+immutable, never copy the whole database.
 
 /** Sent with every board nudge: a nudged agent is often waiting on a background result. */

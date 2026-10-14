@@ -22,8 +22,8 @@ describe("MCP inject gate", () => {
   it("requires executor and batch temporary files outside the checkout and a clean handoff", () => {
     for (const role of ["executor", "batch"]) {
       const rules = protocolFor(role);
-      assert.match(rules, /\u6240\u6709\u4e34\u65f6\u6587\u4ef6.*\u90fd\u653e\u8fdb \/tmp\/<\u672c\u5361\u5361\u53f7>\//);
-      assert.match(rules, /\u4e0d\u8981\u7559\u5728\u5de5\u4f5c\u76ee\u5f55/);
+      assert.match(rules, /\u6240\u6709\u4e34\u65f6\u6587\u4ef6.*KANBAN_TMP/);
+      assert.match(rules, /\u4e0d\u8981\u5199\u8fdb\u4ed3\u5e93\u7684\u8ddf\u8e2a\u6587\u4ef6/);
       assert.match(rules, /git status --short \u5fc5\u987b\u4e3a\u7a7a\uff08\u672a\u8ddf\u8e2a\u6587\u4ef6\u4e5f\u4e0d\u884c\uff09\uff0c\u5426\u5219\u5148\u6e05\u6389\u6216\u79fb\u51fa/);
     }
     const batch = protocolFor("batch");
@@ -34,12 +34,14 @@ describe("MCP inject gate", () => {
   it("tells every role to keep scratch files under its own card and to read the production database in place", () => {
     for (const role of ["executor", "batch", "reviewer", "reader", "decision"]) {
       const rules = protocolFor(role);
-      assert.match(rules, /\u6d4f\u89c8\u5668 --user-data-dir、mktemp.*\u90fd\u653e\u8fdb \/tmp\/<\u672c\u5361\u5361\u53f7>\//, role);
+      assert.match(rules, /\u6d4f\u89c8\u5668 --user-data-dir、mktemp.*KANBAN_TMP/, role);
       assert.match(rules, /TMPDIR \u548c KANBAN_TMP/, role);
+      assert.match(rules, /\.kanban-work\//, role);
+      assert.doesNotMatch(rules, /\/tmp\//, role);
       assert.match(rules, /\u4e0d\u8981\u53e6\u8d77\u540d\u5b57/, role);
       assert.match(rules, /mode=ro&immutable=1/, role);
       assert.match(rules, /\u4e0d\u8981\u590d\u5236\u6574\u5e93/, role);
-      assert.match(rules, /\u53ea\u590d\u5236 kanban\.db \u8fd9\u4e00\u4e2a\u6587\u4ef6\u5230 \/tmp\/<\u672c\u5361\u5361\u53f7>\/ \u4e0b/, role);
+      assert.match(rules, /\u53ea\u590d\u5236 kanban\.db \u8fd9\u4e00\u4e2a\u6587\u4ef6\u5230 \$KANBAN_TMP\/ \u4e0b/, role);
     }
     assert.match(protocolFor("batch"), /^10\. \u6d3b\u4e0d\u5728\u672c\u4ed3\u5e93\u65f6/m);
   });

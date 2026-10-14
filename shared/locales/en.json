@@ -192,7 +192,7 @@
   "boardViews.quiet.label": "Waiting for merge, {count} card(s)",
   "boardViews.quiet.toggle": "{action}: waiting for merge, {count} card(s)",
   "briefFile.error.forbidden": "Only <leader> can use --brief-file.",
-  "briefFile.error.outside": "--brief-file must point to a file in the current repository or under /tmp: {path}",
+  "briefFile.error.outside": "--brief-file must point to a file in the current repository or an allowed card work directory: {path}",
   "briefFile.error.tooLarge": "--brief-file must be a regular file of at most {max} bytes: {path}",
   "briefFile.error.unreadable": "Cannot read --brief-file: {path}",
   "cardCode.noFreeCode": "Short code {code} has no free variant left",

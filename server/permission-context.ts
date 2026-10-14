@@ -7,6 +7,7 @@ import { getTask } from "./store";
 import { loadConfig } from "./config";
 import { cardMarkOf } from "./card-ref";
 import { cardTmpRoot } from "./card-tmp";
+import { cardTmpTaskContext, preparedCardTmpDir } from "./card-tmp-record";
 import type { TaskReadScope } from "./read-scope";
 
 export interface PermissionContext {
@@ -36,7 +37,7 @@ export function permissionContext(agentId: string): PermissionContext {
     let temporaryRoot: string | undefined;
     const code = cardMarkOf(task, config);
     if (/^[A-Za-z0-9]+_\d+$/.test(code)) {
-      const tmp = join(cardTmpRoot(), code);
+      const tmp = preparedCardTmpDir(task.id, code) ?? join(cardTmpRoot(cardTmpTaskContext(task)), code);
       // Never inherit the process's TMPDIR/HOME as a read grant. Only this code.
       const stat = lstatSync(tmp, { throwIfNoEntry: false });
       if (stat?.isDirectory() && !stat.isSymbolicLink()) temporaryRoot = tmp;

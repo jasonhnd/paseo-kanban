@@ -50,7 +50,7 @@ function rootsOf(scope: TaskReadScope | undefined): string[] | null {
   if (scope.temporaryRoot !== undefined) {
     if (!isAbsolute(scope.temporaryRoot) || !lstatSync(scope.temporaryRoot).isDirectory()) return null;
     const real = canonical(scope.temporaryRoot);
-    if (!real || !within(tmp, real) || samePath(real, tmp) || samePath(real, home)) return null;
+    if (!real || samePath(real, resolve("/")) || samePath(real, tmp) || samePath(real, home)) return null;
     // The host derives this one card directory. In a fully isolated test it
     // can contain HOME; HOME itself is explicitly excluded by pathAllowed.
     roots.push(real);

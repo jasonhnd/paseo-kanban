@@ -10,7 +10,7 @@ const runner = new URL("../bin/test.mjs", import.meta.url);
 const phasesModule = new URL("./helpers/test-phases.mjs", import.meta.url);
 const roots: string[] = [];
 after(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-function runFixture(failure?: "functional" | "performance", inheritedLegacy?: string | null) {
+function runFixture(failure?: "functional" | "performance" | "pollution", inheritedLegacy?: string | null) {
   const root = mkdtempSync(join(tmpdir(), "kanban-test-runner-"));
   roots.push(root);
   mkdirSync(join(root, "test"));
@@ -28,7 +28,7 @@ function runFixture(failure?: "functional" | "performance", inheritedLegacy?: st
     writeFileSync(join(root, "test", `${name}.test.ts`), `
       import { test } from "node:test";
       import assert from "node:assert/strict";
-      import { existsSync, writeFileSync } from "node:fs";
+      import { existsSync, mkdirSync, writeFileSync } from "node:fs";
       import { join } from "node:path";
       test("${name} worker", async () => {
         await new Promise(resolve => setTimeout(resolve, ${delay}));
@@ -37,6 +37,7 @@ function runFixture(failure?: "functional" | "performance", inheritedLegacy?: st
         writeFileSync("${name}.tmpdir", process.env.TMPDIR ?? "");
         assert.ok(process.env.KANBAN_TMP_ROOT?.startsWith(process.env.TMPDIR + "/"), "card roots must be owned by this test run");
         writeFileSync("${name}.card-root", process.env.KANBAN_TMP_ROOT);
+        ${failure === "pollution" && name === "fast" ? 'mkdirSync(".kanban-work/TEST_0500", { recursive: true });' : ""}
         writeFileSync("${name}.test-marker", process.env.KANBAN_TEST_TMP ?? "");
         // Tests may unset the primary overrides, but the legacy fallback must remain isolated.
         delete process.env.ROLES_STATE_DIR;
@@ -92,6 +93,12 @@ it("test runner waits for all parallel workers before the isolated performance p
   assert.equal(readFileSync(join(result.root, "performance"), "utf8"), "ran");
   assert.equal(readFileSync(join(result.root, "tick-scale"), "utf8"), "ran");
 });
+it("test runner rejects a whole phase that adds a card directory in its default project root", () => {
+  const result = runFixture("pollution");
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /card-root isolation failed/);
+  assert.equal(existsSync(join(result.root, "performance")), false);
+});
 it("test runner propagates functional failure and does not start performance", () => {
   const result = runFixture("functional");
   assert.equal(result.status, 1, result.stdout + result.stderr);
@@ -114,6 +121,12 @@ it("test runner gives the run a private TMPDIR and removes it afterwards", () =>
   assert.equal(readFileSync(join(result.root, "slow.test-marker"), "utf8"), slow);
   assert.match(fast, /kanban-test-\d+-/);
   assert.notEqual(fast, process.env.TMPDIR);
+  for (const worker of ["fast", "slow"]) {
+    const cardRoot = readFileSync(join(result.root, `${worker}.card-root`), "utf8");
+    assert.ok(cardRoot.startsWith(fast + "/"));
+    assert.notEqual(cardRoot, process.env.KANBAN_TMP_ROOT);
+    assert.equal(existsSync(cardRoot), false);
+  }
   assert.equal(existsSync(fast), false);
 });
 it("test runner isolates the legacy fallback with an unset or populated parent override", () => {
@@ -143,7 +156,7 @@ it("coverage keeps c8 data and test temp dirs under one root that is removed aft
   roots.push(root);
   for (const dir of ["bin", "test/helpers", "server", "shared"]) mkdirSync(join(root, dir), { recursive: true });
   const repo = new URL("..", import.meta.url).pathname;
-  for (const file of ["bin/coverage.mjs", "test/helpers/test-tmp.mjs", "test/helpers/coverage-phases.mjs", "test/helpers/test-phases.mjs"]) copyFileSync(join(repo, file), join(root, file));
+  for (const file of ["bin/coverage.mjs", "test/helpers/test-tmp.mjs", "test/helpers/card-root-audit.mjs", "test/helpers/coverage-phases.mjs", "test/helpers/test-phases.mjs"]) copyFileSync(join(repo, file), join(root, file));
   symlinkSync(join(repo, "node_modules"), join(root, "node_modules"));
   writeFileSync(join(root, "server/mod.ts"), "export const value = 1;\n");
   writeFileSync(join(root, "test/a.test.ts"), `

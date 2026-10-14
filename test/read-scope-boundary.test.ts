@@ -97,6 +97,22 @@ it("production hook obtains roots only from a live DB binding/config, honors rev
   assert.equal(permissionContext("unbound-reader").readScope, undefined);
 });
 
+it("host-granted project work roots are readable without granting their parents or other cards", () => {
+  const own = join(dir, "project", ".kanban-work", "TEST_0406");
+  const other = join(dir, "project", ".kanban-work", "TEST_0407");
+  for (const path of [own, other]) {
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, "sentinel.txt"), "card fixture");
+  }
+  const ctx = { kanban: true, role: "reader", autoAccept: true, readScope: { ...scope, temporaryRoot: own } };
+  assert.equal(decidePermission({ ...ctx, request: read(join(own, "sentinel.txt")) }).action, "allow");
+  assert.equal(decidePermission({ ...ctx, request: read(join(other, "sentinel.txt")) }).action, "deny");
+  assert.equal(decidePermission({ ...ctx, request: search(join(dir, "project")) }).action, "deny");
+  for (const temporaryRoot of ["/", homedir(), "/tmp"]) {
+    assert.equal(decidePermission({ ...ctx, readScope: { ...scope, temporaryRoot }, request: read(join(own, "sentinel.txt")) }).action, "deny");
+  }
+});
+
 it("card temporary root never grants its isolated HOME, while ordinary workspace/temp/native reads remain usable", () => {
   const homeBefore = process.env.HOME;
   const temporaryRoot = join(dir, "artificial-card-tmp"); mkdirSync(temporaryRoot);

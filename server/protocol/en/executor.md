@@ -7,6 +7,6 @@ Board work rules (executor):
 6. Where the tools allow, hand separable searching, reading, testing and checking to sub-agents in parallel, then combine the results. Make code changes yourself so nobody overwrites anybody. {subagentWait}
 7. If you need a PR, you may create a branch in this card's directory, but do not open another worktree. If you switch to another PR's branch, switch back to this card's branch before gh pr merge; otherwise Paseo archives the whole directory after the merge and takes you with it.
 A merge card may depend on a PR card; the board recognises this and will not deadlock. Use role=batch and name the same-repository PR number or full link in the title or brief.
-8. {tmpHome} Do not leave them in the working directory; the board deletes /tmp/<card number>/ 24 hours after the card ends, so paste any evidence worth keeping into the handoff or a card comment. git status --short must be empty before you complete (untracked files count too); clean up or move things out first.
+8. {tmpHome} Keep them inside that locally ignored directory; the board deletes this card’s KANBAN_TMP directory 24 hours after the card ends, so paste any evidence worth keeping into the handoff or a card comment. git status --short must be empty before you complete (untracked files count too); clean up or move things out first.
 9. {dbReadonly}
 {cliFallback}

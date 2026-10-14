@@ -188,9 +188,29 @@ describe("per-card TMPDIR", () => {
     await startTask(task.id, launcher, "test", options);
     generation = cardTmpGeneration(path);
     assert.ok(generation);
+    process.env.KANBAN_TMP_ROOT = join(dir, "changed-root");
     getDb().prepare("UPDATE tasks SET status = 'rework' WHERE id = ?").run(task.id);
     appendEvent(task.id, "request_changes", "running", "rework", "test", { reason: "demo fixture" });
-    await startTask(task.id, launcher, "test", options);
-    assert.equal(sends, 1);
+    try {
+      await startTask(task.id, launcher, "test", options);
+      assert.equal(sends, 1);
+      assert.equal(existsSync(join(process.env.KANBAN_TMP_ROOT, cardMark(task.id))), false);
+    } finally { process.env.KANBAN_TMP_ROOT = tmpRoot; }
+  });
+
+  it("uses Git's shared info/exclude for a linked project workspace", () => {
+    const repo = join(dir, "linked-source");
+    const linked = join(dir, "linked-project");
+    execFileSync("git", ["init", "-q", repo]);
+    execFileSync("git", ["-C", repo, "-c", "user.name=paseo-fleet contributors", "-c", "user.email=noreply@example.invalid", "commit", "--allow-empty", "-qm", "fixture"]);
+    execFileSync("git", ["-C", repo, "worktree", "add", "--detach", linked]);
+    const prior = process.env.KANBAN_TMP_ROOT;
+    delete process.env.KANBAN_TMP_ROOT;
+    try {
+      const env = cardTmpEnv("TEST_0404", { workspacePath: linked });
+      assert.equal(env.KANBAN_TMP, join(realpathSync(linked), ".kanban-work", "TEST_0404"));
+      assert.match(readFileSync(join(repo, ".git/info/exclude"), "utf8"), /^\.kanban-work\/$/m);
+      assert.equal(execFileSync("git", ["status", "--short"], { cwd: linked, encoding: "utf8" }), "");
+    } finally { process.env.KANBAN_TMP_ROOT = prior; }
   });
 });

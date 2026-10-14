@@ -192,7 +192,7 @@
   "boardViews.quiet.label": "等合并 {count} 张",
   "boardViews.quiet.toggle": "{action}：等合并 {count} 张",
   "briefFile.error.forbidden": "只有<leader>能用 --brief-file。",
-  "briefFile.error.outside": "--brief-file 只能指向当前仓库或 /tmp 下的文件：{path}",
+  "briefFile.error.outside": "--brief-file 只能指向当前仓库或允许的卡片工作目录下的文件：{path}",
   "briefFile.error.tooLarge": "--brief-file 必须是不超过 {max} 字节的普通文件：{path}",
   "briefFile.error.unreadable": "--brief-file 读不到：{path}",
   "cardCode.noFreeCode": "简称 {code} 没有可用的不冲突写法",

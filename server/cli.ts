@@ -3,7 +3,7 @@ import { leaderActionNote } from "./protocol";
 import { protocolText } from "./protocol-text";
 import { t } from "../shared/i18n";
 import { applyServerLanguage } from "./language";
-import { readBriefFile } from "./brief-file";
+import { briefFileTemporaryRoots, readBriefFile } from "./brief-file";
 import { pathToFileURL } from "node:url";
 import { createPaseoClient } from "@getpaseo/client";
 import { formatAudit, performAudit, type AuditView } from "./audit";
@@ -413,7 +413,7 @@ async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEn
     family: parsed.flag("family"),
     idempotency: parsed.flag("idempotency"),
     brief: parsed.flag("brief-file")
-      ? `${t("cli.briefSource", { path: parsed.flag("brief-file") as string })}\n\n${readBriefFile(parsed.flag("brief-file") as string, identity.role)}`
+      ? `${t("cli.briefSource", { path: parsed.flag("brief-file") as string })}\n\n${readBriefFile(parsed.flag("brief-file") as string, identity.role, process.cwd(), briefFileTemporaryRoots(parsed.flag("project")))}`
       : parsed.flag("brief"),
   };
   return handleTool(tool, args, env.KANBAN_TOKEN?.trim() || null, identity, {
