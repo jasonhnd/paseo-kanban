@@ -3,10 +3,18 @@ import { unifiedDataRoot } from "./storage/root";
 import { homedir, tmpdir } from "node:os";
 import { t } from "../shared/i18n";
 import * as pathFs from "./perf-fs";
-import { existsSync as testExistsSync, readFileSync as testReadFileSync, statSync as testStatSync } from "node:fs";
+import { existsSync as testExistsSync, lstatSync as testLstatSync, readFileSync as testReadFileSync, readlinkSync as testReadlinkSync, realpathSync as testRealpathSync, statSync as testStatSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { paseoHome, PLUGIN_IDS, type PluginId } from "./contract";
+
+/** Raw node:fs for the test-data guard. A namespace import would trip DEP0176 in the host bundle. */
+const testIo = {
+  existsSync: testExistsSync,
+  lstatSync: testLstatSync,
+  readlinkSync: testReadlinkSync,
+  realpathSync: testRealpathSync,
+};
 
 export const HOME = homedir();
 
@@ -95,7 +103,7 @@ export function assertTestDataPath(path: string): void {
     throw new Error(`Tests may not touch unisolated board data: ${path}; set KANBAN_DATA_DIR to a temporary directory.`);
   };
   if (!process.env.KANBAN_DATA_DIR?.trim()) refuse();
-  const canonical = (value: string) => canonicalPath(value, new Set(), testFs);
+  const canonical = (value: string) => canonicalPath(value, new Set(), testIo);
   const inside = (target: string, parent: string) => {
     const rel = relative(parent, target);
     return rel === "" || (!isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`));
