@@ -16,6 +16,8 @@
 
 ![显示合成额度套餐的 Fleet 页面](../../assets/quota.png)
 
+卡片的临时内容现在使用项目下的 `.kanban-work/<卡号>/`；配置、回退与清理见[卡片工作目录](CARD-WORK-DIRECTORIES.md)。
+
 ## Paseo 0.11.2 的 Command Center 与图标
 
 macOS 按 **⌘K**（Windows／Linux 为 Ctrl+K）搜索 **打开项目看板**；标题随插件的中英文语言设置更新。官方 **0.11.2 Web UI** 只在当前页面具有本安装的宿主上下文时显示该动作，例如已打开的插件页或活动工作区。没有宿主上下文的空首页**不显示**该动作；离开插件页回到空首页后也不会显示。先点侧栏 **Paseo Kanban** 打开看板。在 Settings 选择宿主，并不代表每个页面都有该上下文。见[兼容性](COMPATIBILITY.md#command-center-与-manifest-图标)。

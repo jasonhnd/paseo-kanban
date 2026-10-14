@@ -1,0 +1,69 @@
+# Card work directories
+
+Each started executor, reviewer, reader, decision or batch card receives an absolute
+`KANBAN_TMP` and a matching `TMPDIR` with a trailing slash. Put logs, copied files,
+build output, screenshots, browser profiles and other disposable artifacts there.
+Use the current card's display code; parallel cards have separate directories.
+
+The default is `<project workspace>/.kanban-work/<card code>/`. The board first
+uses `projects.<project>.workspacePath` in `kanban.config.json` (the older
+`workspace` spelling also works). Without a configured directory it uses the
+card's original repository directory, including the recorded source repository
+of a temporary worktree. For example:
+
+```json
+{
+  "projects": {
+    "demo": {
+      "defaultWorkspace": "dir",
+      "workspacePath": "/path/to/<project-workspace>/demo"
+    }
+  }
+}
+```
+
+The workspace must be a writable Git repository root. The board adds
+`.kanban-work/` to Git's local `info/exclude`, preserving existing rules. Git
+resolves that file through the common directory for linked worktrees. No tracked
+ignore file is edited. New card directories and generation markers are created
+with owner-only permissions.
+
+If the project is not a Git repository, is missing, or its scratch/exclude path
+cannot be written safely, the board uses
+`<plugin-data-root>/work/<project>/<card code>/`. Project names are encoded as
+one directory segment. There is no system temporary-directory fallback.
+`KANBAN_TMP_ROOT` still explicitly selects `<override>/<card code>/`; an unusable
+explicit override is reported and does not silently pick another root.
+
+The actual prepared path is recorded in card events. Resuming an existing agent
+rotates the generation at that path even after a config or override change.
+Reader/decision permissions grant only that card directory alongside their
+existing workspace/document scope, never its parent or another card's directory.
+A supervisor's `--brief-file` may read inside the command's Git repository or an
+allowed configured/fallback/explicit work root. Real paths are checked before
+reading, so an escaping symlink remains refused. Arbitrary system temp files are
+no longer accepted by default.
+
+Done/archived card directories remain eligible for cleanup after 24 hours. The
+existing ownership, agent-cwd, Git, activity/generation, retirement-journal and
+per-round limits remain. Config changes do not strand recorded paths. Default
+cleanup does not follow a replaced work-root symlink. Preserve lasting evidence
+in the handoff or another authorized durable location before completion.
+
+## Tests and switching an existing installation
+
+The full test runner overrides inherited `KANBAN_TMP_ROOT` with a run-owned root;
+each test worker preloads its own explicit card root and removes it afterwards.
+CLI/fake-launcher children inherit it. The runner compares actual default-root
+card-directory names before and after each phase and refuses newly added roots.
+The negative audit fixture uses its own disposable project directory.
+
+Upgrade only through the separately authorized installation procedure. Confirm
+project workspace settings and writable local excludes, remove an old explicit
+`KANBAN_TMP_ROOT` if the new default is wanted, and inspect the first new card's
+environment and `card_tmp_prepared` event. Already running agents retain the
+environment with which they were created; existing briefs and protocols are not
+rewritten. Legacy system-temp directories without prepared-path events are not
+automatically imported into the new cleanup roots. Inventory them separately
+before any authorized cleanup. No production migration or release is performed
+by this source change.

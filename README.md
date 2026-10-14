@@ -83,6 +83,8 @@ Installation performs locked dependency preparation and generates the command bu
 
 Use [workflow](docs/WORKFLOW.md) and [troubleshooting](docs/COMPATIBILITY.md) if dispatch is held. Never share authentication files, raw board databases, backups or unredacted doctor output in an issue.
 
+Card scratch uses the project’s `.kanban-work/<card code>/`; see [card work directories](docs/CARD-WORK-DIRECTORIES.md) for configuration, fallback and cleanup.
+
 ## Update, disable or remove
 
 Back up state and record the current full revision, source, installed path and enabled state first. After RC publication is confirmed, preview and apply an **explicit ref each time**:

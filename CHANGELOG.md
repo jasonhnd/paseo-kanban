@@ -3,6 +3,19 @@
 The single plugin has one version and CHANGELOG. Distribution is through Git.
 Six release candidates are recorded here. `0.1.0-rc.6` is the current unpublished candidate, pending independent review. Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
 
+## 0.1.0-rc.7 — unreleased source preparation
+
+No rc.7 version bump, tag, push or Release is made by this preparation; package metadata remains rc.6.
+
+### Changed
+
+- Per-card scratch defaults to the configured project's `.kanban-work/<card code>/`, locally excluded by Git. A missing, non-Git or unwritable project falls back to `<plugin-data-root>/work/<project>/<card code>/`; explicit `KANBAN_TMP_ROOT` remains supported. Recorded paths preserve resume generations and delayed cleanup after settings change.
+- Supervisor brief-file boundaries and reader/decision card scope follow the new work roots. English/Chinese worker protocols and documentation direct temporary artifacts to the card's injected directory.
+
+### Fixed
+
+- Full test phases and workers explicitly isolate `KANBAN_TMP_ROOT`, including fake-launcher and CLI children. Default-root name audits reject test phases that leave new card directories outside their owned roots.
+
 ## 0.1.0-rc.6 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.6`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.5 tags are never moved.
