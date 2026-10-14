@@ -14,6 +14,7 @@ No rc.7 version bump, tag, push or Release is made by this preparation; package 
 
 ### Fixed
 
+- Project settings and short-code updates retain the configured work directory, including the legacy `workspace` alias; Chinese worker rules retain the reviewed-card/name restrictions and identify the board as the local-exclude writer.
 - Full test phases and workers explicitly isolate `KANBAN_TMP_ROOT`, including fake-launcher and CLI children. Default-root name audits reject test phases that leave new card directories outside their owned roots.
 
 ## 0.1.0-rc.6 — pending review and publication

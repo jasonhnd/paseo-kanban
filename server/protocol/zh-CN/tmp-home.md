@@ -1,1 +1,1 @@
-所有临时文件（日志、副本、构建产物、截图、浏览器 --user-data-dir、mktemp）都放进 KANBAN_TMP/。TMPDIR 和 KANBAN_TMP 默认 <项目 workspace>/.kanban-work/<本卡卡号>/；仓库不可写或非 Git 时用 <plugin-data-root>/work/<项目>/<本卡卡号>/，KANBAN_TMP_ROOT 可改根。缺失时照此建。只用本卡卡号，不要另起名字。Git 本地 exclude 加 .kanban-work/。
+所有临时文件（日志、副本、构建产物、截图、浏览器 --user-data-dir、mktemp）都放进 TMPDIR 和 KANBAN_TMP。默认项目 .kanban-work/<卡号>/；非 Git/不可写用 <plugin-data-root>/work/<项目>/<卡号>/，KANBAN_TMP_ROOT 可改根。只用本卡号，不要另起名字（不要用被审卡、别的卡的卡号，也不要 kbn0074-after、xxx-review-随机串）。看板写本地 exclude，不改跟踪的忽略文件。

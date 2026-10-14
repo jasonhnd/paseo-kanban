@@ -769,6 +769,7 @@ export function setProjectWorkspace(
     const alwaysTemp = patch.alwaysTemp ?? current.alwaysTemp === true;
     const next: ProjectWorkspace = { defaultWorkspace: mode, baseBranch: base, worktreeLanes: lanes, lanesEnabled, parallel };
     if (stored?.code) next.code = stored.code;
+    if (stored?.workspacePath) next.workspacePath = stored.workspacePath;
     if (alwaysTemp) next.alwaysTemp = true;
     if ((patch.waitParentPr ?? current.waitParentPr) === false) next.waitParentPr = false;
     config.projects = {
@@ -797,6 +798,7 @@ export function setProjectCode(project: string, code: string): KanbanConfig {
       ...(config.projects ?? {}),
       [name]: {
         defaultWorkspace: stored?.defaultWorkspace ?? "dir",
+        ...(stored?.workspacePath ? { workspacePath: stored.workspacePath } : {}),
         baseBranch: current.baseBranch,
         worktreeLanes: current.worktreeLanes,
         lanesEnabled: current.lanesEnabled,
