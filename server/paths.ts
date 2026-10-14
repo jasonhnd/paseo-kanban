@@ -3,7 +3,7 @@ import { unifiedDataRoot } from "./storage/root";
 import { homedir, tmpdir } from "node:os";
 import { t } from "../shared/i18n";
 import * as pathFs from "./perf-fs";
-import * as testFs from "node:fs";
+import { existsSync as testExistsSync, readFileSync as testReadFileSync, statSync as testStatSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { paseoHome, PLUGIN_IDS, type PluginId } from "./contract";
@@ -58,7 +58,7 @@ export function dataDirChoice(env: NodeJS.ProcessEnv = process.env): DataDirChoi
   if (explicit) return chooseDataDir({ env, home: HOME, pluginRoot: pluginRoot(env), exists: () => false });
   const key = JSON.stringify([HOME, env.PASEO_HOME ?? null, env.KANBAN_HOME ?? null, env.KANBAN_PASEO_CONFIG ?? null]);
   if (startupChoice?.key !== key) {
-    startupChoice = { key, choice: chooseDataDir({ env, home: HOME, pluginRoot: pluginRoot(env), exists: testFs.existsSync }) };
+    startupChoice = { key, choice: chooseDataDir({ env, home: HOME, pluginRoot: pluginRoot(env), exists: testExistsSync }) };
   }
   return startupChoice.choice;
 }
@@ -131,7 +131,7 @@ let pluginsCache: { path: string; mtimeMs: number; size: number; plugins: Record
 function registeredPlugins(path: string): Record<string, unknown> | null {
   let stat: { mtimeMs: number; size: number };
   try {
-    stat = testFs.statSync(path);
+    stat = testStatSync(path);
   } catch {
     pluginsCache = null;
     return null;
@@ -143,7 +143,7 @@ function registeredPlugins(path: string): Record<string, unknown> | null {
   }
   let plugins: Record<string, unknown> | null = null;
   try {
-    const parsed: unknown = JSON.parse(testFs.readFileSync(path, "utf8"));
+    const parsed: unknown = JSON.parse(testReadFileSync(path, "utf8"));
     const value = parsed && typeof parsed === "object" ? (parsed as { plugins?: unknown }).plugins : undefined;
     plugins = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
   } catch {
