@@ -50,6 +50,9 @@ function reply(data: string, send: (data: string) => void): void {
 async function withRuntime(work: (fixture: any) => Promise<void>): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "single-plugin-host-"));
   const env = isolatedEnvironment(dir);
+  // The data-dir guard accepts a board only inside TMPDIR. The shared helper puts it beside that directory.
+  env.KANBAN_DATA_DIR = join(dir, "tmp", "board");
+  await mkdir(env.KANBAN_DATA_DIR, { recursive: true });
   // Prevent platform probes even on Darwin. Empty config contains no provider/profile identities.
   env.KANBAN_TEST_TMP = dir;
   const socketServer = new WebSocketServer({ host: "127.0.0.1", port: 0 });
@@ -72,10 +75,12 @@ async function withRuntime(work: (fixture: any) => Promise<void>): Promise<void>
     process.on('exit',()=>writeFileSync(${JSON.stringify(ledger)},JSON.stringify({intervals:active.size})));
   `);
   let child: any, ready: any, exit: { code: number | null; signal: string | null } | null = null;
+  const stderr: Buffer[] = [];
   const logger: any = { child: () => logger, debug() {}, info() {}, warn() {}, error() {} };
   const runtime = new PluginRuntime(logger, "0.11.0", {
     spawnChild() {
       child = fork(workerPath, [], { env, cwd: source, execArgv: ["--import", preload], serialization: "advanced", stdio: ["ignore", "pipe", "pipe", "ipc"] });
+      child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
       child.on("message", (msg: any) => { if (msg.type === "ready") ready = msg; });
       child.on("exit", (code: number | null, signal: string | null) => { exit = { code, signal }; });
       return child;
@@ -94,6 +99,7 @@ async function withRuntime(work: (fixture: any) => Promise<void>): Promise<void>
     if (runtime.catalog().length) await runtime.stopPluginById("paseo-kanban");
     assert.deepEqual(exit, { code: 0, signal: null }, "cleanup must exit naturally before the host force timer");
     assert.deepEqual(JSON.parse(await readFile(ledger, "utf8")), { intervals: 0 }, "all real worker intervals are released");
+    assert.doesNotMatch(Buffer.concat(stderr).toString("utf8"), /DEP0176/);
   } catch (error) {
     console.error(runtime.getLogs("paseo-kanban").map((entry: any) => entry.message).join("\n"));
     throw error;
@@ -147,7 +153,7 @@ test("actual compiled client mounts board/workspace and Fleet tabs, shares setti
       const modules={'react':React,'react/jsx-runtime':jsx,'react-native':RN,'@getpaseo/plugin/client/react-native':RN,'@tanstack/react-query':query,'@getpaseo/plugin':sdk,'@getpaseo/plugin/client':host,'@getpaseo/plugin/client/ui':clientUi,'zod':zod};
       const exports=(0,eval)(globalThis.__compiledClient)(name=>{if(!(name in modules))throw new Error('Unexpected client dependency '+name);return modules[name];});
       const surfaces=new Map(),events=[];const add=kind=>row=>{const key=kind+':'+row.id;if(surfaces.has(key))throw new Error('duplicate surface '+key);surfaces.set(key,row);events.push(['add',key]);return()=>{surfaces.delete(key);events.push(['remove',key]);};};
-      const dispose=exports.default({addScreen:add('screen'),addSidebarItem:add('sidebar'),addWorkspacePanel:add('workspace'),addSettingsScreen:add('settings')});
+      const dispose=exports.default({addScreen:add('screen'),addSidebarItem:add('sidebar'),addSidebarHeaderItem:add('sidebar'),addWorkspacePanel:add('workspace'),addCommandCenterItem:()=>()=>{},addSettingsScreen:add('settings')});
       export {surfaces,events,dispose};
       export function mount(kind,theme){const container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container);const client=new query.QueryClient({defaultOptions:{queries:{retry:false,gcTime:Infinity}}});
         const Component=surfaces.get(kind+':board').Component;const props={theme,layout:{compact:false,platform:'web'},workspaceId:'anonymous-workspace',host:{id:'anonymous-local-host',label:'Anonymous'},navigation:{openAgent(){},openWorkspace(){}}};
@@ -193,5 +199,34 @@ test("actual compiled client mounts board/workspace and Fleet tabs, shares setti
       mounted?.unmount(); host.dispose(); dom.window.close();
       delete global.__hostInvoke; delete global.__compiledClient;
     }
+  });
+});
+
+test("an open client still calls kanban tools on the same MCP url after reload", async () => {
+  await withRuntime(async ({ runtime, env }) => {
+    const call = async (port: number) => {
+      const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "kanban_ping", arguments: {} } }),
+      });
+      const body = await response.json() as { result?: { content?: Array<{ text?: string }> } };
+      return body.result?.content?.[0]?.text ?? "";
+    };
+    await until(() => runtime.getLogs("paseo-kanban").some((entry: { message?: string }) => String(entry.message).includes("mcp listening")), "MCP started");
+    const port = Number(await readFile(join(env.KANBAN_DATA_DIR, "mcp.port"), "utf8"));
+    assert.equal(await call(port), "kanban-pong");
+    // Host reloadPlugin stops the plugin, waits for the process to close, then starts it.
+    // The running agent keeps the URL baked in at create time.
+    assert.equal(await runtime.stopPluginById("paseo-kanban"), true);
+    await runtime.startPlugin("paseo-kanban", source);
+    const limit = Date.now() + 15_000;
+    let text = "";
+    while (text !== "kanban-pong") {
+      assert.ok(Date.now() < limit, "original MCP url did not answer after reload");
+      try { text = await call(port); } catch { text = ""; }
+      if (text !== "kanban-pong") await pause();
+    }
+    assert.equal(Number(await readFile(join(env.KANBAN_DATA_DIR, "mcp.port"), "utf8")), port);
   });
 });
