@@ -1,11 +1,16 @@
 /// <reference types="node" />
 import { zhCNPart } from "./helpers/locale";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { after, describe, it } from "node:test";
+import { after, describe, it, mock } from "node:test";
 import { cardTmpEnv, cardTmpGeneration, cardTmpRoot, TMP_GENERATION_FILE } from "../server/card-tmp";
+import { unifiedDataRoot } from "../server/storage/root";
 import { closeDb, getDb } from "../server/db";
 import { type AgentLauncher } from "../server/dispatch";
 import { startTask } from "./helpers/compat-dispatch";
@@ -19,8 +24,17 @@ const dir = mkdtempSync(join(tmp, "card-tmp-"));
 const tmpRoot = join(dir, "tmp-root");
 process.env.KANBAN_DATA_DIR = dir;
 process.env.KANBAN_TMP_ROOT = tmpRoot;
+// A red run against the old default must fail without writing real card roots.
+const originalMkdir = fs.mkdirSync;
+const mkdirGuard = mock.method(fs, "mkdirSync", (...args: Parameters<typeof fs.mkdirSync>) => {
+  if (/^\/(?:private\/)?tmp\/[A-Za-z0-9]+_\d+(?:\/|$)/.test(String(args[0]))) throw new Error("test refused a real system card root");
+  return Reflect.apply(originalMkdir, fs, args);
+});
+syncBuiltinESMExports();
 
 after(() => {
+  mkdirGuard.mock.restore();
+  syncBuiltinESMExports();
   closeDb();
   delete process.env.KANBAN_TMP_ROOT;
   rmSync(dir, { recursive: true, force: true });
@@ -31,13 +45,63 @@ const profile = (role: string): Profile => ({
 });
 
 describe("per-card TMPDIR", () => {
-  it("defaults the root to /tmp and honors KANBAN_TMP_ROOT", () => {
+  it("defaults to the project fallback under the plugin data root and honors KANBAN_TMP_ROOT", () => {
     assert.equal(cardTmpRoot(), tmpRoot);
     delete process.env.KANBAN_TMP_ROOT;
     try {
-      assert.equal(cardTmpRoot(), "/tmp");
+      assert.equal(cardTmpRoot(), join(unifiedDataRoot(), "work", "unassigned"));
     } finally {
       process.env.KANBAN_TMP_ROOT = tmpRoot;
+    }
+  });
+
+  it("uses the configured project workspace, excludes scratch locally and isolates cards", () => {
+    const repo = join(dir, "configured-repo");
+    const other = join(dir, "card-copy");
+    execFileSync("git", ["init", "-q", repo]);
+    execFileSync("git", ["init", "-q", other]);
+    writeFileSync(join(dir, "kanban.config.json"), JSON.stringify({
+      projects: { demo: { defaultWorkspace: "dir", workspacePath: repo } },
+    }));
+    delete process.env.KANBAN_TMP_ROOT;
+    try {
+      const context = { project: "demo", workspacePath: other };
+      const a = cardTmpEnv("TEST_0400", context);
+      const b = cardTmpEnv("TEST_0401", context);
+      assert.equal(a.KANBAN_TMP, join(realpathSync(repo), ".kanban-work", "TEST_0400"));
+      assert.equal(b.KANBAN_TMP, join(realpathSync(repo), ".kanban-work", "TEST_0401"));
+      assert.ok(cardTmpGeneration(a.KANBAN_TMP));
+      cardTmpEnv("TEST_0400", context);
+      const exclude = readFileSync(join(repo, ".git/info/exclude"), "utf8");
+      assert.equal(exclude.split("\n").filter(line => line === ".kanban-work/").length, 1);
+      assert.equal(execFileSync("git", ["status", "--short"], { cwd: repo, encoding: "utf8" }), "");
+      assert.equal(existsSync(join(other, ".kanban-work")), false);
+    } finally { process.env.KANBAN_TMP_ROOT = tmpRoot; }
+  });
+
+  it("falls back for a non-repository or unwritable project, never to the system temp root", () => {
+    const home = join(dir, "fallback-home");
+    const notGit = join(dir, "not-git");
+    const readOnly = join(dir, "read-only-repo");
+    mkdirSync(notGit);
+    execFileSync("git", ["init", "-q", readOnly]);
+    const homeMock = mock.method(os, "homedir", () => home);
+    syncBuiltinESMExports();
+    delete process.env.KANBAN_TMP_ROOT;
+    chmodSync(readOnly, 0o500);
+    try {
+      for (const [project, workspacePath, code] of [
+        ["plain", notGit, "TEST_0402"], ["readonly", readOnly, "TEST_0403"],
+      ] as const) {
+        const env = cardTmpEnv(code, { project, workspacePath });
+        assert.equal(env.KANBAN_TMP, join(unifiedDataRoot(process.env, home), "work", project, code));
+        assert.ok(cardTmpGeneration(env.KANBAN_TMP));
+      }
+    } finally {
+      chmodSync(readOnly, 0o700);
+      process.env.KANBAN_TMP_ROOT = tmpRoot;
+      homeMock.mock.restore();
+      syncBuiltinESMExports();
     }
   });
 

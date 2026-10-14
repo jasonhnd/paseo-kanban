@@ -30,7 +30,21 @@ describe("--brief-file", () => {
     writeFileSync(join(repo, "brief.md"), "in repo");
     writeFileSync(join(scratch, "brief.md"), "in tmp");
     assert.equal(readBriefFile("brief.md", "supervisor", repo), "in repo");
-    assert.equal(readBriefFile(join(scratch, "brief.md"), "supervisor", repo), "in tmp");
+    assert.equal(readIsolatedBrief(join(scratch, "brief.md"), "supervisor", repo), "in tmp");
+  });
+
+  it("reads configured work roots and explicit overrides without granting arbitrary temp files", () => {
+    const prior = process.env.KANBAN_TMP_ROOT;
+    process.env.KANBAN_TMP_ROOT = scratch;
+    try {
+      writeFileSync(join(scratch, "work-brief.md"), "card work");
+      writeFileSync(join(outside, "not-a-brief.md"), "outside");
+      assert.equal(readBriefFile(join(scratch, "work-brief.md"), "supervisor", repo), "card work");
+      assert.throws(() => readBriefFile(join(outside, "not-a-brief.md"), "supervisor", repo), (err) => err instanceof KanbanError && err.code === "invalid");
+    } finally {
+      if (prior === undefined) delete process.env.KANBAN_TMP_ROOT;
+      else process.env.KANBAN_TMP_ROOT = prior;
+    }
   });
 
   it("refuses files outside the repository and /tmp, including through a symlink", () => {

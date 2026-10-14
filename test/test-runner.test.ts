@@ -35,6 +35,8 @@ function runFixture(failure?: "functional" | "performance", inheritedLegacy?: st
         assert.ok(!existsSync("${name}"), "ordinary tests must run once");
         writeFileSync("${name}", String(process.pid));
         writeFileSync("${name}.tmpdir", process.env.TMPDIR ?? "");
+        assert.ok(process.env.KANBAN_TMP_ROOT?.startsWith(process.env.TMPDIR + "/"), "card roots must be owned by this test run");
+        writeFileSync("${name}.card-root", process.env.KANBAN_TMP_ROOT);
         writeFileSync("${name}.test-marker", process.env.KANBAN_TEST_TMP ?? "");
         // Tests may unset the primary overrides, but the legacy fallback must remain isolated.
         delete process.env.ROLES_STATE_DIR;
