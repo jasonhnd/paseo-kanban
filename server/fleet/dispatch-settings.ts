@@ -20,6 +20,12 @@ type Runner = (provider: string) => Promise<unknown>;
 const modelCatalog: Runner = async provider => JSON.parse(await run(BIN.paseo,
   ["provider", "models", provider, "--thinking", "--json", "--home", PASEO_DIR], 10_000));
 
+/** Disabled and unknown providers have no catalog. Other failures still need a warning. */
+function thinkingCatalogQuiet(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : String(error);
+  return /provider\s+\S+\s+is disabled/i.test(text) || /unknown provider/i.test(text);
+}
+
 /** Read only the public model catalog. Unknown capabilities cannot authorize an effort override. */
 export async function readThinkingCatalog(profiles: readonly DispatchProfile[], runner: Runner = modelCatalog): Promise<ThinkingCatalog> {
   const result: Record<string, string[]> = {};
@@ -33,7 +39,9 @@ export async function readThinkingCatalog(profiles: readonly DispatchProfile[], 
           result[profile.name] = model.thinkingOptionIds;
         }
       }
-    } catch { dispatchOverrideWarning(`Thinking options unavailable for provider ${provider}`); }
+    } catch (error) {
+      if (!thinkingCatalogQuiet(error)) dispatchOverrideWarning(`Thinking options unavailable for provider ${provider}`);
+    }
   }));
   return result;
 }
