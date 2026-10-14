@@ -9,7 +9,7 @@ Local candidate tag: `v0.1.0-rc.7`. This candidate is prepared only. Install it 
 
 ### Changed
 
-- Per-card scratch moves from the system temporary directory to the configured project's `.kanban-work/<card code>/`, and Git locally excludes that directory. A missing, non-Git or unwritable project falls back to `<plugin-data-root>/work/<project>/<card code>/`. There is no system-temporary-directory fallback. Recorded paths keep resume generations and delayed cleanup after a settings change.
+- Per-card scratch moves from the system temporary directory to the configured project's `.kanban-work/<card code>/`, and Git locally excludes that directory. A missing, non-Git or unwritable project falls back to `<plugin-data-root>/work/<project>/<card code>/`. `<plugin-data-root>` is `KANBAN_DATA_DIR`, otherwise `$PASEO_HOME/plugin-data/paseo-kanban`, which is `~/.paseo/plugin-data/paseo-kanban` when `PASEO_HOME` is unset. There is no system-temporary-directory fallback. Recorded paths keep resume generations and delayed cleanup after a settings change.
 - Supervisor brief-file boundaries and reader/decision card scope follow the new work roots. English/Chinese worker protocols and documentation put temporary artifacts in the card's injected directory.
 
 ### Fixed

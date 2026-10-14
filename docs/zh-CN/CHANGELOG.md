@@ -8,7 +8,7 @@
 
 ### 变更（Changed）
 
-- 每张卡的临时目录从系统临时目录改到所配置项目的 `.kanban-work/<卡号>/`，并由 Git 本地 exclude。项目缺失、不是 Git 仓库或不可写时，回退到 `<plugin-data-root>/work/<项目>/<卡号>/`。不再回退到系统临时目录。已记录路径在设置变化后仍保留 resume generation 与延迟清理。
+- 每张卡的临时目录从系统临时目录改到所配置项目的 `.kanban-work/<卡号>/`，并由 Git 本地 exclude。项目缺失、不是 Git 仓库或不可写时，回退到 `<plugin-data-root>/work/<项目>/<卡号>/`。`<plugin-data-root>` 是 `KANBAN_DATA_DIR`，否则是 `$PASEO_HOME/plugin-data/paseo-kanban`；未设置 `PASEO_HOME` 时为 `~/.paseo/plugin-data/paseo-kanban`。不再回退到系统临时目录。已记录路径在设置变化后仍保留 resume generation 与延迟清理。
 - supervisor 的 brief 文件边界，以及通读／决策卡范围，跟随新的工作根。中英文 worker 守则和文档把临时产物放到注入的卡片目录。
 
 ### 修复（Fixed）

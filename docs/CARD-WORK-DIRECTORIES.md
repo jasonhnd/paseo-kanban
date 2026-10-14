@@ -30,8 +30,11 @@ with owner-only permissions.
 
 If the project is not a Git repository, is missing, or its scratch/exclude path
 cannot be written safely, the board uses
-`<plugin-data-root>/work/<project>/<card code>/`. Project names are encoded as
-one directory segment. There is no system temporary-directory fallback.
+`<plugin-data-root>/work/<project>/<card code>/`. `<plugin-data-root>` is
+`KANBAN_DATA_DIR`, otherwise `$PASEO_HOME/plugin-data/paseo-kanban`
+(`~/.paseo/plugin-data/paseo-kanban` when `PASEO_HOME` is unset). Project names
+are encoded as one directory segment. There is no system temporary-directory
+fallback.
 `KANBAN_TMP_ROOT` still explicitly selects `<override>/<card code>/`; an unusable
 explicit override is reported and does not silently pick another root. If no
 work directory can be prepared, dispatch refuses to start the agent instead of
