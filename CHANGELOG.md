@@ -15,7 +15,7 @@ Local candidate tag: `v0.1.0-rc.7`. This candidate is prepared only. Install it 
 ### Fixed
 
 - Project settings and short-code updates keep the configured work directory, including the legacy `workspace` alias. Chinese worker rules keep the reviewed-card and name restrictions and identify the board as the writer of the local exclude.
-- Full test phases and workers isolate their scratch roots. Tests no longer write card directories on the real default root. Default-root name audits reject a phase that leaves a new card directory outside its owned roots.
+- Full test phases and workers isolate their scratch roots. Tests no longer write card directories on the real default root. The card-tmp guard still refuses a real system card root outside its own fixture, and allows paths inside that fixture when the fixture is nested under the invoking card directory. Default-root name audits reject a phase that leaves a new card directory outside its owned roots.
 
 ### Switching an existing installation
 

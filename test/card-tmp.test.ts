@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { after, describe, it, mock } from "node:test";
 import { cardTmpEnv, cardTmpGeneration, cardTmpRoot, TMP_GENERATION_FILE } from "../server/card-tmp";
 import { unifiedDataRoot } from "../server/storage/root";
@@ -26,9 +26,31 @@ const tmpRoot = join(dir, "tmp-root");
 process.env.KANBAN_DATA_DIR = dir;
 process.env.KANBAN_TMP_ROOT = tmpRoot;
 // A red run against the old default must fail without writing real card roots.
+// The owned fixture may sit inside /tmp/<card> or /private/tmp/<card> when the
+// invoking isolation directory uses that prefix. Those internal paths are the
+// fixture, not an external system card root.
+const realSystemCardRoot = /^\/(?:private\/)?tmp\/[A-Za-z0-9]+_\d+(?:\/|$)/;
+function ownedFixtureRoots(): string[] {
+  const roots = new Set<string>([resolve(dir)]);
+  try { roots.add(realpathSync(dir)); } catch { /* the fixture directory exists */ }
+  for (const root of [...roots]) {
+    if (root.startsWith("/private/tmp/")) roots.add(`/tmp/${root.slice("/private/tmp/".length)}`);
+    else if (root.startsWith("/tmp/")) roots.add(`/private/tmp/${root.slice("/tmp/".length)}`);
+  }
+  return [...roots];
+}
+const ownedRoots = ownedFixtureRoots();
+function isInsideOwnedFixture(target: string): boolean {
+  const candidate = resolve(String(target));
+  return ownedRoots.some(root => {
+    const rel = relative(root, candidate);
+    return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+  });
+}
 const originalMkdir = fs.mkdirSync;
 const mkdirGuard = mock.method(fs, "mkdirSync", (...args: Parameters<typeof fs.mkdirSync>) => {
-  if (/^\/(?:private\/)?tmp\/[A-Za-z0-9]+_\d+(?:\/|$)/.test(String(args[0]))) throw new Error("test refused a real system card root");
+  const target = String(args[0]);
+  if (realSystemCardRoot.test(target) && !isInsideOwnedFixture(target)) throw new Error("test refused a real system card root");
   return Reflect.apply(originalMkdir, fs, args);
 });
 syncBuiltinESMExports();
@@ -46,6 +68,18 @@ const profile = (role: string): Profile => ({
 });
 
 describe("per-card TMPDIR", () => {
+  it("refuses a real system card root outside the owned fixture", () => {
+    assert.throws(() => mkdirSync("/tmp/TEST_0099/external-card"), /test refused a real system card root/);
+    assert.throws(() => mkdirSync("/private/tmp/TEST_0099/external-card"), /test refused a real system card root/);
+    const sibling = resolve(dir, "..", "not-this-fixture");
+    if (realSystemCardRoot.test(sibling)) {
+      assert.throws(() => mkdirSync(sibling), /test refused a real system card root/);
+    }
+    const inside = join(dir, "owned-fixture-dir");
+    mkdirSync(inside);
+    assert.equal(statSync(inside).isDirectory(), true);
+  });
+
   it("defaults to the project fallback under the plugin data root and honors KANBAN_TMP_ROOT", () => {
     assert.equal(cardTmpRoot(), tmpRoot);
     delete process.env.KANBAN_TMP_ROOT;
