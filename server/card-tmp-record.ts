@@ -4,6 +4,8 @@ import { cardMarkOf } from "./card-ref";
 import { getDb } from "./db";
 import { appendEvent, type TaskRow } from "./store";
 import { readWorktreeCreated } from "./worktree-record";
+import { KanbanError } from "./errors";
+import { t } from "../shared/i18n";
 
 export function cardTmpTaskContext(task: TaskRow): CardTmpContext {
   return { project: task.project, workspacePath: readWorktreeCreated(task.id)?.root ?? task.workspace_path };
@@ -22,6 +24,9 @@ export function preparedCardTmpDir(taskId: number, code: string): string | null 
 export function prepareTaskTmpEnv(task: TaskRow, actor: string): Record<string, string> {
   const code = cardMarkOf(task);
   const env = cardTmpEnv(code, cardTmpTaskContext(task), preparedCardTmpDir(task.id, code));
+  if (/^[A-Za-z0-9]+_\d+$/.test(code) && !env.KANBAN_TMP) {
+    throw new KanbanError("workspace_missing", t("cardTmp.error.unavailable"));
+  }
   if (env.KANBAN_TMP) appendEvent(task.id, "card_tmp_prepared", null, null, actor, { path: env.KANBAN_TMP });
   return env;
 }

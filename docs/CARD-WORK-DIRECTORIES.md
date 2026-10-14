@@ -33,7 +33,9 @@ cannot be written safely, the board uses
 `<plugin-data-root>/work/<project>/<card code>/`. Project names are encoded as
 one directory segment. There is no system temporary-directory fallback.
 `KANBAN_TMP_ROOT` still explicitly selects `<override>/<card code>/`; an unusable
-explicit override is reported and does not silently pick another root.
+explicit override is reported and does not silently pick another root. If no
+work directory can be prepared, dispatch refuses to start the agent instead of
+inheriting the process default.
 
 The actual prepared path is recorded in card events. Resuming an existing agent
 rotates the generation at that path even after a config or override change.

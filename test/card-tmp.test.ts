@@ -17,6 +17,7 @@ import { startTask } from "./helpers/compat-dispatch";
 import { cardMark } from "../server/card-ref";
 import type { Profile } from "../server/profiles";
 import { appendEvent, createTask } from "../server/store";
+import { KanbanError } from "../server/errors";
 
 const tmp = tmpdir();
 mkdirSync(tmp, { recursive: true });
@@ -128,6 +129,45 @@ describe("per-card TMPDIR", () => {
       assert.deepEqual(cardTmpEnv("TEST_0300"), {});
     } finally {
       process.env.KANBAN_TMP_ROOT = tmpRoot;
+    }
+  });
+
+  it("refuses to launch an agent when its explicit work root cannot be prepared", async () => {
+    const blocker = join(dir, "start-blocker");
+    writeFileSync(blocker, "file");
+    process.env.KANBAN_TMP_ROOT = blocker;
+    let creates = 0;
+    const launcher: AgentLauncher = { async create() { creates++; return { id: "must-not-start" }; }, async send() {} };
+    const task = createTask({ project: "tmpenv", title: "Unusable work root", role: "executor", workspacePath: `none:${dir}` });
+    try {
+      await assert.rejects(startTask(task.id, launcher, "test", { profiles: [profile("executor")], chosen: profile("executor"), reason: "Test" }),
+        (err) => err instanceof KanbanError && err.code === "workspace_missing");
+      assert.equal(creates, 0, "never inherit a process default directory when preparation fails");
+    } finally { process.env.KANBAN_TMP_ROOT = tmpRoot; }
+  });
+
+  it("falls back when a local exclude is unwritable or the project work root is a symlink", () => {
+    const home = join(dir, "unsafe-home");
+    const outside = join(dir, "unsafe-target");
+    mkdirSync(outside);
+    const homeMock = mock.method(os, "homedir", () => home);
+    syncBuiltinESMExports();
+    delete process.env.KANBAN_TMP_ROOT;
+    try {
+      for (const [project, code] of [["exclude", "TEST_0410"], ["symlink", "TEST_0411"]] as const) {
+        const repo = join(dir, project + "-repo");
+        execFileSync("git", ["init", "-q", repo]);
+        const exclude = join(repo, ".git/info/exclude");
+        if (project === "exclude") chmodSync(exclude, 0o400);
+        else symlinkSync(outside, join(repo, ".kanban-work"));
+        const env = cardTmpEnv(code, { project, workspacePath: repo });
+        assert.equal(env.KANBAN_TMP, join(unifiedDataRoot(process.env, home), "work", project, code));
+        assert.equal(existsSync(join(outside, code)), false);
+        chmodSync(exclude, 0o600);
+      }
+    } finally {
+      process.env.KANBAN_TMP_ROOT = tmpRoot;
+      homeMock.mock.restore(); syncBuiltinESMExports();
     }
   });
 

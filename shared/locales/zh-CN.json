@@ -195,6 +195,7 @@
   "briefFile.error.outside": "--brief-file 只能指向当前仓库或允许的卡片工作目录下的文件：{path}",
   "briefFile.error.tooLarge": "--brief-file 必须是不超过 {max} 字节的普通文件：{path}",
   "briefFile.error.unreadable": "--brief-file 读不到：{path}",
+  "cardTmp.error.unavailable": "无法准备本卡工作目录；请检查项目、回退目录或 KANBAN_TMP_ROOT 的权限。",
   "cardCode.noFreeCode": "简称 {code} 没有可用的不冲突写法",
   "cardDrawer.brief.none": "（没有简报）",
   "cardDrawer.brief.title": "简报",
