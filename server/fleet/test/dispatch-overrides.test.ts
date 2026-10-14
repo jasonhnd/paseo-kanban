@@ -215,3 +215,27 @@ test("explicit positions sort before implicit positions, keep stable ties, and d
   assert.equal((reversed.roles.executor as Record<string, MatrixEntry[]>).L1[0].profile, "Demo executor");
   for (const order of [0, -1, 1.5, 1001, "1"]) assert.equal(ContractMatrixEntry.safeParse({ profile: "Demo", effort: null, order }).success, false);
 });
+
+test("disabled or unknown providers stay quiet while other catalog failures still warn", async () => {
+  const warnings: string[] = [];
+  const original = console.warn;
+  console.warn = (message?: unknown) => { warnings.push(String(message)); };
+  try {
+    const profiles = [
+      { name: "Disabled", provider: "antigravity", model: "flash" },
+      { name: "Also disabled", provider: "gemini", model: "flash" },
+      { name: "Unknown", provider: "missing", model: "none" },
+      { name: "Broken", provider: "codex", model: "gpt" },
+    ];
+    const result = await readThinkingCatalog(profiles, async (provider) => {
+      if (provider === "antigravity") throw new Error("paseo provider: Failed to fetch models for antigravity: Provider antigravity is disabled");
+      if (provider === "gemini") throw new Error("paseo provider: Failed to fetch models for gemini: Provider gemini is disabled");
+      if (provider === "missing") throw new Error("paseo provider: Failed to fetch models for missing: Unknown provider: missing");
+      throw new Error("paseo provider: connection reset");
+    });
+    assert.deepEqual(result, {});
+    assert.deepEqual(warnings, ["[afc] dispatch overrides: Thinking options unavailable for provider codex"]);
+  } finally {
+    console.warn = original;
+  }
+});
