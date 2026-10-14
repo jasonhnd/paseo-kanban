@@ -49,6 +49,8 @@ test("dependency preparation failures stop before command generation", () => {
 
 test("the plain Node entry prepares a package reached through a symlink", () => {
   const root = fixture(); mkdirSync(join(root, "server")); mkdirSync(join(root, "tools"));
+  // The no-extension npm fixture must not inherit an enclosing checkout's ESM package scope.
+  writeFileSync(join(root, "package.json"), '{"type":"commonjs"}\n');
   copyFileSync(fileURLToPath(new URL("../server/prepare.mjs", import.meta.url)), join(root, "server/prepare.mjs"));
   writeFileSync(join(root, "tools/npm"), `#!${process.execPath}\nrequire("node:fs").writeFileSync("prepared", "yes");\n`, { mode: 0o755 });
   symlinkSync(root, join(root, "alias"), "dir");
