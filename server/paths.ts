@@ -8,8 +8,10 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { fileURLToPath } from "node:url";
 import { paseoHome, PLUGIN_IDS, type PluginId } from "./contract";
 
+type CanonicalIo = Pick<typeof pathFs, "existsSync" | "lstatSync" | "readlinkSync" | "realpathSync">;
+
 /** Raw node:fs for the test-data guard. A namespace import would trip DEP0176 in the host bundle. */
-const testIo = {
+const testIo: CanonicalIo = {
   existsSync: testExistsSync,
   lstatSync: testLstatSync,
   readlinkSync: testReadlinkSync,
@@ -218,7 +220,7 @@ export function checkoutRoot(): string | null {
 }
 
 /** Resolve existing parents too, so symlinked data directories cannot bypass the guard. */
-export function canonicalPath(path: string, seen = new Set<string>(), io = pathFs): string {
+export function canonicalPath(path: string, seen = new Set<string>(), io: CanonicalIo = pathFs): string {
   const absolute = resolve(path);
   if (seen.has(absolute)) throw new Error(t("paths.symlinkLoop", { path: absolute }));
   seen.add(absolute);
