@@ -11,9 +11,10 @@ import { saveConfig, type KanbanConfig } from "../server/config";
 import { closeDb, getDb } from "../server/db";
 import type { AgentLauncher } from "../server/dispatch";
 import { KanbanError } from "../server/errors";
-import { completeTask } from "../server/flow";
+import { completeTask, pollAwaitingPr } from "../server/flow";
 import { MISSING_CONFIRM_MS, resetReconcileForTests } from "../server/schedule";
-import { createTask, getTask } from "../server/store";
+import { blockTask, createTask, getTask } from "../server/store";
+import { readContract, setGhRunner, type GhRunner } from "../server/pr";
 import { issueToken, type Identity } from "../server/tokens";
 import { handleTool } from "../server/tools";
 import { protocolFor } from "../server/protocol";
@@ -126,6 +127,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setGhRunner(null);
   closeDb();
   delete process.env.KANBAN_AGENTS_DIR;
   delete process.env.KANBAN_DISPATCH_MATRIX;
@@ -343,6 +345,101 @@ describe("complete --on-behalf", () => {
     await handleTool("kanban_complete", { id: blocked.id, summary: "After the archive", handoff, onBehalf: true }, null, leader(kanbanLeader));
     assert.equal(getTask(blocked.id).status, "in_review");
     assert.equal(events(blocked.id, "complete")[0]?.onBehalf, true);
+  });
+
+  const pr = "https://github.com/acme/widgets/pull/7";
+  function checks(mode: "pending" | "pass" | "fail" | "error"): GhRunner {
+    return async (args) => {
+      if (mode === "error") throw new Error("Demo check lookup unavailable");
+      const line = args.join(" ");
+      if (line.startsWith("pr view")) return JSON.stringify({ url: pr, headRefOid: "abc123", headRefName: "feature" });
+      if (line.includes("/protection")) return JSON.stringify({ required_status_checks: { contexts: ["ci"] } });
+      if (line.includes("/rules/")) return JSON.stringify([{ type: "required_status_checks", parameters: { required_status_checks: [{ context: "ci" }] } }]);
+      if (line.includes("/statuses")) return "[]";
+      if (line.includes("check-runs")) return JSON.stringify({ check_runs: [{ name: "ci", status: mode === "pending" ? "in_progress" : "completed", conclusion: mode === "pending" ? null : mode === "pass" ? "success" : "failure" }] });
+      throw new Error(line);
+    };
+  }
+
+  async function pendingBatch(blocked: boolean) {
+    const task = runningCard("batch");
+    getDb().prepare("UPDATE tasks SET contract_json = ? WHERE id = ?").run(JSON.stringify({ kind: "github", repo: "acme/widgets", pr, awaiting: false }), task.id);
+    if (blocked) {
+      bind(task.id, "ws-card");
+      await tick(board({ inspect: ws("ws-card", true) }));
+      assert.equal(getTask(task.id).status, "blocked");
+    }
+    setGhRunner(checks("pending"));
+    await assert.rejects(
+      () => handleTool("kanban_complete", { id: task.id, summary: "Leader submitted while checks pending", handoff: { ...handoff, pr, waitingOn: "Required CI checks" }, onBehalf: true }, null, leader(projectLeader)),
+      (error: unknown) => error instanceof KanbanError && error.code === "pr_checks",
+    );
+    assert.equal(getTask(task.id).status, blocked ? "blocked" : "running");
+    assert.equal(readContract(getTask(task.id).contract_json).awaiting, true);
+    assert.equal(events(task.id, "complete").length, 0);
+    return task;
+  }
+
+  for (const blocked of [false, true]) {
+    it(`preserves the real delegate through pending checks and a database reopen (${blocked ? "blocked" : "running"})`, async () => {
+      const task = await pendingBatch(blocked);
+      const saved = getTask(task.id).handoff_json;
+      const runs = getDb().prepare("SELECT ended_at FROM runs WHERE task_id = ?").all(task.id) as Array<{ ended_at: string | null }>;
+      assert.equal(runs[0]?.ended_at, null);
+      closeDb();
+      setGhRunner(checks("pending"));
+      assert.deepEqual(await pollAwaitingPr(), []);
+      assert.equal(events(task.id, "complete").length, 0);
+      setGhRunner(checks("pass"));
+      assert.deepEqual(await pollAwaitingPr(), [task.id]);
+      assert.equal(getTask(task.id).status, "acceptance");
+      assert.equal(getTask(task.id).handoff_json, saved);
+      assert.equal(readContract(getTask(task.id).contract_json).awaiting, false);
+      const event = events(task.id, "complete")[0];
+      assert.equal(event?.actor, projectLeader);
+      assert.equal(event?.actorAgentId, projectLeader);
+      assert.equal(event?.onBehalf, true);
+      assert.equal(event?.note, catalog("zh-CN")["flow.onBehalf.note"]);
+      assert.equal(event?.summary, "Leader submitted while checks pending");
+      const ended = getDb().prepare("SELECT ended_at, outcome FROM runs WHERE task_id = ?").get(task.id) as { ended_at: string | null; outcome: string };
+      assert.ok(ended.ended_at);
+      assert.equal(ended.outcome, "complete");
+      assert.deepEqual(await pollAwaitingPr(), []);
+      assert.equal(events(task.id, "complete").length, 1);
+    });
+  }
+
+  it("keeps the submitted recovery blocked on lookup errors and failed required checks", async () => {
+    const task = await pendingBatch(true);
+    setGhRunner(checks("error"));
+    assert.deepEqual(await pollAwaitingPr(), []);
+    assert.equal(getTask(task.id).status, "blocked");
+    setGhRunner(checks("fail"));
+    assert.deepEqual(await pollAwaitingPr(), [task.id]);
+    assert.equal(getTask(task.id).status, "blocked");
+    assert.equal(readContract(getTask(task.id).contract_json).awaiting, false);
+    setGhRunner(checks("pass"));
+    assert.deepEqual(await pollAwaitingPr(), []);
+    assert.equal(events(task.id, "complete").length, 0);
+  });
+
+  it("does not resume an unsubmitted blocked card, a review submission, or a newer block", async () => {
+    const unsubmitted = runningCard("batch");
+    blockTask(unsubmitted.id, "needs_human", "No handoff submitted", "test");
+    getDb().prepare("UPDATE tasks SET contract_json = ? WHERE id = ?").run(JSON.stringify({ kind: "github", repo: "acme/widgets", pr, awaiting: true }), unsubmitted.id);
+    const review = runningCard();
+    blockTask(review.id, "needs_human", "Review must be claimed", "test");
+    await handleTool("kanban_complete", { id: review.id, summary: "Submit for review", handoff: { ...handoff, pr }, onBehalf: true }, null, leader(projectLeader));
+    assert.equal(getTask(review.id).status, "in_review");
+    const changed = await pendingBatch(true);
+    getDb().prepare("UPDATE tasks SET status = 'running' WHERE id = ?").run(changed.id);
+    blockTask(changed.id, "needs_human", "New human decision required", "test");
+    setGhRunner(checks("pass"));
+    assert.deepEqual(await pollAwaitingPr(), []);
+    assert.equal(getTask(unsubmitted.id).status, "blocked");
+    assert.equal(getTask(review.id).status, "in_review");
+    assert.equal(getTask(changed.id).status, "blocked");
+    assert.equal(events(changed.id, "complete").length, 0);
   });
 
   it("refuses every other identity, including a worker who passes the flag", async () => {
