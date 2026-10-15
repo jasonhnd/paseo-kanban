@@ -10,10 +10,11 @@ import { kanbanHelp, runKanban } from "../server/cli";
 import { closeDb, getDb } from "../server/db";
 import { startTask } from "./helpers/compat-dispatch";
 import { KanbanError } from "../server/errors";
-import { approveTask, rejectTask, requestChanges } from "../server/flow";
+import { acceptTask, approveTask, completeTask, rejectTask, requestChanges } from "../server/flow";
 import type { Profile } from "../server/profiles";
+import { readContract, resetCheckCache, setGhRunner, type GhRunner } from "../server/pr";
 import { runTick } from "./helpers/compat-schedule";
-import { blockTask, createTask, getTask, listBoard, setFinishedListener } from "../server/store";
+import { blockTask, claimStatus, createTask, getTask, listBoard, setFinishedListener } from "../server/store";
 import { issueToken } from "../server/tokens";
 import { handleTool } from "../server/tools";
 import { setProjectCode } from "../server/config";
@@ -451,6 +452,148 @@ describe("reject and reviewed cards", () => {
       .get(original.id) as { from_status: string; to_status: string };
     assert.equal(event.from_status, "in_review");
     assert.equal(event.to_status, "acceptance");
+  });
+
+  it("checks the github target before a local-only manual review can approve it", async () => {
+    const pr = "https://github.com/acme/widgets/pull/7";
+    const sha = "abc123";
+    const runner = (mode: "pass" | "wait" | "fail" | "error", calls: string[]): GhRunner => async (args) => {
+      const line = args.join(" ");
+      calls.push(line);
+      if (mode === "error") throw new Error("gh: authentication required");
+      if (line.startsWith("pr view")) return JSON.stringify({ url: pr, headRefOid: sha, headRefName: "feature" });
+      if (line.includes("/protection")) return JSON.stringify({ required_status_checks: { contexts: ["ci"] } });
+      if (line.includes("/rules/")) {
+        return JSON.stringify([{ type: "required_status_checks", parameters: { required_status_checks: [{ context: "ci" }] } }]);
+      }
+      if (line.includes("/statuses")) return "[]";
+      if (line.includes("check-runs")) {
+        const status = mode === "wait" ? "in_progress" : "completed";
+        const conclusion = mode === "pass" ? "success" : mode === "wait" ? null : "failure";
+        return JSON.stringify({
+          check_runs: [{ name: "ci", status, conclusion, html_url: "https://github.com/acme/widgets/runs/1" }],
+        });
+      }
+      throw new Error(line);
+    };
+    const scene = (mode: "pass" | "wait" | "fail" | "error") => {
+      const calls: string[] = [];
+      resetCheckCache();
+      setGhRunner(runner(mode, calls));
+      const original = createTask({
+        project: `ci-${mode}`,
+        title: `Target ${mode}`,
+        role: "executor",
+        workspacePath: dir,
+        contract: "github:acme/widgets",
+      });
+      claimStatus(original.id, "ready", "running", "test");
+      const submitted = completeTask(original.id, "executor", "Handoff", { pr, files: ["README.md"] });
+      assert.equal(submitted.status, "in_review");
+      getDb().prepare("UPDATE tasks SET executor_agent_id = 'exec-live', agent_id = 'exec-live' WHERE id = ?").run(original.id);
+      const review = createTask({
+        project: `ci-${mode}`,
+        title: `Manual ${mode}`,
+        role: "reviewer",
+        workspacePath: dir,
+        reviewOf: original.id,
+      });
+      assert.equal(readContract(getTask(review.id).contract_json).kind, "local-only");
+      getDb().prepare("UPDATE tasks SET status = 'reviewing', agent_id = 'reviewer-1' WHERE id = ?").run(review.id);
+      return { original, review, calls };
+    };
+    const releases = (id: number) =>
+      (getDb().prepare("SELECT COUNT(*) AS n FROM events WHERE task_id = ? AND kind = 'release_agent'").get(id) as { n: number }).n;
+    try {
+      {
+        const { original, review, calls } = scene("wait");
+        const approved = await approveTask(review.id, "Looks right", "reviewer");
+        assert.equal(approved.id, review.id);
+        assert.equal(approved.status, "reviewing");
+        const again = getTask(original.id);
+        assert.equal(again.status, "in_review");
+        assert.equal(again.executor_agent_id, "exec-live");
+        assert.equal(again.agent_id, "exec-live");
+        assert.equal(again.review_round, 0);
+        assert.match(again.hold_reason ?? "", new RegExp(zhCN("reclaimNote.result.running")));
+        assert.match(again.contract_json ?? "", /"awaiting":true/);
+        assert.ok(calls.length > 0);
+        assert.equal(releases(original.id), 0);
+        assert.equal(getTask(review.id).status, "reviewing");
+        await assert.rejects(
+          () => acceptTask(original.id, "supervisor"),
+          (err: unknown) => err instanceof KanbanError && err.code === "illegal_transition",
+        );
+        assert.equal(getTask(original.id).status, "in_review");
+      }
+      {
+        const { original, review, calls } = scene("fail");
+        const approved = await approveTask(review.id, "Looks right", "reviewer");
+        assert.equal(approved.id, review.id);
+        assert.equal(approved.status, "reviewing");
+        const again = getTask(original.id);
+        assert.equal(again.status, "rework");
+        assert.equal(again.review_round, 0);
+        assert.equal(again.executor_agent_id, "exec-live");
+        assert.equal(again.agent_id, "exec-live");
+        assert.ok(calls.length > 0);
+        const comment = getDb().prepare("SELECT body FROM comments WHERE task_id = ? ORDER BY id DESC LIMIT 1").get(original.id) as { body: string };
+        assert.match(comment.body, /ci/);
+        assert.match(comment.body, /https:\/\/github.com\/acme\/widgets\/runs\/1/);
+        const event = getDb().prepare("SELECT from_status, to_status FROM events WHERE task_id = ? AND kind = 'pr_failed'").get(original.id) as {
+          from_status: string;
+          to_status: string;
+        };
+        assert.equal(event.from_status, "in_review");
+        assert.equal(event.to_status, "rework");
+        assert.equal(releases(original.id), 0);
+        await assert.rejects(() => acceptTask(original.id, "supervisor"), (err: unknown) => err instanceof KanbanError);
+        assert.equal(getTask(original.id).status, "rework");
+        assert.equal(getTask(review.id).status, "reviewing");
+      }
+      {
+        const { original, review, calls } = scene("error");
+        await assert.rejects(
+          () => approveTask(review.id, "Looks right", "reviewer"),
+          (err: unknown) => err instanceof KanbanError && err.code === "pr_checks",
+        );
+        const again = getTask(original.id);
+        assert.equal(again.status, "in_review");
+        assert.equal(again.executor_agent_id, "exec-live");
+        assert.equal(again.agent_id, "exec-live");
+        assert.equal(again.review_round, 0);
+        assert.match(again.hold_reason ?? "", new RegExp("gh " + localePattern(zhCNPart("cardParts.event.prError", 2, 6))));
+        assert.ok(calls.length > 0);
+        assert.equal(releases(original.id), 0);
+        assert.equal(getTask(review.id).status, "reviewing");
+        await assert.rejects(
+          () => acceptTask(original.id, "supervisor"),
+          (err: unknown) => err instanceof KanbanError && err.code === "illegal_transition",
+        );
+        assert.equal(getTask(original.id).status, "in_review");
+      }
+      {
+        const { original, review, calls } = scene("pass");
+        const approved = await approveTask(review.id, "Looks right", "reviewer");
+        assert.equal(approved.id, review.id);
+        assert.equal(approved.status, "acceptance");
+        const again = getTask(original.id);
+        assert.equal(again.status, "acceptance");
+        assert.equal(again.review_round, 0);
+        assert.match(again.contract_json ?? "", /"awaiting":false/);
+        assert.ok(calls.length > 0);
+        const event = getDb().prepare("SELECT from_status, to_status FROM events WHERE task_id = ? AND kind = 'approve'").get(original.id) as {
+          from_status: string;
+          to_status: string;
+        };
+        assert.equal(event.from_status, "in_review");
+        assert.equal(event.to_status, "acceptance");
+        assert.ok(releases(original.id) > 0);
+      }
+    } finally {
+      setGhRunner(null);
+      resetCheckCache();
+    }
   });
 
   it("leaves an acceptance or reviewing target in place when the manual review approves", async () => {
