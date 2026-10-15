@@ -92,6 +92,7 @@ interface StoredOnBehalf {
   actorAgentId: string;
   note: string;
   blockedEventId?: number | null;
+  generation?: string;
 }
 
 function latestBlockEvent(id: number): number | null {
@@ -99,11 +100,20 @@ function latestBlockEvent(id: number): number | null {
   return row?.id ?? null;
 }
 
+/** A status round-trip or a new run must invalidate an earlier hand-in. */
+function completionGeneration(task: TaskRow): string {
+  const run = getDb().prepare("SELECT id, ended_at FROM runs WHERE task_id = ? ORDER BY id DESC LIMIT 1").get(task.id) as { id: number; ended_at: string | null } | undefined;
+  const transition = getDb().prepare(`SELECT id FROM events WHERE task_id = ?
+    AND from_status IS NOT NULL AND to_status IS NOT NULL AND from_status <> to_status
+    ORDER BY id DESC LIMIT 1`).get(task.id) as { id: number } | undefined;
+  return JSON.stringify([task.status, task.agent_id, task.paseo_workspace_id, run?.id ?? null, run?.ended_at ?? null, transition?.id ?? null]);
+}
+
 /** Internal submission metadata, outside the caller-provided handoff. */
 function storedOnBehalf(task: TaskRow): StoredOnBehalf | null {
   const saved = safeParse<{ completion?: Partial<StoredOnBehalf> }>(task.handoff_json)?.completion;
   if (saved?.onBehalf !== true || typeof saved.actorAgentId !== "string" || !saved.actorAgentId.trim() || typeof saved.note !== "string") return null;
-  return { onBehalf: true, actorAgentId: saved.actorAgentId, note: saved.note, blockedEventId: saved.blockedEventId };
+  return { onBehalf: true, actorAgentId: saved.actorAgentId, note: saved.note, blockedEventId: saved.blockedEventId, generation: saved.generation };
 }
 
 export function completeTask(id: number, actorRole: "executor", summary: string, handoff: unknown, options?: CompleteOnBehalf): TaskRow;
@@ -129,7 +139,7 @@ export function completeTask(id: number, actorRole: string, summary: string, han
   const handoffWarnings = completionHandoffWarnings(handoff);
   const stored = JSON.stringify({ summary: [text, warning].filter(Boolean).join("\n\n"), handoff: handoff ?? null,
     ...(handoffWarnings.length ? { submissionWarnings: handoffWarnings } : {}),
-    ...(onBehalf ? { completion: { ...behalf, ...(task.status === "blocked" ? { blockedEventId: latestBlockEvent(id) } : {}) } } : {}),
+    ...(onBehalf ? { completion: { ...behalf, generation: completionGeneration(task), ...(task.status === "blocked" ? { blockedEventId: latestBlockEvent(id) } : {}) } } : {}),
   });
   const diagnostics: PrBindingDiagnostics = {};
   const bound = writeContract(rememberPullRequest(task.contract_json, handoff, text, {
@@ -1255,6 +1265,13 @@ export async function pollAwaitingPr(budgetMs = PR_POLL_BUDGET_MS): Promise<numb
       if (task.status !== "reviewing" && task.status !== "running" && task.status !== "blocked") return;
       if (task.status !== "reviewing" && taskSubmitsToReview(task)) return;
       const behalf = storedOnBehalf(task);
+      // Check every direct delegated submission, including cards that returned
+      // to running after unblock or were assigned a new run on the same agent.
+      // Missing generation evidence from older hand-ins also requires resubmission.
+      if (task.status !== "reviewing" && behalf && behalf.generation !== completionGeneration(task)) {
+        saveContract(task.id, writeContract({ ...state, awaiting: false }));
+        return;
+      }
       // Only a leader's explicit submission of this exact blocked state may
       // resume. A later block is a new decision, not a completed CI wait.
       if (task.status === "blocked" && (!COMPLETERS.has(task.role) || !behalf
@@ -1265,7 +1282,8 @@ export async function pollAwaitingPr(budgetMs = PR_POLL_BUDGET_MS): Promise<numb
       const fresh = getTask(task.id);
       if (fresh.status !== task.status || fresh.agent_id !== task.agent_id
         || fresh.contract_json !== task.contract_json || fresh.handoff_json !== task.handoff_json
-        || (task.status === "blocked" && behalf?.blockedEventId !== latestBlockEvent(task.id))) return;
+        || (task.status === "blocked" && behalf?.blockedEventId !== latestBlockEvent(task.id))
+        || (task.status !== "reviewing" && behalf && behalf.generation !== completionGeneration(fresh))) return;
       if (verdict.kind === "pass") {
         saveContract(task.id, writeContract({ ...state, awaiting: false }));
         if (task.status === "reviewing") approveNow(task.id, verdict.summary, "scheduler");
