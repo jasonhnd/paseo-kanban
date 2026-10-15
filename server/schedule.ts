@@ -551,14 +551,22 @@ async function reconcile(
   for (const row of rows) {
     running.add(row.id);
     const task = getTask(row.id);
-    if (task.status === "running" || task.status === "reviewing") {
-      // Before start grace and before the lost-agent reclaim. A dead workspace
-      // must not grow a replacement agent. Unknown listings keep the old rule.
-      if (await workspaceFate(task) === "gone") {
-        blockLostWorkspace(task, agentState(task.agent_id));
-        missingSince.delete(row.id);
-        continue;
-      }
+    if ((task.status !== "running" && task.status !== "reviewing") || task.agent_id !== row.agent_id) continue;
+    // Before start grace and before the lost-agent reclaim. A dead workspace
+    // must not grow a replacement agent. Unknown listings keep the old rule.
+    const fate = await workspaceFate(task);
+    const freshWorkspace = getTask(row.id);
+    // A handoff or a new binding can land while the host lookup is in flight.
+    // Discard every stale result, including live/unknown results before reclaim.
+    if (freshWorkspace.status !== task.status || freshWorkspace.agent_id !== task.agent_id
+      || freshWorkspace.paseo_workspace_id !== task.paseo_workspace_id) {
+      missingSince.delete(row.id);
+      continue;
+    }
+    if (fate === "gone") {
+      blockLostWorkspace(freshWorkspace, agentState(freshWorkspace.agent_id));
+      missingSince.delete(row.id);
+      continue;
     }
     if (!row.agent_id && now.getTime() - Date.parse(row.updated_at) < START_GRACE_MS) continue;
     // agents.create can finish in the daemon after the caller's socket is gone.
