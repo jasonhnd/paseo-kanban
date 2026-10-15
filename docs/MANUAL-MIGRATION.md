@@ -48,7 +48,7 @@ hourly slot. After authorization, **Authorized, waiting for the next scheduled
 sample** distinguishes a saved authorization from a completed quota reading.
 It does not force an extra sample or refresh an old reading's timestamp.
 
-`dispatch: false` on a plan and `disabledPools` in Fleet configuration control
+`dispatch: false` on a plan and `disabledPools` in `kanban.config.json` control
 its eligibility for task dispatch. They do not disable monitoring or authorize
 Cursor. Conversely, enabling the Cursor reader does not enable a pool for task
 dispatch. Keep your dispatch choices while opting into monitoring. Credentials

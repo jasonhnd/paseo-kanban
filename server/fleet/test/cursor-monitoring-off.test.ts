@@ -23,10 +23,11 @@ const paseo = {} as PaseoApi;
 test("fresh-root transfer keeps Cursor off and exposes that state through RPC and cached cards", async () => {
   setLanguage("en");
   await mkdir(fleet, { recursive: true });
-  const config = { language: "en", disabledPools: ["demo-cursor"], extension: { demo: true } };
+  const config = { language: "en", extension: { demo: true } };
+  await writeFile(join(process.env.KANBAN_DATA_DIR!, "kanban.config.json"), JSON.stringify({ disabledPools: ["demo-cursor"] }));
   await writeFile(join(fleet, "afc.config.json"), JSON.stringify(config));
   const plan = { id: "demo-cursor", name: "Cursor", adapter: CURSOR_API, providers: ["cursor"], dispatch: false,
-    screenRead: false, priceUsdMonthly: null, manual: { usedPct: 23, at: new Date(Date.now() - 3 * 86400000).toISOString() } };
+    screenRead: false, cycleDay: 1, priceUsdMonthly: null, manual: { usedPct: 23, at: new Date(Date.now() - 3 * 86400000).toISOString() } };
   await writeFile(PLANS, JSON.stringify({ plans: [plan] }));
   assert.equal(adapterSwitches(fleet)[CURSOR_API], false);
   const board = await buildUsage(paseo, "7d");
@@ -34,6 +35,8 @@ test("fresh-root transfer keeps Cursor off and exposes that state through RPC an
   assert.equal(board.plans[0].cursorMonitoring, false);
   const card = board.companies![0];
   assert.equal(card.cursorMonitoring, false);
+  assert.equal(card.windows[0].usedPct, 23);
+  assert.equal(card.stale, true);
   assert.equal(card.notice, t("cursor.monitoring.off"));
   assert.equal(board.pools![plan.id].dispatchable, false);
   const cached = JSON.parse(await readFile(join(fleet, "quota-companies.json"), "utf8"));
@@ -47,7 +50,8 @@ test("fresh-root transfer keeps Cursor off and exposes that state through RPC an
 
 test("legacy markers keep monitoring on independently of dispatch and disabledPools", async () => {
   const legacy = join(root, "legacy"); await mkdir(legacy);
-  await writeFile(join(legacy, "afc.config.json"), JSON.stringify({ disabledPools: ["demo-cursor"] }));
+  await writeFile(join(legacy, "afc.config.json"), "{}");
+  await writeFile(join(legacy, "kanban.config.json"), JSON.stringify({ disabledPools: ["demo-cursor"] }));
   for (const marker of ["cursor-usage.json", "cursor-login-state.json"]) {
     await writeFile(join(legacy, marker), "{}");
     const switches = adapterSwitches(legacy);
@@ -57,7 +61,8 @@ test("legacy markers keep monitoring on independently of dispatch and disabledPo
     await rm(join(legacy, marker));
   }
   for (const dispatch of [true, false]) for (const disabledPools of [[], ["demo-cursor"]]) {
-    await writeFile(join(legacy, "afc.config.json"), JSON.stringify({ disabledPools, adapters: { [CURSOR_API]: true } }));
+    await writeFile(join(legacy, "kanban.config.json"), JSON.stringify({ disabledPools }));
+    await writeFile(join(legacy, "afc.config.json"), JSON.stringify({ adapters: { [CURSOR_API]: true } }));
     assert.equal(adapterSwitches(legacy)[CURSOR_API], true);
     const entry = companyCatalog([{ id: "demo-cursor", adapter: CURSOR_API, ...{ dispatch } }], adapterSwitches(legacy))[0];
     assert.equal(entry.cursorMonitoring, true);

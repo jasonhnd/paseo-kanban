@@ -87,7 +87,7 @@ Cursor 额度卡会明确显示「Cursor 自动监控已关闭」。可点击卡
 额度页的读取请求也共用每小时采样时段。授权后显示「已授权，等待下一次定时采样」，
 用于区分已保存授权和已完成额度读取；不会额外强制采样，也不会刷新旧读数的时间戳。
 
-套餐的 `dispatch: false` 与 Fleet 配置中的 `disabledPools` 控制派活资格，
+套餐的 `dispatch: false` 与 `kanban.config.json` 中的 `disabledPools` 控制派活资格，
 不会关闭监控，也不会完成 Cursor 授权。开启 Cursor 读取器同样不会打开套餐的
 派活资格；可以保持原有派活设置并单独开启监控。凭证始终不导入，
 不要通过复制 Cursor token 文件来恢复连接。完整文件边界参见
