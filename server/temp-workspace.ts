@@ -332,6 +332,9 @@ export function tempCleanupDue(task: TaskRow, now: Date): boolean {
   if (!discard && !(task.status === "archived" && notMergedBackoffOnly(events, owned.directory))) {
     steps.push(["skip_worktree", owned.directory]);
   }
+  // A fresh approval clears old merge waits, but a later failed validation backs off normally.
+  if (discard && events.some(event => event.action === "skip_worktree" && event.reason === "discard_changed" &&
+      (event.rowId ?? 0) > (discard.authorizationId ?? 0))) steps.push(["skip_worktree", owned.directory]);
   if (task.paseo_workspace_id) steps.push(["archive_workspace", task.paseo_workspace_id]);
   if (!steps.every(([action, id]) => retryReady(events, action, id, now))) return false;
   return agentsOpenedBy(task).every((agentId) => agentAttemptDue(events, agentId, now));
@@ -739,7 +742,8 @@ export async function settleTempWorkspace(input: {
     if (!discard) return canContinue();
     if (!canContinue() || !(await discardStillValid(task, owned, discard, run)) || !canContinue()) {
       record({ action: "skip_worktree", directory: owned.directory, branch: owned.branch, ok: false,
-        reason: "discard_changed", error: t("cleanupDiscard.changed") });
+        reason: "discard_changed", error: t("cleanupDiscard.changed"),
+        retryAt: nextRetryAt(events, "skip_worktree", owned.directory, input.now) });
       return false;
     }
     return true;

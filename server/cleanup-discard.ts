@@ -12,6 +12,7 @@ import { isTempWorkspace, tempCleaned } from "./temp-mark";
 import { createdWorktree, ownedWorktree, type OwnedWorktree } from "./worktree-gc";
 
 export interface DiscardAuthorization extends OwnedWorktree {
+  authorizationId?: number;
   cleanupGeneration: number;
   workspaceId: string | null;
   actor: string;
@@ -28,14 +29,26 @@ function eligible(task: TaskRow, owned: OwnedWorktree): boolean {
 
 /** A grant is limited to one cleanup generation, owned copy and exact branch/base tips. */
 export function discardAuthorization(task: TaskRow, owned: OwnedWorktree): DiscardAuthorization | null {
-  const row = getDb().prepare(`SELECT actor, data_json FROM events c WHERE c.task_id = ?
+  const row = getDb().prepare(`SELECT id, actor, data_json FROM events c WHERE c.task_id = ?
     AND c.kind = 'cleanup_discard_authorized' AND ${currentCleanupSql("c", "c.task_id")} ORDER BY c.id DESC LIMIT 1`)
-    .get(task.id) as { actor: string; data_json: string } | undefined;
+    .get(task.id) as { id: number; actor: string; data_json: string } | undefined;
   if (!row) return null;
   const grant = JSON.parse(row.data_json) as DiscardAuthorization;
   return grant.cleanupGeneration === cleanupGeneration(task.id) && grant.branch === owned.branch && grant.base === owned.base &&
     samePath(grant.root, owned.root) && samePath(grant.directory, owned.directory) && grant.workspaceId === task.paseo_workspace_id
-    ? { ...grant, actor: row.actor } : null;
+    ? { ...grant, actor: row.actor, authorizationId: row.id } : null;
+}
+
+function discardCompleted(taskId: number, grant: DiscardAuthorization): boolean {
+  return !!getDb().prepare(`SELECT 1 FROM events c WHERE c.task_id = ? AND c.kind = 'cleanup_discarded'
+    AND ${currentCleanupSql("c", "c.task_id")} AND json_extract(c.data_json, '$.head') = ?
+    AND json_extract(c.data_json, '$.branch') = ? AND json_extract(c.data_json, '$.directory') = ? LIMIT 1`)
+    .get(taskId, grant.head, grant.branch, grant.directory);
+}
+
+function directoryMissing(directory: string): boolean {
+  try { lstatSync(directory); } catch (error) { return (error as NodeJS.ErrnoException).code === "ENOENT"; }
+  return false;
 }
 
 /** Fail closed after any awaited read. Directory removal uses the ordinary clean-worktree path. */
@@ -45,12 +58,15 @@ export async function discardStillValid(task: TaskRow, owned: OwnedWorktree, gra
       grant.workspaceId !== current.paseo_workspace_id) return false;
   const head = await run(owned.root, ["rev-parse", "--verify", headRef(owned.branch)]);
   const base = await run(owned.root, ["rev-parse", "--verify", headRef(owned.base)]);
+  if (head.code !== 0 && discardCompleted(task.id, grant) && directoryMissing(owned.directory)) {
+    const missing = await run(owned.root, ["show-ref", "--verify", "--quiet", headRef(owned.branch)]);
+    return missing.code === 1;
+  }
   if (head.code !== 0 || base.code !== 0 || head.stdout.trim() !== grant.head || base.stdout.trim() !== grant.baseOid) return false;
   const state = directoryState(owned.directory);
   if (state === "missing") {
     // existsSync also hides read failures. Only ENOENT proves a prior removal.
-    try { lstatSync(owned.directory); } catch (error) { return (error as NodeJS.ErrnoException).code === "ENOENT"; }
-    return false;
+    return directoryMissing(owned.directory);
   }
   if (state !== "present") return false;
   const top = await run(owned.directory, ["rev-parse", "--show-toplevel"]);
@@ -92,6 +108,7 @@ export async function authorizeDiscard(taskId: number, actor: string): Promise<D
 /** Compare-and-delete only the audited tip, after normal workspace/worktree retirement. */
 export async function deleteDiscardedBranch(task: TaskRow, owned: OwnedWorktree, grant: DiscardAuthorization, run: GitRunner): Promise<boolean> {
   if (!(await discardStillValid(task, owned, grant, run))) return false;
+  if (discardCompleted(task.id, grant)) return true;
   const listed = await run(owned.root, ["worktree", "list", "--porcelain"]);
   if (listed.code !== 0 || listed.stdout.split("\n").includes(`branch ${headRef(owned.branch)}`)) return false;
   const deleted = await run(owned.root, ["update-ref", "-d", headRef(owned.branch), grant.head]);

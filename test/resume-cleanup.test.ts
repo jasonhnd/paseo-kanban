@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { after, beforeEach, it } from "node:test";
 import { readCleanupEvents } from "../server/archive-book";
 import { kanbanHelp, runKanban } from "../server/cli";
+import { drainCleanups, flushCleanups, installCleanup } from "../server/cleanup";
 import { loadConfig, saveConfig } from "../server/config";
 import { closeDb, getDb } from "../server/db";
 import { setMissingCwdHooks, resetMissingCwdForTests } from "../server/missing-cwd";
@@ -111,6 +112,11 @@ for (const leader of ["project-leader", "board-leader"]) {
     assert.equal(discarded[0].actor, leader);
     assert.deepEqual(JSON.parse(discarded[0].data_json).commits, f.commits);
     assert.equal(JSON.parse(rows(f.id, "temp_workspace_cleaned")[0].data_json).keptBranch, false);
+    // Restart after the discard receipt, before the final cleanup marks were persisted.
+    getDb().prepare("DELETE FROM events WHERE task_id = ? AND (kind = 'temp_workspace_cleaned' OR (kind = 'cleanup' AND json_extract(data_json, '$.action') = 'delete_branch'))").run(f.id);
+    assert.equal(await settle(f, archives), "settled");
+    assert.equal(rows(f.id, "cleanup_discarded").length, 1, "no duplicate discard receipt");
+    assert.deepEqual(archives, [f.workspaceId]);
   });
 }
 
@@ -152,6 +158,7 @@ it("does not discard a newer tip or uncommitted changes added after authorizatio
     assert.ok(existsSync(f.directory));
     assert.deepEqual(archives, []);
     assert.equal(rows(f.id, "cleanup_discarded").length, 0);
+    assert.equal(tempCleanupDue(getTask(f.id), new Date()), false, "changed approvals retain normal failure backoff");
   }
 });
 
@@ -167,3 +174,61 @@ it("rechecks the authorized tip after awaited workspace inspection", async () =>
 });
 
 it("documents the explicit discard flag in CLI help", () => { assert.ok(kanbanHelp().includes("--discard-unmerged")); });
+
+it("keeps a shared copy and a busy agent's copy after discard authorization", async () => {
+  const shared = fixture();
+  const borrower = createTask({ project: "demo", title: "Shared fixture", role: "reviewer", workspacePath: shared.directory });
+  getDb().prepare("UPDATE tasks SET paseo_workspace_id = ? WHERE id = ?").run(shared.workspaceId, borrower.id);
+  await runKanban(["resume-cleanup", String(shared.id), "--discard-unmerged"], env("project-leader"));
+  const archives: string[] = [];
+  assert.equal(await settle(shared, archives), "pending");
+  assert.ok(existsSync(shared.directory));
+  assert.deepEqual(archives, []);
+
+  const busy = fixture();
+  getDb().prepare("UPDATE tasks SET agent_id = ? WHERE id = ?").run("busy-worker", busy.id);
+  appendEvent(busy.id, "agent_opened", null, null, "kanban", { agentId: "busy-worker" });
+  await runKanban(["resume-cleanup", String(busy.id), "--discard-unmerged"], env("project-leader"));
+  assert.equal(await settleTempWorkspace({ task: getTask(busy.id), events: readCleanupEvents(busy.id), now: new Date(),
+    record: data => appendEvent(busy.id, "cleanup", null, null, "kanban", data),
+    agentActivity: async () => "busy", decideWorkspace: async () => { throw new Error("Must not inspect while busy"); },
+    archiveWorkspace: async () => { throw new Error("Must not archive while busy"); },
+  }), "pending");
+  assert.ok(existsSync(busy.directory));
+});
+
+it("does not reuse a grant across workspace generations or after a base change", async () => {
+  for (const change of ["generation", "base"]) {
+    const f = fixture();
+    await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("project-leader"));
+    if (change === "generation") appendEvent(f.id, "temp_workspace_recreated", null, null, "kanban", { directory: f.directory });
+    else git(f.root, "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "Base advanced");
+    assert.equal(await settle(f, []), "pending");
+    assert.ok(existsSync(f.directory));
+    assert.equal(rows(f.id, "cleanup_discarded").length, 0);
+  }
+});
+
+it("rejects a value on the destructive flag without recording authorization", async () => {
+  const f = fixture();
+  await assert.rejects(runKanban(["resume-cleanup", String(f.id), "--discard-unmerged=false"], env("project-leader")), { code: "invalid" });
+  assert.equal(rows(f.id, "cleanup_discard_authorized").length, 0);
+});
+
+it("performs approved no-PR cleanup through the normal periodic tick", async () => {
+  const f = fixture();
+  appendEvent(f.id, "cleanup", null, null, "kanban", { action: "skip_worktree", directory: f.directory, ok: false, reason: "no_pr" });
+  const archives: string[] = [];
+  await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("board-leader"));
+  installCleanup({ archiveAgent: async () => {}, listAgents: async () => [],
+    inspectAgent: async () => null,
+    inspectWorkspace: async id => id === f.workspaceId ? { id, directory: f.directory, kind: "worktree", name: "Temporary fixture" } : null,
+    archiveWorkspace: async id => { archives.push(id); },
+  });
+  try { await drainCleanups(new Date()); await flushCleanups(); } finally { installCleanup(null); }
+  assert.ok(archives.includes(f.workspaceId));
+  assert.equal(existsSync(f.directory), false);
+  assert.equal(git(f.root, "branch", "--list", f.branch), "");
+  assert.equal(rows(f.id, "cleanup_discarded").length, 1);
+  assert.equal(rows(f.id, "temp_workspace_cleaned").length, 1);
+});
