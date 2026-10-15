@@ -136,13 +136,17 @@ describe("MCP inject gate", () => {
     assert.match(worktree?.config.systemPrompt ?? "", /\u5408\u5e76\u5361\u53ef\u4ee5\u6302\u5728 PR \u5361\u540e\u9762/);
     // TEST_0299: leave the PR branch before merging, or Paseo's merge auto-archive takes the directory (fits the budget).
     assert.match(worktree?.config.systemPrompt ?? "", /\u5148\u5207\u56de\u672c\u5361\u5206\u652f\u518d gh pr merge/);
+    // GitHub issue 3: do not check out a PR head as the current branch in the card worktree (108).
+    assert.match(worktree?.config.systemPrompt ?? "", /\u4e0d\u8981\u5728\u672c\u5361\u7684\u4e34\u65f6 worktree \u91cc\u628a PR \u7684 head \u5206\u652f checkout \u6210\u5f53\u524d\u5206\u652f/);
+    assert.match(worktree?.config.systemPrompt ?? "", /\u7528\u72ec\u7acb\u7684\u672c\u5730\u5206\u652f\u6216 ref \u63a8\u9001/);
+    assert.match(worktree?.config.systemPrompt ?? "", /gh pr merge\uff0c\u4e0d\u8981 checkout head/);
     // No-CI wording: local tests and build go in verification.
     assert.match(worktree?.config.systemPrompt ?? "", /\u6ca1\u6709 CI \u7684\u4ed3\u5e93\uff0c\u4ea4\u6d3b\u524d\u5728\u672c\u673a\u8dd1\u5b8c\u6d4b\u8bd5\u548c\u6784\u5efa\u5e76\u628a\u547d\u4ee4\u548c\u7ed3\u679c\u5199\u8fdb verification/);
     // TEST_0211 adds the per-card TMPDIR and production-database rules (260-character budget).
     // Executor rules grew by 167 and the no-wait rule shrank by 3 (CI dropped from the poll list).
     // Keep the original budget for the rules; a card checkout's CLI path may be longer than the installation's.
     const budgetedPrompt = (worktree?.config.systemPrompt ?? "").replace(displayCliPath(), "$PLUGIN_ROOT/bin/paseo-kanban.mjs");
-    assert.ok(budgetedPrompt.length <= 226 * 2 + 49 + 107 + 39 + 110 + 220 + 100 + 260 + 260 + 164);
+    assert.ok(budgetedPrompt.length <= 226 * 2 + 49 + 107 + 39 + 110 + 220 + 100 + 260 + 260 + 164 + 108);
     // TEST_0256 adds the no-wait rule and the sub-agent wait sentence (260-character budget).
     const reader = guardCreateHook(req({ env: { [BOARD_AGENT_ENV]: "1", KANBAN_ROLE: "reader" } }), "http://127.0.0.1:9");
     assert.match(reader?.config.systemPrompt ?? "", /\u4e0d\u6539\u6587\u4ef6\uff0c\u4e0d commit/);
@@ -225,7 +229,9 @@ describe("MCP inject gate", () => {
       const noWaitBudget = role === "supervisor" ? 0 : 260;
       // Executor rules +167 and no-wait -3; the leader note +6. Other worker roles only lost "CI、".
       const noCiBudget = role === "executor" ? 164 : role === "supervisor" ? 6 : 0;
-      assert.ok(text.length <= previous[role] * 2 + policyBudget + mergeCardBudget + tmpRuleBudget + noWaitBudget + noCiBudget, `${role} \u5de5\u4f5c\u5b88\u5219\u8d85\u8fc7\u6587\u6848\u9884\u7b97`);
+      // GitHub issue 3 adds 108 characters to the executor merge rule.
+      const checkoutHeadBudget = role === "executor" ? 108 : 0;
+      assert.ok(text.length <= previous[role] * 2 + policyBudget + mergeCardBudget + tmpRuleBudget + noWaitBudget + noCiBudget + checkoutHeadBudget, `${role} \u5de5\u4f5c\u5b88\u5219\u8d85\u8fc7\u6587\u6848\u9884\u7b97`);
       if (role === "supervisor") assert.match(text, /\u5148\u7528 kanban_comment \u5199\u4e00\u53e5\u8fdb\u5ea6\uff0c\u518d\u7ed3\u675f\u8fd9\u4e00\u8f6e/);
       else {
         assert.match(text, /\u56de\u5408\u7ed3\u675f = \u4f60\u505c\u4e0b\u6765\u4e86\uff0c\u4e0d\u4f1a\u6709\u4eba\u518d\u53eb\u4f60/);

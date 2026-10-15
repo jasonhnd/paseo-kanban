@@ -88,7 +88,7 @@ export function toolDefs(language: Language = getLanguage()): McpTool[] {
     inputSchema: { type: "object", properties: { last: { type: "boolean" } } },
   },
   { name: "kanban_comment", description: text("kanban_comment.description"), inputSchema: { type: "object", properties: { id: CARD_REF, text: { type: "string" } }, required: ["text"] } },
-  { name: "kanban_complete", description: text("kanban_complete.description"), inputSchema: { type: "object", properties: { id: CARD_REF, summary: { type: "string" }, handoff: { description: text("kanban_complete.param.handoff") } }, required: ["summary"] } },
+  { name: "kanban_complete", description: text("kanban_complete.description"), inputSchema: { type: "object", properties: { id: CARD_REF, summary: { type: "string" }, handoff: { description: text("kanban_complete.param.handoff") }, onBehalf: { type: "boolean" } }, required: ["summary"] } },
   { name: "kanban_block", description: text("kanban_block.description"), inputSchema: { type: "object", properties: { id: CARD_REF, reason: { type: "string" }, kind: { type: "string" } }, required: ["reason", "kind"] } },
   { name: "kanban_approve", description: text("kanban_approve.description"), inputSchema: { type: "object", properties: { id: CARD_REF, summary: { type: "string" } }, required: ["summary"] } },
   { name: "kanban_request_changes", description: text("kanban_request_changes.description"), inputSchema: { type: "object", properties: { id: CARD_REF, reason: { type: "string" }, findings: { type: "string" } }, required: ["reason"] } },
@@ -294,7 +294,19 @@ export async function handleTool(name: string, args: Record<string, unknown>, to
   return ACL[name] && isWriteTool(name) ? auditWrite(name, identity, work) : work();
 }
 
+function onBehalfRequested(args: Record<string, unknown>): boolean {
+  return args.onBehalf === true || args.onBehalf === "true";
+}
+
 async function handleAuthenticatedTool(name: string, args: Record<string, unknown>, identity: Identity, hooks?: { agentPresence?: (agentId: string) => Promise<AgentPresence> | AgentPresence }): Promise<unknown> {
+  // Checked before the completer ACL. A worker who passes the flag is refused
+  // here, instead of completing as themselves. Leaders are not in that ACL.
+  if (name === "kanban_complete" && onBehalfRequested(args)) {
+    return completeTask(taskId(identity, args), identity.role, String(args.summary ?? ""), args.handoff, {
+      onBehalf: true,
+      actorAgentId: identity.agentId,
+    });
+  }
   assertRole(identity, name);
   if (AGENT_BOUND.has(name)) assertCurrentAgent(identity, taskId(identity, args), name);
   switch (name) {
