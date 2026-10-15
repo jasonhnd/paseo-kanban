@@ -239,11 +239,68 @@ async function gateReview(task: TaskRow, actor: string): Promise<TaskRow | null>
 }
 
 /**
+ * Required checks failed on a target that is still waiting for a claim.
+ * returnForChecks only accepts reviewing, which this target is not.
+ * Send it back to its executor without counting a review round, and leave
+ * the linked review card where it is. Do not notify acceptance or release
+ * the executor: the approval did not finish.
+ */
+function returnUnclaimedTargetForChecks(id: number, verdict: Extract<PrVerdict, { kind: "fail" }>, actor: string): TaskRow {
+  const task = getTask(id);
+  if (task.status !== "in_review") throw new KanbanError("illegal_transition", t("flow.error.cannotReturn", { status: task.status }), { from: task.status });
+  const note = checksNote(verdict);
+  const ts = new Date().toISOString();
+  const info = getDb()
+    .prepare(
+      `UPDATE tasks SET status = 'rework', agent_id = executor_agent_id, updated_at = ?, nudge_count = 0 WHERE id = ? AND status = 'in_review'`,
+    )
+    .run(ts, id);
+  if (info.changes !== 1) throw new KanbanError("conflict", t("flow.error.statusChanged", { card: cardMark(id) }), { id });
+  const state = readContract(getTask(id).contract_json);
+  saveContract(id, writeContract({ ...state, awaiting: false }));
+  appendEvent(id, "pr_failed", "in_review", "rework", actor, { summary: verdict.summary, checks: verdict.checks });
+  addComment(id, actor, note);
+  return getTask(id);
+}
+
+/**
+ * The review card's own contract is not the target's. A manual --reviews
+ * card is local-only unless one is set, so approveTask would otherwise skip
+ * the target's required checks. Returns true when the target must stay out
+ * of acceptance. A query error throws, matching an inline review.
+ */
+async function gateLinkedReviewTarget(review: TaskRow, actor: string): Promise<boolean> {
+  if (review.role !== "reviewer" || review.review_of == null) return false;
+  const original = getTask(review.review_of);
+  if (original.status !== "in_review") return false;
+  const state = readContract(original.contract_json);
+  if (state.kind !== "github") return false;
+  const verdict = await evaluateContract(state);
+  if (verdict.kind === "pass" || verdict.kind === "skip") {
+    saveContract(original.id, writeContract({ ...state, awaiting: false }));
+    return false;
+  }
+  if (verdict.kind === "wait") {
+    saveContract(original.id, writeContract({ ...state, awaiting: true }));
+    setHold(original.id, verdict.summary);
+    appendEvent(original.id, "pr_wait", original.status, original.status, actor, { summary: verdict.summary });
+    return true;
+  }
+  if (verdict.kind === "fail") {
+    returnUnclaimedTargetForChecks(original.id, verdict, actor);
+    return true;
+  }
+  setHold(original.id, verdict.summary);
+  appendEvent(original.id, "pr_error", null, original.status, actor, { summary: verdict.summary });
+  throw new KanbanError("pr_checks", verdict.summary);
+}
+
+/**
  * A linked review can finish before an inline reviewer claims the target.
  * in_review is that queue. Move it to acceptance, the same end state as an
- * inline approve, and do not increment the review round. Leave every other
- * status alone: acceptance is already waiting, and reviewing belongs to the
- * inline claim.
+ * inline approve, and do not increment the review round. The caller has
+ * already applied the target's own check gate. Leave every other status
+ * alone: acceptance is already waiting, and reviewing belongs to the inline claim.
  */
 function acceptUnclaimedReviewTarget(review: TaskRow, summary: string, actor: string): void {
   if (review.role !== "reviewer" || review.review_of == null) return;
@@ -276,8 +333,13 @@ export function approveTask(id: number, summary: string, actor = "reviewer"): Ta
   if (task.status !== "reviewing") {
     throw new KanbanError("illegal_transition", t("flow.error.cannotApprove", { status: task.status }), { from: task.status, to: "acceptance" });
   }
-  if (readContract(task.contract_json).kind !== "github") return approveNow(id, text, actor);
-  return gateReview(task, actor).then((held) => held ?? approveNow(id, text, actor));
+  const finish = async (ownHeld: TaskRow | null): Promise<TaskRow> => {
+    if (ownHeld) return ownHeld;
+    const held = await gateLinkedReviewTarget(getTask(id), actor);
+    return held ? getTask(id) : approveNow(id, text, actor);
+  };
+  if (readContract(task.contract_json).kind !== "github") return finish(null);
+  return gateReview(task, actor).then(finish);
 }
 
 function reviewHandoff(reason: string, findings: string): string {
