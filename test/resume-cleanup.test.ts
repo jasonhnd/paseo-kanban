@@ -222,7 +222,8 @@ it("performs approved no-PR cleanup through the normal periodic tick", async () 
   await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("board-leader"));
   installCleanup({ archiveAgent: async () => {}, listAgents: async () => [],
     inspectAgent: async () => null,
-    inspectWorkspace: async id => id === f.workspaceId ? { id, directory: f.directory, kind: "worktree", name: "Temporary fixture" } : null,
+    inspectWorkspace: async id => id === f.workspaceId ? { id, directory: f.directory, kind: "worktree", name: "Temporary fixture",
+      projectRoot: f.root, projectId: null, archived: false } : null,
     archiveWorkspace: async id => { archives.push(id); },
   });
   try { await drainCleanups(new Date()); await flushCleanups(); } finally { installCleanup(null); }
