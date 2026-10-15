@@ -9,7 +9,7 @@ import { cardMark } from "./card-ref";
 import { DEFAULT_ARCHIVE_DEADLINE_MS, loadConfig } from "./config";
 import { getDb } from "./db";
 import { headRef, isProtectedBranch, refOk, removeReadOnlyWorktree, runGit, runGitSync, type GitRunner } from "./git";
-import { agentsTouching, directoryState, pathWithin, PLACEHOLDER_NAME, placeholderBlocksRemoval, purgeCardAgents, purgeDecision, readCwdAgentList, retainAgentsBeforeDirectoryRemoval, agentListUnreadReason, type CwdAgent } from "./missing-cwd";
+import { agentOutsideCardScope, agentsTouching, directoryState, pathWithin, PLACEHOLDER_NAME, placeholderBlocksRemoval, purgeCardAgents, purgeDecision, readCwdAgentList, retainAgentsBeforeDirectoryRemoval, agentListUnreadReason, type CwdAgent } from "./missing-cwd";
 import { samePath } from "./placement";
 import { readContract } from "./pr";
 import { statusLabel } from "../shared/labels";
@@ -310,7 +310,8 @@ export function rebuiltCleanupPending(task: TaskRow): boolean {
   if (open.some(row => pathWithin(owned.directory, row.workspace_path))) return false;
   const listed = readCwdAgentList();
   if (!listed) return false;
-  if (agentsTouching(owned.directory, listed).some(agent => !purgeDecision(agent).ok)) return false;
+  const scope = { taskId: task.id, recorded: new Set(agentsOpenedBy(task)) };
+  if (agentsTouching(owned.directory, listed).some((agent) => agentOutsideCardScope(agent, scope) || !purgeDecision(agent).ok)) return false;
   return true;
 }
 
@@ -502,7 +503,7 @@ async function purgeOpenedAgents(
     return "retry";
   }
   if (directoryState(directory) === "present") {
-    const touching = await retainAgentsBeforeDirectoryRemoval(directory, activity);
+    const touching = await retainAgentsBeforeDirectoryRemoval(directory, activity, { taskId: task.id, recorded: new Set(agentsOpenedBy(task)) });
     for (const agentId of touching.purged) markAgentPurged(events, agentId, directory, record);
     for (const agentId of touching.waiting) noteTurnOnce(events, agentId, directory, record);
     if (touching.unread.length > 0) {
@@ -513,6 +514,18 @@ async function purgeOpenedAgents(
         ok: false,
         outcome: "error",
         error: t("tempWorkspace.agents.unreadableList", { agents: touching.unread.join(t("common.listSep")) }),
+        retryAt,
+      });
+      return "retry";
+    }
+    if (touching.outside.length > 0) {
+      const retryAt = nextRetryAt(events, "purge_agents", directory, now);
+      record({
+        action: "purge_agents",
+        directory,
+        ok: false,
+        outcome: "error",
+        error: t("tempWorkspace.agents.foreignDirectory"),
         retryAt,
       });
       return "retry";

@@ -7,6 +7,7 @@
 ### 修复
 
 - 全局 Kanban leader（`supervisorAgentId`）可恢复所有项目卡片的清理，其他项目权限范围不变。`resume-cleanup <卡号> --discard-unmerged` 只允许项目登记的 leader 或 Kanban leader 丢弃自有临时分支：先列出完整提交 SHA／标题，审计授权 leader 和丢弃提交，再走正常清理删除干净的 worktree、分支并归档 workspace。卡令牌、执行者、审查者不能使用；副本仍在时，tip、基准变化或未提交改动会暂停移除。副本删除后，基准前进不阻止删除已批准 tip；tip 改变或删分支重试耗尽时，保留分支、撤销授权并通知 leader，清理正常收束。不加参数时 `not_merged` 行为不变。修复 [GitHub issue #2](https://github.com/jasonhnd/paseo-kanban/issues/2)。
+- 清理一张卡时，只删除这张卡记录过的 agent：runs、任务列、令牌，以及打开事件里的 agentId，再加上从这些 agent 派生出来的子 agent。只是共用目录或 workspace 的 agent 会留下来，包括另一张早已完成的卡的执行和审查 agent。标签写成这张卡、但记录属于另一张卡的 agent 不会被清掉。清理说明只写别的卡的 agent 还在用这个目录，不点出那些 agent。见 [GitHub issue #3](https://github.com/jasonhnd/paseo-kanban/issues/3)。
 
 ## 0.1.0-rc.9 — 待审查与发布
 

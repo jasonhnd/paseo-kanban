@@ -8,6 +8,7 @@ Nine release candidates are recorded here. `0.1.0-rc.9` is the current unpublish
 ### Fixed
 
 - The global Kanban leader (`supervisorAgentId`) can resume cleanup for cards in every project. Other project permissions stay scoped. `resume-cleanup <card> --discard-unmerged` lets only the registered project leader or Kanban leader abandon an owned temporary branch: it lists full commit SHAs/titles, audits the authorizing leader and discarded commits, and uses normal cleanup to remove the clean worktree/branch and archive the workspace. Card tokens and workers cannot use it. Changed tips, base or uncommitted work hold retirement while the copy exists. After removal, base movement does not block deletion of the approved tip; a changed tip or exhausted deletion retries keeps the branch, revokes the grant and notifies its leader so cleanup settles. Without the flag, `not_merged` behavior is unchanged. Fixes [GitHub issue #2](https://github.com/jasonhnd/paseo-kanban/issues/2).
+- Cleaning a card now deletes only the agents that card recorded: runs, the task columns, tokens, and open events, plus a child spawned from one of those agents. Agents that only share the directory or workspace stay, including another finished card's executor and reviewer. An agent whose label names this card but whose record belongs to another card is not purged. The cleanup note says that other cards' agents still use the directory and does not name those agents. See [GitHub issue #3](https://github.com/jasonhnd/paseo-kanban/issues/3).
 
 ## 0.1.0-rc.9 — pending review and publication
 

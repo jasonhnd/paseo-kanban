@@ -1791,6 +1791,7 @@
   "tempMark.note.pending": "待合回：{card}（{detail}）",
   "tempMark.note.temp": "临时 workspace：{card}（完成后自动收拾）",
   "tempWorkspace.agents.deleteFailed": "删除失败",
+  "tempWorkspace.agents.foreignDirectory": "别的卡的 agent 还在用这个目录",
   "tempWorkspace.agents.stillPointing": "还有 agent 指着这个目录：{agents}",
   "tempWorkspace.agents.unreadable": "看不了 agent 是否还在跑",
   "tempWorkspace.agents.unreadableList": "看不了 agent 是否还在跑：{agents}",

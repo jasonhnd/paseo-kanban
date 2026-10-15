@@ -634,15 +634,18 @@ describe("worktree gc keeps a directory while another card's agent is running or
       assert.equal(existsSync(card.directory), true);
       assert.equal(existsSync(join(card.directory, PLACEHOLDER_NAME)), false);
       const waits = readCleanupEvents(card.id).filter((event) => event.action === "wait_turn" && event.agentId === neighbor.agentId);
-      assert.equal(waits.length, 1);
-      assert.equal(waits[0]?.retryAt, undefined);
+      assert.equal(waits.length, 0);
+      const failed = readCleanupEvents(card.id).filter((event) => event.action === "remove_worktree" && event.ok === false);
+      assert.equal(failed.length, 1);
+      assert.equal(failed[0]?.error, zhCN("tempWorkspace.agents.foreignDirectory"));
+      assert.equal(JSON.stringify(readCleanupEvents(card.id)).includes(neighbor.agentId), false);
       assert.equal(readCleanupEvents(card.id).some((event) => event.action === "remove_worktree" && event.ok === true), false);
     } finally {
       resetMissingCwdForTests();
     }
   });
 
-  it("keeps the worktree and records a retry when the other agent's query throws", async () => {
+  it("keeps the worktree while another card's agent points at it, without querying that agent", async () => {
     const card = await mergedCopy("query-neighbor");
     const neighbor = finishedNeighbor(card.directory, zhCNPart("cardParts.event.prError", 2, 6));
     const agent: CwdAgent = {
@@ -665,21 +668,22 @@ describe("worktree gc keeps a directory while another card's agent is running or
       assert.equal(existsSync(join(card.directory, PLACEHOLDER_NAME)), false);
       const failed = readCleanupEvents(card.id).filter((event) => event.action === "remove_worktree" && event.ok === false);
       assert.equal(failed.length, 1);
-      assert.match(failed[0]?.error ?? "", new RegExp(localePattern(zhCNPart("cleanup.error.unreadable", 0, 9))));
+      assert.equal(failed[0]?.error, zhCN("tempWorkspace.agents.foreignDirectory"));
+      assert.equal(JSON.stringify(readCleanupEvents(card.id)).includes(neighbor.agentId), false);
       assert.equal(typeof failed[0]?.retryAt, "string");
       await sweep(card.id, [agent], async () => ({ archived: false, busy: false }), new Date(start.getTime() + 30_000));
       assert.equal(existsSync(card.directory), true);
       assert.equal(readCleanupEvents(card.id).filter((event) => event.action === "remove_worktree" && event.ok === false).length, 1);
       broken = false;
       await sweep(card.id, [agent], async () => ({ archived: false, busy: false }), new Date(start.getTime() + 61_000));
-      assert.equal(existsSync(card.directory), false);
-      assert.equal(readCleanupEvents(card.id).some((event) => event.action === "remove_worktree" && event.ok === true), true);
+      assert.equal(existsSync(card.directory), true);
+      assert.equal(readCleanupEvents(card.id).some((event) => event.action === "remove_worktree" && event.ok === true), false);
     } finally {
       resetMissingCwdForTests();
     }
   });
 
-  it("still removes a merged worktree when the other agent is idle", async () => {
+  it("keeps a merged worktree when another card's idle agent still points at it", async () => {
     const card = await mergedCopy("idle-neighbor");
     const neighbor = finishedNeighbor(card.directory, (zhCNPart("cleanup.reason.gone", 0, 2) + "Demo text"));
     const agent: CwdAgent = {
@@ -718,9 +722,13 @@ describe("worktree gc keeps a directory while another card's agent is running or
       } finally {
         release();
       }
-      assert.equal(deleted, true);
-      assert.equal(existsSync(card.directory), false);
-      assert.equal(readCleanupEvents(card.id).some((event) => event.action === "remove_worktree" && event.ok === true), true);
+      assert.equal(deleted, false);
+      assert.equal(existsSync(card.directory), true);
+      const failed = readCleanupEvents(card.id).filter((event) => event.action === "remove_worktree" && event.ok === false);
+      assert.equal(failed.length, 1);
+      assert.equal(failed[0]?.error, zhCN("tempWorkspace.agents.foreignDirectory"));
+      assert.equal(JSON.stringify(readCleanupEvents(card.id)).includes(agent.id), false);
+      assert.equal(readCleanupEvents(card.id).some((event) => event.action === "remove_worktree" && event.ok === true), false);
     } finally {
       resetMissingCwdForTests();
     }
@@ -780,7 +788,7 @@ describe("worktree gc keeps a directory while another card's agent is running or
     });
   }
 
-  it("keeps the worktree when cleanupOps cannot ask Paseo and the agent file looks idle", async () => {
+  it("keeps the worktree while another card's agent file is present, even when Paseo cannot be asked", async () => {
     const agentsRoot = join(dir, "gc-agents-inspect");
     const previous = process.env.KANBAN_AGENTS_DIR;
     process.env.KANBAN_AGENTS_DIR = agentsRoot;
@@ -847,16 +855,18 @@ describe("worktree gc keeps a directory while another card's agent is running or
       assert.equal(existsSync(join(agentsRoot, "bucket", `${neighbor.agentId}.json`)), true);
       const failed = readCleanupEvents(card.id).filter((event) => event.action === "remove_worktree" && event.ok === false);
       assert.equal(failed.length, 1);
-      assert.match(failed[0]?.error ?? "", new RegExp(localePattern(zhCNPart("cleanup.error.unreadable", 0, 9))));
+      assert.equal(failed[0]?.error, zhCN("tempWorkspace.agents.foreignDirectory"));
+      assert.equal(JSON.stringify(readCleanupEvents(card.id)).includes(neighbor.agentId), false);
       assert.equal(typeof failed[0]?.retryAt, "string");
       await run(new Date(start.getTime() + 30_000));
       assert.equal(existsSync(card.directory), true);
+      assert.equal(existsSync(join(agentsRoot, "bucket", `${neighbor.agentId}.json`)), true);
       assert.equal(readCleanupEvents(card.id).filter((event) => event.action === "remove_worktree" && event.ok === false).length, 1);
       broken = false;
       await run(new Date(start.getTime() + 61_000));
-      assert.equal(existsSync(card.directory), false);
-      assert.equal(existsSync(join(agentsRoot, "bucket", `${neighbor.agentId}.json`)), false);
-      assert.equal(readCleanupEvents(card.id).some((event) => event.action === "remove_worktree" && event.ok === true), true);
+      assert.equal(existsSync(card.directory), true);
+      assert.equal(existsSync(join(agentsRoot, "bucket", `${neighbor.agentId}.json`)), true);
+      assert.equal(readCleanupEvents(card.id).some((event) => event.action === "remove_worktree" && event.ok === true), false);
     } finally {
       if (previous === undefined) delete process.env.KANBAN_AGENTS_DIR;
       else process.env.KANBAN_AGENTS_DIR = previous;
@@ -951,7 +961,7 @@ describe("worktree gc keeps a directory while another card's agent is running or
     }
   });
 
-  it("keeps the worktree when an agent file cannot be read, then removes it once the file can", async () => {
+  it("keeps the worktree when another card's agent file cannot be read, and still keeps it once the file can", async () => {
     const agentsRoot = join(dir, "gc-agents-file");
     const previous = process.env.KANBAN_AGENTS_DIR;
     process.env.KANBAN_AGENTS_DIR = agentsRoot;
@@ -985,9 +995,13 @@ describe("worktree gc keeps a directory while another card's agent is running or
       assert.equal(readCleanupEvents(card.id).filter((event) => event.action === "remove_worktree" && event.ok === false).length, 1);
       chmodSync(file, 0o644);
       await sweepDisk(card.id, agentsRoot, new Date(start.getTime() + 61_000));
-      assert.equal(existsSync(card.directory), false);
-      assert.equal(existsSync(file), false);
-      assert.equal(readCleanupEvents(card.id).some((event) => event.action === "remove_worktree" && event.ok === true), true);
+      assert.equal(existsSync(card.directory), true);
+      assert.equal(existsSync(file), true);
+      const opened = readCleanupEvents(card.id).filter((event) => event.action === "remove_worktree" && event.ok === false);
+      assert.equal(opened.length, 1);
+      assert.equal(opened[0]?.error, zhCN("tempWorkspace.agents.foreignDirectory"));
+      assert.equal(JSON.stringify(readCleanupEvents(card.id)).includes(neighbor.agentId), false);
+      assert.equal(readCleanupEvents(card.id).some((event) => event.action === "remove_worktree" && event.ok === true), false);
     } finally {
       try {
         chmodSync(file, 0o644);
