@@ -168,6 +168,45 @@ describe("reconcile blocks a card whose bound workspace is gone", () => {
     assert.equal(CJK.test(catalog("en")["flow.onBehalf.note"] ?? ""), false);
   });
 
+  for (const lookup of ["inspect", "list"] as const) {
+    for (const changed of ["completed", "status", "agent", "workspace"] as const) {
+      it(`ignores a late ${lookup} result after the card's ${changed} changes`, async () => {
+        const task = runningCard();
+        bind(task.id, "ws-card");
+        let resolveLookup!: () => void;
+        let enteredLookup!: () => void;
+        const pending = new Promise<void>((resolve) => { resolveLookup = resolve; });
+        const entered = new Promise<void>((resolve) => { enteredLookup = resolve; });
+        const launcher = board();
+        if (lookup === "inspect") launcher.inspectWorkspace = async () => {
+          enteredLookup();
+          await pending;
+          return ws("ws-card", true);
+        };
+        else launcher.listWorkspaces = async () => {
+          enteredLookup();
+          await pending;
+          return [ws("ws-card", true)];
+        };
+        const reconciling = tick(launcher);
+        await entered;
+        if (changed === "completed") completeTask(task.id, "executor", "Handed in during lookup", { files: [], verification: "passed", risks: [] });
+        if (changed === "status") getDb().prepare("UPDATE tasks SET status = 'reviewing' WHERE id = ?").run(task.id);
+        if (changed === "agent") getDb().prepare("UPDATE tasks SET agent_id = 'replacement-agent' WHERE id = ?").run(task.id);
+        if (changed === "workspace") bind(task.id, "replacement-workspace");
+        const expected = getTask(task.id);
+        resolveLookup();
+        await reconciling;
+        const actual = getTask(task.id);
+        assert.equal(actual.status, expected.status);
+        assert.equal(actual.agent_id, expected.agent_id);
+        assert.equal(actual.paseo_workspace_id, expected.paseo_workspace_id);
+        assert.equal(events(task.id, "blocked").length, 0);
+        assert.equal(events(task.id, "reclaimed").length, 0);
+      });
+    }
+  }
+
   it("blocks a still-live agent when the bound workspace is archived", async () => {
     const task = runningCard();
     bind(task.id, "ws-card");
