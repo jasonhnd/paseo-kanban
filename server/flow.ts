@@ -238,7 +238,27 @@ async function gateReview(task: TaskRow, actor: string): Promise<TaskRow | null>
   throw new KanbanError("pr_checks", verdict.summary);
 }
 
+/**
+ * A linked review can finish before an inline reviewer claims the target.
+ * in_review is that queue. Move it to acceptance, the same end state as an
+ * inline approve, and do not increment the review round. Leave every other
+ * status alone: acceptance is already waiting, and reviewing belongs to the
+ * inline claim.
+ */
+function acceptUnclaimedReviewTarget(review: TaskRow, summary: string, actor: string): void {
+  if (review.role !== "reviewer" || review.review_of == null) return;
+  const original = getTask(review.review_of);
+  if (original.status !== "in_review") return;
+  move(original.id, "in_review", "acceptance", actor, "approve", "", [], { summary, sourceReviewId: review.id });
+  addComment(original.id, actor, summary || t("flow.comment.approved"));
+  notifyAcceptance(original.id);
+  promoteParents(actor);
+  releaseAgents(original.id, null, true);
+}
+
 function approveNow(id: number, summary: string, actor: string): TaskRow {
+  const review = getTask(id);
+  acceptUnclaimedReviewTarget(review, summary, actor);
   const reviewerId = getTask(id).agent_id;
   const next = move(id, "reviewing", "acceptance", actor, "approve", "", [], { summary });
   addComment(id, actor, summary || t("flow.comment.approved"));
@@ -476,8 +496,10 @@ export function leaderPassTask(id: number, note: string, actor = "supervisor"): 
  * The second review rejection (review_round becomes 2) stops on rework and wakes the project leader.
  * It does not resume the executor. A later rejection, after the leader sends it back, still stops at round 3.
  * Leader rejects and land conflicts do not take the round-2 stop. Land conflicts do not increment review_round.
+ * in_review is included so a linked review can send back a target that no inline reviewer has claimed.
+ * The review card itself must still be reviewing. Creating the review does not claim the target.
  */
-const REWORK_FROM = new Set<Status>(["acceptance", "done", "archived", "rework", "reviewing", "blocked"]);
+const REWORK_FROM = new Set<Status>(["acceptance", "done", "archived", "rework", "reviewing", "blocked", "in_review"]);
 
 function parkSecondReview(task: TaskRow, reason: string, findings: string, actor: string, endRun: boolean): TaskRow {
   const text = reason.trim();

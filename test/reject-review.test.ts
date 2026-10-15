@@ -453,6 +453,29 @@ describe("reject and reviewed cards", () => {
     assert.equal(event.to_status, "acceptance");
   });
 
+  it("leaves an acceptance or reviewing target in place when the manual review approves", async () => {
+    for (const status of ["acceptance", "reviewing"] as const) {
+      const original = createTask({ project: `queued-keep-${status}`, title: "Already placed", role: "executor", workspacePath: dir });
+      getDb()
+        .prepare("UPDATE tasks SET status = ?, review_round = 1, executor_agent_id = 'exec-live', agent_id = 'exec-live' WHERE id = ?")
+        .run(status, original.id);
+      const review = createTask({
+        project: `queued-keep-${status}`,
+        title: "Manual review",
+        role: "reviewer",
+        workspacePath: dir,
+        reviewOf: original.id,
+      });
+      getDb().prepare("UPDATE tasks SET status = 'reviewing', agent_id = 'reviewer-1' WHERE id = ?").run(review.id);
+      const approved = await approveTask(review.id, "Looks right", "reviewer");
+      assert.equal(approved.status, "acceptance");
+      const again = getTask(original.id);
+      assert.equal(again.status, status);
+      assert.equal(again.review_round, 1);
+      assert.equal(again.agent_id, "exec-live");
+    }
+  });
+
   it("does not claim the target when the manual review card is created", () => {
     const original = createTask({ project: "queued-create", title: "Still queued", role: "executor", workspacePath: dir });
     getDb().prepare("UPDATE tasks SET status = 'in_review', executor_agent_id = 'exec-live' WHERE id = ?").run(original.id);
