@@ -554,7 +554,9 @@ describe("reject and reviewed cards", () => {
       {
         const { original, review, calls } = scene("error");
         await assert.rejects(
-          () => approveTask(review.id, "Looks right", "reviewer"),
+          async () => {
+            await approveTask(review.id, "Looks right", "reviewer");
+          },
           (err: unknown) => err instanceof KanbanError && err.code === "pr_checks",
         );
         const again = getTask(original.id);

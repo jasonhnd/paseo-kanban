@@ -326,6 +326,14 @@ function approveNow(id: number, summary: string, actor: string): TaskRow {
   return next;
 }
 
+function linkedGithubTarget(review: TaskRow): TaskRow | null {
+  if (review.role !== "reviewer" || review.review_of == null) return null;
+  const original = getTask(review.review_of);
+  if (original.status !== "in_review") return null;
+  if (readContract(original.contract_json).kind !== "github") return null;
+  return original;
+}
+
 export function approveTask(id: number, summary: string, actor = "reviewer"): TaskRow | Promise<TaskRow> {
   const text = summary.trim();
   if (!text) throw new KanbanError("invalid", t("flow.error.noSummary"));
@@ -333,13 +341,16 @@ export function approveTask(id: number, summary: string, actor = "reviewer"): Ta
   if (task.status !== "reviewing") {
     throw new KanbanError("illegal_transition", t("flow.error.cannotApprove", { status: task.status }), { from: task.status, to: "acceptance" });
   }
-  const finish = async (ownHeld: TaskRow | null): Promise<TaskRow> => {
-    if (ownHeld) return ownHeld;
-    const held = await gateLinkedReviewTarget(getTask(id), actor);
-    return held ? getTask(id) : approveNow(id, text, actor);
-  };
-  if (readContract(task.contract_json).kind !== "github") return finish(null);
-  return gateReview(task, actor).then(finish);
+  const ownGithub = readContract(task.contract_json).kind === "github";
+  if (!ownGithub && !linkedGithubTarget(task)) return approveNow(id, text, actor);
+  return (async () => {
+    if (ownGithub) {
+      const held = await gateReview(getTask(id), actor);
+      if (held) return held;
+    }
+    if (await gateLinkedReviewTarget(getTask(id), actor)) return getTask(id);
+    return approveNow(id, text, actor);
+  })();
 }
 
 function reviewHandoff(reason: string, findings: string): string {
