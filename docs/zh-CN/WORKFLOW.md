@@ -56,4 +56,4 @@ node "$BOARD_INSTALL/bin/paseo-kanban.mjs" resume-cleanup DEMO_0001 --discard-un
 
 返回结果先列出本地基准以外提交的完整 SHA／标题，并用 `cleanup_discard_authorized` 记录 leader、精确 tip 和提交。该回执表示授权，清理尚未完成。正常清理将在合适的 tick 执行，共享 workspace、活跃 agent 检查照常生效；归档 workspace、删除 worktree，并只删除已批准的本地分支 tip。分支删除成功后，`cleanup_discarded` 记录 leader 和丢弃提交。不删除远端分支。
 
-出现新提交、基准变化或未提交改动时，保留现场。检查新状态后，若仍打算丢弃，再显式加参数授权。重建后的 workspace 代次不能复用旧授权。不加参数时，原有合并检查和保留分支规则继续生效。
+副本仍存在时，出现新提交、基准变化或未提交改动会暂停移除副本。检查该副本后，若仍打算丢弃，再显式加参数授权。副本删除后，基准前进不影响删除已批准的 tip。若分支 tip 不同或已在其他 worktree 中检出，则保留分支、撤销授权，记录 `keep_branch` 和 `temp_workspace_cleaned`（`keptBranch: true`），并唤醒登记的项目 leader（必要时回退到 Kanban leader）。删分支的临时错误继续使用正常退避和 12 次上限；达到上限同样保留、撤销并通知。不要求对已删除的副本重新授权。撤销最新授权后不能重新启用更旧授权。重建后的 workspace 代次不能复用旧授权。不加参数时，原有合并检查和保留分支规则继续生效。
