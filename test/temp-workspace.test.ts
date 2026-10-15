@@ -2862,7 +2862,7 @@ describe("temporary workspace cleanup", () => {
     assert.equal((JSON.parse(cleaned?.data_json ?? "{}") as { keptBranch?: boolean }).keptBranch, true);
   });
 
-  it("waits without backoff while a review agent still uses the temporary directory", async () => {
+  it("waits without backoff while a review agent still uses the temporary directory, then keeps that other card's agent", async () => {
     const card = await landedTemp("review-hold", "review");
     const sibling = createTask({ project: "review-hold", title: "Independent review", role: "reviewer", workspacePath: card.directory, reviewOf: card.id });
     const reviewAgent = `review-${sibling.id}`;
@@ -2892,10 +2892,21 @@ describe("temporary workspace cleanup", () => {
       assert.equal(shared().length, 1);
       getDb().prepare("UPDATE tasks SET status = 'done' WHERE id = ?").run(sibling.id);
       await drainCleanups(new Date(start.getTime() + 2_000));
+      assert.equal(box.archives(), 0);
+      assert.equal(existsSync(card.directory), true);
+      assert.equal(existsSync(agentFile(reviewAgent)), true);
+      assert.equal(existsSync(agentFile(card.agentId)), false);
+      assert.equal(eventRows(card.id).some((row) => row.kind === "temp_workspace_cleaned"), false);
+      assert.equal(eventRows(card.id).some((row) => row.kind === "agent_purged" && row.data_json.includes(reviewAgent)), false);
+      const held = cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false);
+      assert.equal(held.length, 1);
+      assert.equal(held[0]?.error, zhCN("tempWorkspace.agents.foreignDirectory"));
+      assert.equal(String(held[0]?.error).includes(reviewAgent), false);
+      assert.equal((await git(card.root, ["branch", "--list", card.branch])).includes(card.branch), true);
     } finally {
+      rmSync(agentFile(reviewAgent), { force: true });
       release();
     }
-    await assertCleaned(card.root, card.id, card.branch, card.directory, box.archives());
     assert.equal(cleanupRows(card.id).some((row) => String(row.error ?? "").includes(zhCNPart("cleanup.error.unreadable", 0, 9))), false);
   });
 
