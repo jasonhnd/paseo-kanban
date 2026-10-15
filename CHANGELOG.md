@@ -5,6 +5,10 @@ Nine release candidates are recorded here. `0.1.0-rc.9` is the current unpublish
 
 ## Unreleased
 
+### Fixed
+
+- A running or reviewing card whose bound Paseo workspace was archived by the host, or is missing from a successful workspace list, is blocked as needs_human instead of staying in progress with no live agent. Executor and batch rules say not to check out a PR head branch as the current branch in the card's temporary worktree: push from a separate local branch or ref, or run gh pr merge without checking out the head. The Kanban leader (supervisorAgentId) or that project's registered leader can hand in the disappeared agent's work with complete --on-behalf. The complete event records onBehalf. Every other identity is refused. doctor still changes no cards. See [GitHub issue #3](https://github.com/jasonhnd/paseo-kanban/issues/3).
+
 ## 0.1.0-rc.9 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.9`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.8 tags are never moved.
