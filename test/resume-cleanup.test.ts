@@ -133,6 +133,15 @@ it("refuses discard for creators, foreign leaders, workers, card tokens and the 
   assert.ok(existsSync(f.directory));
 });
 
+it("does not promote a card-bound guest token into cleanup authority", async () => {
+  const f = fixture();
+  const caller = { KANBAN_TOKEN: issueToken("guest", f.id, "board-leader") };
+  for (const suffix of [[], ["--discard-unmerged"]]) {
+    await assert.rejects(runKanban(["resume-cleanup", String(f.id), ...suffix], caller), { code: "forbidden" });
+  }
+  assert.equal(rows(f.id, "cleanup_discard_authorized").length, 0);
+});
+
 it("refuses active cards, dirty copies and foreign checkouts before recording authorization", async () => {
   const f = fixture();
   const command = ["resume-cleanup", String(f.id), "--discard-unmerged"];
