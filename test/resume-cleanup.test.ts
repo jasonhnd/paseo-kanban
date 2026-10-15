@@ -25,8 +25,9 @@ const env = (id: string) => ({ PASEO_AGENT_ID: id });
 let serial = 0;
 
 beforeEach(() => {
+  getDb().exec("DELETE FROM tokens");
   saveConfig({ ...loadConfig(), supervisorAgentId: "board-leader", supervisors: { demo: "project-leader", other: "other-leader" } });
-  setMissingCwdHooks({ listAgents: async () => [], listAgentFiles: () => [] });
+  setMissingCwdHooks({ listAgents: () => [] });
 });
 after(() => { resetMissingCwdForTests(); closeDb(); rmSync(dir, { recursive: true, force: true }); });
 
@@ -102,7 +103,7 @@ for (const leader of ["project-leader", "board-leader"]) {
     assert.deepEqual(JSON.parse(authorized[0].data_json).commits, f.commits);
     assert.equal(tempCleanupDue(getTask(f.id), new Date()), true);
     const archives: string[] = [];
-    assert.equal(await settle(f, archives), "settled");
+    assert.equal(await settle(f, archives), "settled", JSON.stringify(readCleanupEvents(f.id)));
     assert.equal(existsSync(f.directory), false);
     assert.equal(git(f.root, "branch", "--list", f.branch), "");
     assert.deepEqual(archives, [f.workspaceId]);

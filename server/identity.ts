@@ -163,6 +163,8 @@ const LEGACY_UNBLOCK_ACTION = "\u89e3\u9664\u5361\u4f4f";
 export interface SupervisorScopeOptions {
   /** Set by the unblock command: the Kanban <leader> may then unblock a block the board itself caused. */
   unblock?: boolean;
+  /** Cleanup fallback belongs to the Kanban leader across every project. */
+  resumeCleanup?: boolean;
 }
 
 /** `action` is display text only (it goes into the refusal); behaviour is chosen by `options`. */
@@ -170,9 +172,18 @@ export function assertSupervisorScope(identity: Identity, task: TaskRow, action:
   if (identity.role !== "supervisor" || !identity.agentId) return;
   if (task.created_by_agent === identity.agentId) return;
   if (projectSupervisor(task.project) === identity.agentId) return;
+  if (options.resumeCleanup && isKanbanLeader(identity.agentId)) return;
   const unblock = options.unblock === true || action === LEGACY_UNBLOCK_ACTION;
   if (unblock && loadConfig().supervisorAgentId === identity.agentId && boardCausedBlock(task)) return;
   throw new KanbanError("forbidden", t("identity.otherProjectCard", { action, project: task.project }));
+}
+
+/** Destructive cleanup needs a registered project/Kanban leader, never a card-bound token or anonymous shell. */
+export function assertDiscardCleanupScope(identity: Identity, task: TaskRow): void {
+  if (identity.role !== "supervisor" || identity.taskId != null || !identity.agentId ||
+      (projectSupervisor(task.project) !== identity.agentId && !isKanbanLeader(identity.agentId))) {
+    throw new KanbanError("forbidden", t("cleanupDiscard.onlyLeader"));
+  }
 }
 
 /** Adjudication belongs to the registered project leader or the Kanban leader. */

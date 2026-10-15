@@ -17,7 +17,8 @@ import { retiredDefaultWorktree, assertConfigReadable, doctorSettings, findConfi
 import { KanbanError } from "./errors";
 import { handoverLeader } from "./handover";
 import { assertSafeAgentId } from "./agent-id";
-import { assertCliCommandAllowed, assertNotLeaderAgent, assertProjectScope, assertSupervisorScope, isKanbanLeader, resolveCliIdentity, resolveCompactIdentity } from "./identity";
+import { assertCliCommandAllowed, assertDiscardCleanupScope, assertNotLeaderAgent, assertProjectScope, assertSupervisorScope, isKanbanLeader, resolveCliIdentity, resolveCompactIdentity } from "./identity";
+import { authorizeDiscard } from "./cleanup-discard";
 import { superviseProject } from "./leader-registry";
 import { auditView, launcherFrom } from "./paseo";
 import type { AgentPresence } from "./presence";
@@ -72,7 +73,7 @@ const COMMANDS: Record<string, { flags: readonly string[]; positionals: "none" |
   project: { flags: ["project", "workspace", "base", "lanes", "allow-lanes", "parallel", "always-temp", "wait-parent-pr", "code"], positionals: "none" },
   rebind: { flags: ["id", "agent"], positionals: "one" },
   "purge-agents": { flags: ["id", "dry-run"], positionals: "one" },
-  "resume-cleanup": { flags: ["id"], positionals: "one" },
+  "resume-cleanup": { flags: ["id", "discard-unmerged"], positionals: "one" },
   "native-sessions": { flags: ["sweep", "dry-run", "apply", "restore", "restore-manifest", "reset-failed", "reconcile-codex", "reconcile-claude", "include-tmp-sessions", "project", "limit", "offset"], positionals: "none" },
   "compact-events": { flags: ["dry-run", "apply", "days"], positionals: "none" },
   vacuum: { flags: ["dry-run", "apply"], positionals: "none" },
@@ -347,15 +348,22 @@ async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEn
     return { text: result.text, deleted: result.deleted, dryRun };
   }
   if (parsed.cmd === "resume-cleanup") {
-    if (identity.role !== "supervisor") throw new KanbanError("forbidden", t("cli.onlyLeader.resumeCleanup"));
+    if (identity.role !== "supervisor" || identity.taskId != null) throw new KanbanError("forbidden", t("cli.onlyLeader.resumeCleanup"));
     const taskId = resolveTaskId(parsed.positionals[0] ?? parsed.flag("id") ?? "");
-    assertSupervisorScope(identity, getTask(taskId), t("cli.action.resumeCleanup"));
+    const discard = parsed.flag("discard-unmerged");
+    if (discard !== undefined && discard !== "true") throw new KanbanError("invalid", t("cleanupDiscard.flag"));
+    const task = getTask(taskId);
+    if (discard) assertDiscardCleanupScope(identity, task);
+    assertSupervisorScope(identity, task, t("cli.action.resumeCleanup"), { resumeCleanup: true });
+    const grant = discard ? await authorizeDiscard(taskId, identity.agentId!) : null;
     const resumedSteps = resumeCleanup(taskId);
     const requestId = resumedSteps === 0 ? requestRebuiltCleanup(taskId) : null;
     const requeued = requestId !== null;
     const resumed = resumedSteps + (requeued ? 1 : 0);
-    return { requeued, requested: requeued, requestId, execution: requeued ? "periodic" : null,
-      text: requeued ? t("cli.resumeCleanup.requested") : resumed === 0 ? t("cli.resumeCleanup.none") : t("cli.resumeCleanup.done", { count: resumed }), resumed };
+    const text = grant ? t("cleanupDiscard.requested", { commits: grant.commits.map(commit => `${commit.sha} ${commit.subject}`).join("\n") || t("cleanupDiscard.noCommits") })
+      : requeued ? t("cli.resumeCleanup.requested") : resumed === 0 ? t("cli.resumeCleanup.none") : t("cli.resumeCleanup.done", { count: resumed });
+    return { requeued, requested: requeued || !!grant, requestId, execution: requeued || grant ? "periodic" : null,
+      text, resumed, ...(grant ? { commits: grant.commits } : {}) };
   }
   const id = () => resolveTaskId(parsed.positionals[0] ?? parsed.flag("id") ?? "");
   if (parsed.cmd === "tag") {

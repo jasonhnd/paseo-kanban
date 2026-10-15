@@ -22,6 +22,7 @@ import { branchFailureKind, branchAlreadyGone, createdWorktree, deleteOwnedBranc
 import { readWorktreeCreated, correctedFromDirectories, reconcileRecordedDirectory } from "./worktree-record";
 import { cleanupGeneration, cleanupMark, currentCleanupSql } from "./cleanup-state";
 import { removeArchivedClaudeProjects } from "./native-sessions";
+import { deleteDiscardedBranch, discardAuthorization, discardStillValid } from "./cleanup-discard";
 
 function failure(result: { stderr: string; stdout: string }, fallback: string): string {
   return (result.stderr || result.stdout || fallback).trim();
@@ -320,14 +321,15 @@ export function tempCleanupDue(task: TaskRow, now: Date): boolean {
   const owned = ownedWorktree(task.id, created);
   const events = readCleanupEvents(task.id);
   if (!owned) return retryReady(events, "skip_worktree", created.directory || String(task.id), now);
-  if (parkedMissingPr(events, owned.directory)) return !missingPrWakeDelivered(task.id);
+  const discard = discardAuthorization(task, owned);
+  if (!discard && parkedMissingPr(events, owned.directory)) return !missingPrWakeDelivered(task.id);
   const steps: Array<[RetryAction, string]> = [
     ["wip_commit", owned.directory],
     ["purge_agents", owned.directory],
     ["drop_directory", owned.directory],
     ["delete_branch", owned.directory],
   ];
-  if (!(task.status === "archived" && notMergedBackoffOnly(events, owned.directory))) {
+  if (!discard && !(task.status === "archived" && notMergedBackoffOnly(events, owned.directory))) {
     steps.push(["skip_worktree", owned.directory]);
   }
   if (task.paseo_workspace_id) steps.push(["archive_workspace", task.paseo_workspace_id]);
@@ -732,6 +734,16 @@ export async function settleTempWorkspace(input: {
       current.executor_agent_id !== task.executor_agent_id || pendingLand(task.id)) return false;
     return !holdForSharedWorkspace(current, events, record);
   };
+  const discard = discardAuthorization(task, owned);
+  const discardReady = async (): Promise<boolean> => {
+    if (!discard) return canContinue();
+    if (!canContinue() || !(await discardStillValid(task, owned, discard, run)) || !canContinue()) {
+      record({ action: "skip_worktree", directory: owned.directory, branch: owned.branch, ok: false,
+        reason: "discard_changed", error: t("cleanupDiscard.changed") });
+      return false;
+    }
+    return true;
+  };
   if (input.agentActivity && !recorded(events, "purge_agents")) {
     for (const agentId of agentsOpenedBy(task)) {
       if (agentPurgeDone(events, agentId)) continue;
@@ -769,10 +781,10 @@ export async function settleTempWorkspace(input: {
       noteTurnIdle(events, agentId, record);
     }
   }
-  if (!canContinue()) return "pending";
+  if (!(await discardReady())) return "pending";
   // Once a proof was saved with the directory present, the normal path finishes it. Only an untouched card takes the shortcut.
   const probe = directoryProbe(owned.directory);
-  const dirGone = !savedWip(events) && "state" in probe && probe.state === "absent";
+  const dirGone = (!!discard || !savedWip(events)) && "state" in probe && probe.state === "absent";
   if ("error" in probe) {
     // A read error must not look like a missing directory: existsSync-based checks below would treat it as gone.
     if (!retryReady(events, "skip_worktree", owned.directory, input.now)) return "pending";
@@ -780,7 +792,7 @@ export async function settleTempWorkspace(input: {
       action: "skip_worktree", directory: owned.directory, branch: owned.branch, ok: false, error: probe.error,
     });
   }
-  if (!dirGone && parkedMissingPr(events, owned.directory)) {
+  if (!discard && !dirGone && parkedMissingPr(events, owned.directory)) {
     // Nobody took the no-PR wake yet: try again this round. It is recorded as sent only once delivered.
     if (!missingPrWakeDelivered(task.id)) {
       const parked = [...events].reverse().find((event) => event.action === "skip_worktree" && event.reason === MISSING_PR_REASON);
@@ -792,8 +804,8 @@ export async function settleTempWorkspace(input: {
   // Prior not_merged rows from a missing pull request must not keep an archived copy waiting.
   // A real read failure still uses the backoff.
   const skipNotMergedBackoff = archived && !owned.readOnly && notMergedBackoffOnly(events, owned.directory);
-  if (!dirGone && !skipNotMergedBackoff && !retryReady(events, "skip_worktree", owned.directory, input.now)) return "pending";
-  const saved = savedWip(events);
+  if (!discard && !dirGone && !skipNotMergedBackoff && !retryReady(events, "skip_worktree", owned.directory, input.now)) return "pending";
+  const saved = discard ? undefined : savedWip(events);
   let landedFlag = saved?.landed ?? false;
   let committedWip = saved?.committed ?? false;
   let pushedFlag = saved?.pushed ?? false;
@@ -802,7 +814,11 @@ export async function settleTempWorkspace(input: {
   let archivedKeep = saved?.basis === ARCHIVED_KEEP_BRANCH;
   let goneKeep = false;
   let readOnlyReason: string | undefined;
-  if (dirGone) {
+  if (discard) {
+    // Explicit approval replaces only the merge proof. All ordinary ownership,
+    // live-agent, shared-workspace and clean-directory gates still apply.
+    landedFlag = true;
+  } else if (dirGone) {
     if (!recorded(events, "keep_branch") && !events.some((e) => e.action === "skip_worktree" && e.ok === true && e.reason === "gone")) {
       const tip = await localBranchTip(owned, run);
       if (tip === "unreadable") {
@@ -844,7 +860,7 @@ export async function settleTempWorkspace(input: {
     if (isDirectoryOnlyBasis(pushed.basis)) pushedBasis = pushed.basis;
     originBranch = pushed.originBranch ?? originBranch;
   }
-  if (!dirGone && !owned.readOnly && !saved) {
+  if (!discard && !dirGone && !owned.readOnly && !saved) {
     const landed = await worktreeLanded(task, owned, run, input.now.getTime());
     if (landed.landed && landed.gone) {
       if (!events.some((event) => event.action === "skip_worktree" && event.ok === true && event.reason === "gone")) {
@@ -940,7 +956,7 @@ export async function settleTempWorkspace(input: {
       }
     }
   }
-  let keepBranch = dirGone ? goneKeep : archivedKeep || (!landedFlag && !pushedFlag) || committedWip;
+  let keepBranch = discard ? false : dirGone ? goneKeep : archivedKeep || (!landedFlag && !pushedFlag) || committedWip;
   if (!dirGone && keepBranch && !recorded(events, "keep_branch")) {
     const code = cardMark(task.id);
     const extra = committedWip ? t("tempWorkspace.keep.wipSaved", { message: t("tempWorkspace.wip.commitMessage", { card: code }) }) : t("tempWorkspace.keep.clean");
@@ -979,7 +995,7 @@ export async function settleTempWorkspace(input: {
     if (!retryReady(events, "archive_workspace", workspaceId, input.now)) return "pending";
     const decision = await input.decideWorkspace();
     // A card reopened while Paseo answered keeps its workspace (DEMO_0001).
-    if (!canContinue()) return "pending";
+    if (!(await discardReady())) return "pending";
     // Paseo may still name the directory this card's record had before it was corrected to the real one.
     const mismatch = decision.action === "archive" && !samePath(decision.directory, owned.directory) &&
       !correctedFromDirectories(task.id).some((from) => samePath(decision.directory, from));
@@ -1022,7 +1038,7 @@ export async function settleTempWorkspace(input: {
   }
   if (!recorded(events, "drop_directory")) {
     if (!retryReady(events, "drop_directory", owned.directory, input.now)) return "pending";
-    if (!canContinue()) return "pending";
+    if (!(await discardReady())) return "pending";
     const wasPlaceholder = directoryState(owned.directory) === "placeholder";
     const gitFile = directoryProbe(join(owned.directory, ".git"));
     const missingGit = !wasPlaceholder && directoryState(owned.directory) === "present" && "state" in gitFile && gitFile.state === "absent";
@@ -1045,7 +1061,7 @@ export async function settleTempWorkspace(input: {
   }
   if (!canContinue()) return "pending";
   const recordedSha = artifactAcceptanceSha(task.id);
-  if (recordedSha && !recorded(events, "delete_branch") && !(await artifactCommitInBase(owned.root, recordedSha, owned.base, run))) {
+  if (!discard && recordedSha && !recorded(events, "delete_branch") && !(await artifactCommitInBase(owned.root, recordedSha, owned.base, run))) {
     keepBranch = true;
     if (!events.some((event) => event.action === "keep_branch" && event.reason === ARTIFACT_KEEP_BRANCH)) {
       record({
@@ -1060,11 +1076,18 @@ export async function settleTempWorkspace(input: {
   if (!keepBranch && !archivedKeep && (landedFlag || pushedFlag) && !committedWip && !recorded(events, "delete_branch")) {
     if (!retryReady(events, "delete_branch", owned.directory, input.now)) return "pending";
     const inspectionError = owned.readOnly ? await deleteReadOnlyBranch(task.id, owned, run) : null;
-    const deleted = owned.readOnly
+    const deleted = discard
+      ? { ok: await deleteDiscardedBranch(task, owned, discard, run), error: t("cleanupDiscard.changed"), basis: "discard_unmerged" }
+      : owned.readOnly
       ? { ok: !inspectionError, error: inspectionError ?? undefined, basis: readOnlyReason ?? t("tempWorkspace.branch.readOnlyUnchanged") }
       : await deleteOwnedBranch(task, owned, run, input.run, pushedFlag, isDirectoryOnlyBasis(pushedBasis), pushedBasis);
     let basis = deleted.ok ? deleted.basis : undefined;
     if (!deleted.ok) {
+      if (discard) {
+        record({ action: "delete_branch", directory: owned.directory, branch: owned.branch, ok: false,
+          reason: "discard_changed", error: t("cleanupDiscard.changed") });
+        return "pending";
+      }
       const error = deleted.error ?? t("tempWorkspace.branch.notDeleted");
       const kind = branchFailureKind(error);
       if (kind === "gone") {
