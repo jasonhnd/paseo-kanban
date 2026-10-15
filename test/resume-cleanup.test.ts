@@ -1,0 +1,168 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, beforeEach, it } from "node:test";
+import { readCleanupEvents } from "../server/archive-book";
+import { kanbanHelp, runKanban } from "../server/cli";
+import { loadConfig, saveConfig } from "../server/config";
+import { closeDb, getDb } from "../server/db";
+import { setMissingCwdHooks, resetMissingCwdForTests } from "../server/missing-cwd";
+import { appendEvent, createTask, getTask } from "../server/store";
+import { settleTempWorkspace, tempCleanupDue } from "../server/temp-workspace";
+import { issueToken } from "../server/tokens";
+
+const dir = mkdtempSync(join(tmpdir(), "resume-cleanup-"));
+const trees = join(dir, "trees");
+mkdirSync(trees);
+process.env.KANBAN_DATA_DIR = join(dir, "data");
+process.env.KANBAN_AGENTS_DIR = join(dir, "agents");
+process.env.KANBAN_WORKTREES_ROOT = trees;
+mkdirSync(process.env.KANBAN_AGENTS_DIR);
+const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+const env = (id: string) => ({ PASEO_AGENT_ID: id });
+let serial = 0;
+
+beforeEach(() => {
+  saveConfig({ ...loadConfig(), supervisorAgentId: "board-leader", supervisors: { demo: "project-leader", other: "other-leader" } });
+  setMissingCwdHooks({ listAgents: async () => [], listAgentFiles: () => [] });
+});
+after(() => { resetMissingCwdForTests(); closeDb(); rmSync(dir, { recursive: true, force: true }); });
+
+function fixture() {
+  const root = join(dir, `repo-${++serial}`);
+  mkdirSync(root);
+  git(root, "init", "-q", "-b", "main");
+  git(root, "config", "user.name", "paseo-fleet contributors");
+  git(root, "config", "user.email", "noreply@example.invalid");
+  git(root, "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "Base fixture");
+  const task = createTask({ project: "demo", title: "Cleanup fixture", role: "executor", createdByAgent: "creator" });
+  const branch = `kanban/${task.id}-cleanup`;
+  const directory = join(trees, String(task.id));
+  git(root, "worktree", "add", "-qb", branch, directory);
+  const commits = ["Discarded documentation one", "Discarded documentation two"].map((subject, i) => {
+    writeFileSync(join(directory, `doc-${i}.md`), `${subject}\n`);
+    git(directory, "add", ".");
+    git(directory, "-c", "core.hooksPath=/dev/null", "commit", "-qm", subject);
+    return { sha: git(directory, "rev-parse", "HEAD"), subject };
+  }).reverse();
+  const workspaceId = `workspace-${task.id}`;
+  getDb().prepare("UPDATE tasks SET status = 'done', workspace_path = ?, workspace_kind = 'worktree', workspace_base = 'main', paseo_workspace_id = ? WHERE id = ?").run(directory, workspaceId, task.id);
+  appendEvent(task.id, "temp_workspace", null, null, "test", { root, base: "main" });
+  appendEvent(task.id, "worktree_created", null, null, "test", { directory, branch, base: "main", root, temp: true, workspaceId });
+  return { id: task.id, root, directory, branch, workspaceId, commits };
+}
+type Fixture = ReturnType<typeof fixture>;
+const rows = (id: number, kind: string) => getDb().prepare("SELECT actor, data_json FROM events WHERE task_id = ? AND kind = ? ORDER BY id").all(id, kind) as Array<{ actor: string; data_json: string }>;
+async function settle(f: Fixture, archives: string[], beforeArchive?: () => void) {
+  return settleTempWorkspace({ task: getTask(f.id), events: readCleanupEvents(f.id), now: new Date(),
+    record: data => appendEvent(f.id, "cleanup", null, null, "kanban", data),
+    decideWorkspace: async () => { beforeArchive?.(); return { action: "archive", workspaceId: f.workspaceId, directory: f.directory }; },
+    archiveWorkspace: async id => { archives.push(id); },
+  });
+}
+
+it("lets the Kanban leader resume another project's stopped cleanup", async () => {
+  const f = fixture();
+  appendEvent(f.id, "cleanup", null, null, "kanban", { action: "skip_worktree", directory: f.directory, ok: false, reason: "not_merged", stopped: true, attempts: 12 });
+  const result = await runKanban(["resume-cleanup", String(f.id)], env("board-leader")) as { resumed: number };
+  assert.equal(result.resumed, 1);
+});
+
+it("still refuses an unrelated project leader and ordinary worker identities", async () => {
+  const f = fixture();
+  for (const caller of [env("other-leader"), { KANBAN_TOKEN: issueToken("executor", f.id, "worker") }, { KANBAN_TOKEN: issueToken("reviewer", f.id, "reviewer") }]) {
+    await assert.rejects(runKanban(["resume-cleanup", String(f.id)], caller), { code: "forbidden" });
+  }
+  await assert.rejects(runKanban(["tag", String(f.id), "--tag", "example"], env("board-leader")), { code: "forbidden" });
+});
+
+it("keeps not_merged and all resources without the discard flag", async () => {
+  const f = fixture();
+  await runKanban(["resume-cleanup", String(f.id)], env("project-leader"));
+  const archives: string[] = [];
+  assert.equal(await settle(f, archives), "pending");
+  assert.ok(readCleanupEvents(f.id).some(row => row.reason === "not_merged"));
+  assert.ok(existsSync(f.directory));
+  assert.equal(git(f.root, "rev-parse", f.branch), f.commits[0].sha);
+  assert.deepEqual(archives, []);
+});
+
+for (const leader of ["project-leader", "board-leader"]) {
+  it(`lists and audits exact commits, then cleans the worktree, branch and workspace for ${leader}`, async () => {
+    const f = fixture();
+    await settle(f, []); // A real not_merged failure/backoff must not prevent explicit discard.
+    const result = await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env(leader)) as { text: string; commits: Fixture["commits"] };
+    assert.deepEqual(result.commits, f.commits);
+    for (const commit of f.commits) { assert.ok(result.text.includes(commit.sha)); assert.ok(result.text.includes(commit.subject)); }
+    assert.ok(existsSync(f.directory), "CLI lists the plan before periodic cleanup executes");
+    const authorized = rows(f.id, "cleanup_discard_authorized");
+    assert.equal(authorized[0].actor, leader);
+    assert.deepEqual(JSON.parse(authorized[0].data_json).commits, f.commits);
+    assert.equal(tempCleanupDue(getTask(f.id), new Date()), true);
+    const archives: string[] = [];
+    assert.equal(await settle(f, archives), "settled");
+    assert.equal(existsSync(f.directory), false);
+    assert.equal(git(f.root, "branch", "--list", f.branch), "");
+    assert.deepEqual(archives, [f.workspaceId]);
+    const discarded = rows(f.id, "cleanup_discarded");
+    assert.equal(discarded[0].actor, leader);
+    assert.deepEqual(JSON.parse(discarded[0].data_json).commits, f.commits);
+    assert.equal(JSON.parse(rows(f.id, "temp_workspace_cleaned")[0].data_json).keptBranch, false);
+  });
+}
+
+it("refuses discard for creators, foreign leaders, workers, card tokens and the anonymous shell", async () => {
+  const f = fixture();
+  saveConfig({ ...loadConfig(), supervisors: { ...loadConfig().supervisors, created: "creator" } });
+  for (const caller of [env("creator"), env("other-leader"), {},
+    { KANBAN_TOKEN: issueToken("executor", f.id, "project-leader") },
+    { KANBAN_TOKEN: issueToken("reviewer", f.id, "board-leader") },
+    { KANBAN_TOKEN: issueToken("supervisor", f.id, "board-leader") }]) {
+    await assert.rejects(runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], caller), { code: "forbidden" });
+  }
+  assert.equal(rows(f.id, "cleanup_discard_authorized").length, 0);
+  assert.ok(existsSync(f.directory));
+});
+
+it("refuses active cards, dirty copies and foreign checkouts before recording authorization", async () => {
+  const f = fixture();
+  const command = ["resume-cleanup", String(f.id), "--discard-unmerged"];
+  getDb().prepare("UPDATE tasks SET status = 'running' WHERE id = ?").run(f.id);
+  await assert.rejects(runKanban(command, env("project-leader")));
+  getDb().prepare("UPDATE tasks SET status = 'done' WHERE id = ?").run(f.id);
+  writeFileSync(join(f.directory, "unsaved.md"), "Keep me\n");
+  await assert.rejects(runKanban(command, env("project-leader")));
+  rmSync(join(f.directory, "unsaved.md"));
+  git(f.directory, "switch", "-qc", "foreign");
+  await assert.rejects(runKanban(command, env("project-leader")));
+  assert.equal(rows(f.id, "cleanup_discard_authorized").length, 0);
+});
+
+it("does not discard a newer tip or uncommitted changes added after authorization", async () => {
+  for (const change of ["commit", "dirty"]) {
+    const f = fixture();
+    await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("project-leader"));
+    writeFileSync(join(f.directory, "later.md"), "Keep later work\n");
+    if (change === "commit") { git(f.directory, "add", "."); git(f.directory, "-c", "core.hooksPath=/dev/null", "commit", "-qm", "Later work"); }
+    const archives: string[] = [];
+    assert.equal(await settle(f, archives), "pending");
+    assert.ok(existsSync(f.directory));
+    assert.deepEqual(archives, []);
+    assert.equal(rows(f.id, "cleanup_discarded").length, 0);
+  }
+});
+
+it("rechecks the authorized tip after awaited workspace inspection", async () => {
+  const f = fixture();
+  await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("project-leader"));
+  const archives: string[] = [];
+  assert.equal(await settle(f, archives, () => {
+    git(f.directory, "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "Arrived during inspection");
+  }), "pending");
+  assert.deepEqual(archives, []);
+  assert.ok(existsSync(f.directory));
+});
+
+it("documents the explicit discard flag in CLI help", () => { assert.ok(kanbanHelp().includes("--discard-unmerged")); });
