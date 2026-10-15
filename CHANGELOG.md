@@ -5,6 +5,10 @@ Nine release candidates are recorded here. `0.1.0-rc.9` is the current unpublish
 
 ## Unreleased
 
+### Fixed
+
+- The global Kanban leader (`supervisorAgentId`) can resume cleanup for cards in every project. Other project permissions stay scoped. `resume-cleanup <card> --discard-unmerged` lets only the registered project leader or Kanban leader abandon an owned temporary branch: it lists full commit SHAs/titles, audits the authorizing leader and discarded commits, and uses normal cleanup to remove the clean worktree/branch and archive the workspace. Card tokens and workers cannot use it. Changed tips or uncommitted work hold cleanup; without the flag, `not_merged` behavior is unchanged. Fixes [GitHub issue #2](https://github.com/jasonhnd/paseo-kanban/issues/2).
+
 ## 0.1.0-rc.9 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.9`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.8 tags are never moved.

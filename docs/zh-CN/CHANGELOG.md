@@ -4,6 +4,10 @@
 
 ## 未发布
 
+### 修复
+
+- 全局 Kanban leader（`supervisorAgentId`）可恢复所有项目卡片的清理，其他项目权限范围不变。`resume-cleanup <卡号> --discard-unmerged` 只允许项目登记的 leader 或 Kanban leader 丢弃自有临时分支：先列出完整提交 SHA／标题，审计授权 leader 和丢弃提交，再走正常清理删除干净的 worktree、分支并归档 workspace。卡令牌、执行者、审查者不能使用；tip 变化或有未提交改动时保留现场。不加参数时 `not_merged` 行为不变。修复 [GitHub issue #2](https://github.com/jasonhnd/paseo-kanban/issues/2)。
+
 ## 0.1.0-rc.9 — 待审查与发布
 
 本地候选 tag 为 `v0.1.0-rc.9`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.8 tag 绝不挪动。

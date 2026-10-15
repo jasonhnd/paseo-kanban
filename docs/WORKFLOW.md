@@ -46,3 +46,19 @@ The leader launch sets the board activation marker (`BOARD_AGENT_ENV` in Kanban'
 Report ready deliverables even when another PR or external check is pending; describe it in `handoff.waitingOn`. Use a human-needed block for missing authorization or a decision only the user can make. Keep independent work moving.
 
 The single plugin combines board dispatch with Fleet roles, quota and decisions. Admission uses immutable policy revisions and holds when that policy is unavailable. See [DATA](DATA.md) and [the contract](CONTRACT.md) for integration boundaries.
+
+## Recovering temporary cleanup
+
+`resume-cleanup <card>` clears stopped cleanup retries. The global Kanban leader (`supervisorAgentId`) may run it for any project; an unrelated project leader still cannot. It does not grant that global leader other card operations. An ordinary resume does not abandon unmerged work: `not_merged` still keeps the copy and branch.
+
+When the registered project leader has decided to abandon the commits, that leader or the global Kanban leader can run:
+
+```sh
+node "$BOARD_INSTALL/bin/paseo-kanban.mjs" resume-cleanup DEMO_0001 --discard-unmerged
+```
+
+Put the flag after the card number. It requires the registered leader's agent identity; creators alone, workers, card-bound tokens and an anonymous terminal cannot authorize discard. The card must be done or archived, with its own writable temporary card branch and a clean copy. Main directories, lanes, read-only copies and foreign checkouts are excluded.
+
+The response lists full SHA/title pairs for commits outside the local base and records `cleanup_discard_authorized` with the leader, exact tips and commits. This is an explicit discard authorization, not a completed cleanup receipt. An eligible normal cleanup tick retains the shared-workspace and live-agent checks, archives the workspace, removes the worktree and deletes only the approved local branch tip. `cleanup_discarded` records the leader and commits when branch deletion succeeds. No remote branch is deleted.
+
+New commits, a changed base or uncommitted changes hold the discard. Inspect the new state and rerun the explicit flag only if it is still intended. Rebuilt workspace generations cannot reuse an older authorization. Without the flag, existing merge and branch-retention rules apply.
