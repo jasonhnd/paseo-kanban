@@ -23,6 +23,7 @@ import { KanbanError } from "./errors";
 import { avoidedPools, cooldownLabel, noteStartFailure, recentSuccess, reclaimTask, TRANSIENT_START_LIMIT } from "./failures";
 import { loginBlipProfile } from "./login-blip";
 import { recoverLostCreate } from "./lost-agent";
+import { blockLostWorkspace, workspaceFateReader } from "./lost-workspace";
 import { agentLiveness, agentsDir, readAgentRecord, type AgentLiveness } from "./open";
 import { isQuotaWaitReason, quotaWaitLabel } from "../shared/blocked";
 import { onlyRolesBlock, quotaBrief, readPoolSnapshot, STALE_WAKE_MS, staleMinutes, type PoolSnapshot, type QuotaBrief } from "./pools";
@@ -534,15 +535,31 @@ export function resetReconcileForTests(): void {
   missingSince.clear();
 }
 
-async function reconcile(now: Date, agentState: (agentId: string | null) => AgentLiveness, inspect?: AgentInspector): Promise<void> {
+async function reconcile(
+  now: Date,
+  agentState: (agentId: string | null) => AgentLiveness,
+  inspect?: AgentInspector,
+  launcher?: Pick<AgentLauncher, "inspectWorkspace" | "listWorkspaces">,
+): Promise<void> {
   const rows = getDb().prepare("SELECT id, agent_id, updated_at FROM tasks WHERE status IN ('running', 'reviewing')").all() as unknown as Array<{
     id: number;
     agent_id: string | null;
     updated_at: string;
   }>;
+  const workspaceFate = workspaceFateReader(launcher ?? {});
   const running = new Set<number>();
   for (const row of rows) {
     running.add(row.id);
+    const task = getTask(row.id);
+    if (task.status === "running" || task.status === "reviewing") {
+      // Before start grace and before the lost-agent reclaim. A dead workspace
+      // must not grow a replacement agent. Unknown listings keep the old rule.
+      if (await workspaceFate(task) === "gone") {
+        blockLostWorkspace(task, agentState(task.agent_id));
+        missingSince.delete(row.id);
+        continue;
+      }
+    }
     if (!row.agent_id && now.getTime() - Date.parse(row.updated_at) < START_GRACE_MS) continue;
     // agents.create can finish in the daemon after the caller's socket is gone.
     // The card is already running and the id was never stored. Bind that record
@@ -651,7 +668,7 @@ export async function runTick(options: TickOptions): Promise<TickResult> {
       console.error("[paseo-kanban] land", err instanceof Error ? err.message : err);
     }
   });
-  await phase("tick.reconcile", () => reconcile(now, agentState, options.launcher.inspectAgent));
+  await phase("tick.reconcile", () => reconcile(now, agentState, options.launcher.inspectAgent, options.launcher));
   await phase("tick.stall", () => scanStalled({
     now,
     config,

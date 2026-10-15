@@ -4,7 +4,7 @@ import { getDb } from "./db";
 import { parentBlockReason, parentsBlockReason, taskParents } from "./parents";
 import { cardMark } from "./card-ref";
 import { KanbanError } from "./errors";
-import { DEFAULT_LAND_CONFLICT_LIMIT, DEFAULT_NUDGE_GRACE_MS, DEFAULT_NUDGE_INTERVAL_MS, DEFAULT_PROGRESS_GRACE_MS, loadConfig } from "./config";
+import { DEFAULT_LAND_CONFLICT_LIMIT, DEFAULT_NUDGE_GRACE_MS, DEFAULT_NUDGE_INTERVAL_MS, DEFAULT_PROGRESS_GRACE_MS, loadConfig, projectSupervisor } from "./config";
 import { inOpeningGrace, judgeNudge, lastAssistantText, progressCoversTurn, timelineShowsWork, truncateHandoff, withinNudgeInterval } from "./nudge";
 import { promoteParents } from "./promote";
 import { evaluateContract, readContract, rememberPullRequest, writeContract, type PrVerdict, type PrBindingDiagnostics } from "./pr";
@@ -82,13 +82,28 @@ function completionWorkspaceWarning(task: TaskRow): string | null {
   return t("flow.workspace.warning", { entries: entries.slice(0, 5).join("\n"), remainder });
 }
 
-export function completeTask(id: number, actorRole: "executor", summary: string, handoff: unknown): TaskRow;
-export function completeTask(id: number, actorRole: string, summary: string, handoff: unknown): TaskRow | Promise<TaskRow>;
-export function completeTask(id: number, actorRole: string, summary: string, handoff: unknown): TaskRow | Promise<TaskRow> {
+export interface CompleteOnBehalf {
+  onBehalf?: boolean;
+  actorAgentId?: string | null;
+}
+
+export function completeTask(id: number, actorRole: "executor", summary: string, handoff: unknown, options?: CompleteOnBehalf): TaskRow;
+export function completeTask(id: number, actorRole: string, summary: string, handoff: unknown, options?: CompleteOnBehalf): TaskRow | Promise<TaskRow>;
+export function completeTask(id: number, actorRole: string, summary: string, handoff: unknown, options?: CompleteOnBehalf): TaskRow | Promise<TaskRow> {
   const text = summary.trim();
   if (!text) throw new KanbanError("invalid", t("flow.error.noSummary"));
-  if (!COMPLETERS.has(actorRole)) throw new KanbanError("forbidden", t("flow.error.cannotComplete", { role: roleLabel(actorRole) }), { role: actorRole });
   const task = getTask(id);
+  const onBehalf = options?.onBehalf === true;
+  const behalfActor = options?.actorAgentId?.trim() || "";
+  if (onBehalf) {
+    const settings = loadConfig();
+    const allowed = behalfActor !== "" && (settings.supervisorAgentId === behalfActor || projectSupervisor(task.project, settings) === behalfActor);
+    if (!allowed) throw new KanbanError("forbidden", t("flow.error.onBehalfLeaderOnly"), { role: actorRole });
+  } else if (!COMPLETERS.has(actorRole)) {
+    throw new KanbanError("forbidden", t("flow.error.cannotComplete", { role: roleLabel(actorRole) }), { role: actorRole });
+  }
+  const actor = onBehalf ? behalfActor : actorRole;
+  const behalf = onBehalf ? { onBehalf: true, actorAgentId: options?.actorAgentId ?? null, note: t("flow.onBehalf.note") } : {};
   const wait = waitingOn(handoff);
   if (actorRole === "executor") noteObservedBranch(task, actorRole);
   const warning = completionWorkspaceWarning(task);
@@ -102,18 +117,18 @@ export function completeTask(id: number, actorRole: string, summary: string, han
   }));
   if (submitsToReview(actorRole) || taskSubmitsToReview(task)) {
     saveContract(id, bound);
-    const next = move(id, task.status, "in_review", actorRole, "complete", ", handoff_json = ?", [stored], { summary: text, ...diagnostics, ...(wait ? { waitingOn: wait } : {}) });
-    addComment(id, actorRole, text);
+    const next = move(id, task.status, "in_review", actor, "complete", ", handoff_json = ?", [stored], { summary: text, ...diagnostics, ...(wait ? { waitingOn: wait } : {}), ...behalf });
+    addComment(id, actor, text);
     finishRun(id, "complete");
     return next;
   }
   saveContract(id, bound);
-  if (readContract(bound).kind !== "github") return enterAcceptance(id, task.status, actorRole, text, stored);
+  if (readContract(bound).kind !== "github") return enterAcceptance(id, task.status, actor, text, stored, behalf);
   getDb().prepare("UPDATE tasks SET handoff_json = ? WHERE id = ?").run(stored, id);
-  return gateDirectComplete(id, actorRole, text, stored);
+  return gateDirectComplete(id, actor, text, stored, behalf);
 }
 
-function enterAcceptance(id: number, from: Status, actorRole: string, summary: string, stored: string): TaskRow {
+function enterAcceptance(id: number, from: Status, actorRole: string, summary: string, stored: string, extra: Record<string, unknown> = {}): TaskRow {
   const wait = storedWaitingOn(stored);
   const diagnostics: PrBindingDiagnostics = {};
   const task = getTask(id);
@@ -122,7 +137,7 @@ function enterAcceptance(id: number, from: Status, actorRole: string, summary: s
   rememberPullRequest(task.contract_json, saved.handoff, saved.summary, {
     project: task.project, workspacePath: task.workspace_path, diagnostics,
   });
-  const next = move(id, from, "acceptance", actorRole, "complete", ", handoff_json = ?", [stored], { summary, ...diagnostics, ...(wait ? { waitingOn: wait } : {}) });
+  const next = move(id, from, "acceptance", actorRole, "complete", ", handoff_json = ?", [stored], { summary, ...diagnostics, ...(wait ? { waitingOn: wait } : {}), ...extra });
   addComment(id, actorRole, summary || t("flow.comment.completed"));
   finishRun(id, "complete");
   notifyAcceptance(next.id);
@@ -176,14 +191,14 @@ function holdChecks(id: number, from: Status, actor: string, verdict: Exclude<Pr
   throw new KanbanError("pr_checks", verdict.summary);
 }
 
-async function gateDirectComplete(id: number, actorRole: string, summary: string, stored: string): Promise<TaskRow> {
+async function gateDirectComplete(id: number, actorRole: string, summary: string, stored: string, extra: Record<string, unknown> = {}): Promise<TaskRow> {
   const task = getTask(id);
   const state = readContract(task.contract_json);
-  if (state.kind !== "github") return enterAcceptance(id, task.status, actorRole, summary, stored);
+  if (state.kind !== "github") return enterAcceptance(id, task.status, actorRole, summary, stored, extra);
   const verdict = await evaluateContract(state);
   if (verdict.kind === "pass" || verdict.kind === "skip") {
     saveContract(id, writeContract({ ...state, awaiting: false }));
-    return enterAcceptance(id, task.status, actorRole, summary, stored);
+    return enterAcceptance(id, task.status, actorRole, summary, stored, extra);
   }
   if (verdict.kind === "fail") {
     holdChecks(id, task.status, actorRole, verdict);
