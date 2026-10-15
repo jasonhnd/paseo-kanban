@@ -1,13 +1,22 @@
 # Changelog
 
 The single plugin has one version and CHANGELOG. Distribution is through Git.
-Eight release candidates are recorded here. `0.1.0-rc.8` is the current unpublished candidate, pending independent review. Fixes after that candidate are listed under Unreleased and are not part of rc.8. Public prerelease rc.7 was published on 2026-10-14 and its GitHub Release exists. It remains frozen at `2d6942643edb977072f8818b3d0c764b2ce1a057` (annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`). Public prerelease rc.6 was published on 2026-10-13 and remains frozen at `c70df59d8516b7ecc9350ce5833fb177bafc335b` (annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`). Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
+Nine release candidates are recorded here. `0.1.0-rc.9` is the current unpublished candidate, pending independent review. Public prerelease rc.8 was published on 2026-10-14 and its GitHub Release exists. It remains frozen at `0af33ec7e49891bf3dba2549cb8b6b83487bba4c` (annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`). Public prerelease rc.7 was published on 2026-10-14 and its GitHub Release exists. It remains frozen at `2d6942643edb977072f8818b3d0c764b2ce1a057` (annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`). Public prerelease rc.6 was published on 2026-10-13 and remains frozen at `c70df59d8516b7ecc9350ce5833fb177bafc335b` (annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`). Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
 
 ## Unreleased
 
+## 0.1.0-rc.9 — pending review and publication
+
+Local candidate tag: `v0.1.0-rc.9`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.8 tags are never moved.
+
 ### Fixed
 
-- A manual `--reviews` card can request changes while its target is still `in_review`. The target returns to rework and the review round counts once, the same as a rejection from `reviewing`. A second rejection still stops for a leader ruling, and the third still stops for a person. Creating the review card does not claim the target. Approving that review does not move an `in_review` target. The approval stops with an error so the project <leader> can rule a pass and then accept the card. A later poll of the review card's own checks also leaves that target in `in_review`. See GitHub issue #1.
+- A manual `--reviews` card can request changes while its target is still `in_review`. The target returns to rework and the review round counts once, the same as a rejection from `reviewing`. A second rejection still stops for a leader ruling, and the third still stops for a person. Creating the review card does not claim the target. Approving that review does not move an `in_review` target. The approval stops with an error so the project leader can rule a pass and then accept the card. A later poll of the review card's own checks also leaves that target in `in_review`. See [GitHub issue #1](https://github.com/jasonhnd/paseo-kanban/issues/1).
+
+### Notes
+
+- Package and root lock versions agree on `0.1.0-rc.9`. Node remains `>=24.21.0`, and Paseo daemon/app requirements remain `>=0.11.0 <0.12.0`. Dependency selections, schema and contract versions are unchanged; no automatic data migration or import is introduced. The 20 dev/build dependency alerts remain.
+- Exact rc.9 verification requires rc.9 receipts. Earlier rc.8 results do not pass this candidate. GitHub cold installs, integrated real-browser and installed-host lifecycle, native app, phones, authenticated provider cycles, other platforms and production recovery remain unverified for rc.9. This preparation does not perform the production switch.
 
 ## 0.1.0-rc.8 — pending review and publication
 
