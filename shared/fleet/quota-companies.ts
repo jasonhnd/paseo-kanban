@@ -57,6 +57,8 @@ export const companyCardSchema = z.object({
   id: z.string(),
   /** Quota source adapter of the plan behind this card. Omitted on caches written before adapters. */
   adapter: z.string().optional(),
+  /** Display-only reader state; false still identifies a Cursor card with a manual source. */
+  cursorMonitoring: z.boolean().optional(),
   name: z.string(),
   remainingPct: z.number().nullable(),
   headline: z.string(),
@@ -682,7 +684,13 @@ export function buildCompanies(input: BuildCompaniesInput): CompanyCard[] {
   // Every Antigravity plan reads the same two CLI buckets. Keep protected pools separate, but show the table once.
   const first = input.companies.find(company => company.adapter === ANTIGRAVITY_CLI);
   return cardOrder(input.companies).filter(company => company.adapter !== ANTIGRAVITY_CLI || company === first)
-    .map((company) => (CARD_BUILDERS[company.adapter] ?? singleWindowCard)(company, input))
+    .map((company) => {
+      const card = (CARD_BUILDERS[company.adapter] ?? singleWindowCard)(company, input);
+      return company.cursorMonitoring === undefined ? card : {
+        ...card, cursorMonitoring: company.cursorMonitoring,
+        ...(company.cursorMonitoring === false ? { notice: t("cursor.monitoring.off"), noticeMuted: false } : {}),
+      };
+    })
     .map(card => input.now === undefined ? card : refreshCompanyTime(card, input.now));
 }
 

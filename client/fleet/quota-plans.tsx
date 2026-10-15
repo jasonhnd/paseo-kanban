@@ -1,4 +1,6 @@
 import { useRpc } from "../rpc";
+import { configReadRpc, configWriteRpc } from "../../shared/fleet/settings";
+import { CURSOR_API } from "../../shared/fleet/quota-adapters";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
@@ -170,18 +172,36 @@ function PaceRow({ s, name, pool }: { s: Styles; name: string; pool: PoolView })
   );
 }
 
-export function CursorLinkButtons({ s, link }: { s: Styles; link: BoardUsage["cursorLink"] }) {
+export function CursorLinkButtons({ s, link, monitoring }: { s: Styles; link: BoardUsage["cursorLink"]; monitoring?: boolean }) {
+  const readConfig = useRpc(configReadRpc);
+  const writeConfig = useRpc(configWriteRpc);
   const connect = useRpc(cursorConnectRpc);
   const disconnect = useRpc(cursorDisconnectRpc);
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const state = link?.state ?? "unlinked";
+  const off = monitoring === false;
+  const state = off ? "unlinked" : link?.state ?? "unlinked";
+  const enable = async () => {
+    const snapshot = await readConfig({ file: "config" });
+    const document = snapshot.document;
+    const adapters = document.adapters && typeof document.adapters === "object" && !Array.isArray(document.adapters) ? document.adapters : {};
+    const result = await writeConfig({ file: "config", revision: snapshot.revision,
+      document: { ...document, adapters: { ...adapters, [CURSOR_API]: true } } });
+    await client.invalidateQueries({ queryKey: ["afc"] });
+    return { ok: result.status === "saved", message: t(result.status === "saved" ? "cursor.monitoring.enabled" : "settings.conflict") };
+  };
   const run = (action: () => Promise<{ ok: boolean; message: string }>) => runCursorLink(action, setBusy, setNote, client);
   return (
     <View style={{ gap: 6 }}>
-      <CursorLinkRow s={s} state={state} busy={busy} onConnect={() => run(() => connect({}))} onDisconnect={() => run(() => disconnect({}))} />
-      {state === "unlinked" && link?.message ? <Text style={s.muted}>{link.message}</Text> : null}
+      {off ? <>
+        <Text style={s.muted}>{t("cursor.monitoring.guide")}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("cursor.monitoring.enable")} disabled={busy} style={pressed(s.button)} onPress={() => run(enable)}>
+          <Text style={s.buttonText}>{t("cursor.monitoring.enable")}</Text>
+        </Pressable>
+      </> : null}
+      <CursorLinkRow s={s} state={state} busy={busy} disabled={off} onConnect={() => run(() => connect({}))} onDisconnect={() => run(() => disconnect({}))} />
+      {!off && state === "unlinked" && link?.message ? <Text style={s.muted}>{link.message}</Text> : null}
       {note ? <Text style={s.muted}>{note}</Text> : null}
     </View>
   );
@@ -203,13 +223,13 @@ function runCursorLink(
     .finally(() => setBusy(false));
 }
 
-function CursorLinkRow({ s, state, busy, onConnect, onDisconnect }: {
-  s: Styles; state: string; busy: boolean; onConnect: () => void; onDisconnect: () => void;
+function CursorLinkRow({ s, state, busy, disabled = false, onConnect, onDisconnect }: {
+  s: Styles; state: string; busy: boolean; disabled?: boolean; onConnect: () => void; onDisconnect: () => void;
 }) {
   return (
     <View style={s.row}>
       {showCursorConnect(state) ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={t("quota.plans.cursor.connect")} disabled={busy} style={pressed(s.button)} onPress={onConnect}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("quota.plans.cursor.connect")} disabled={busy || disabled} style={pressed(s.button)} onPress={onConnect}>
           <Text style={s.buttonText}>{cursorConnectLabel(busy, state)}</Text>
         </Pressable>
       ) : null}

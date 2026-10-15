@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { test } from "node:test";
 import { build } from "esbuild";
 import { LIGHT_THEME, DARK_THEME } from "./fixtures/themes";
+import { setLanguage } from "../../../shared/fleet/i18n";
 import { companyCatalog } from "../../../shared/fleet/quota-adapters";
 import { buildCompanies } from "../../../shared/fleet/quota-companies";
 import { companyWindows } from "../usage-view";
@@ -15,6 +16,7 @@ import type { UsagePlan } from "../../../shared/fleet/usage";
 const { JSDOM } = createRequire(import.meta.url)("jsdom");
 
 test("manual Cursor cards retain monitoring warnings and recovery actions on desktop and compact layouts", async () => {
+  setLanguage("en");
   const now = Date.now();
   const plan = { id: "demo-cursor", name: "Cursor", adapter: "manual", cursorMonitoring: false,
     windows: [], priceUsdMonthly: null, dispatch: false, note: "", providers: ["cursor"], api30dUsd: 0, roi30d: null, coverage: "" } as UsagePlan;

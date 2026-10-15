@@ -102,6 +102,7 @@ export function SettingsEditor({ s, file, read, write, onLanguage, integrated = 
       <Text style={s.muted}>{t("settings.adapters")}</Text>
       {OPTIONAL_ADAPTERS.map(id => <View key={id}>
         <Toggle s={s} label={t(id === CURSOR_API ? "settings.cursor" : id === KEYCHAIN ? "settings.keychain" : "settings.antigravity")} value={typeof object(draft.adapters)[id] === "boolean" ? object(draft.adapters)[id] === true : snapshot.effectiveAdapters?.[id] ?? false} onChange={value => patch("adapters", { ...object(draft.adapters), [id]: value })} />
+        {id === CURSOR_API ? <Text style={s.muted}>{t("cursor.monitoring.settingsHint")}</Text> : null}
         {id === ANTIGRAVITY_CLI ? <Text style={s.muted}>{t("settings.antigravityHint")}</Text> : null}
       </View>)}
       <Text style={s.muted}>{t("settings.reloadHint")}</Text>

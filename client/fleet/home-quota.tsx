@@ -89,7 +89,7 @@ function CompanyDetail({ s, company, showPace, now, cursorFooter, markerBasis = 
           <WindowRow key={row.id} s={s} row={row} showPace={showPace} now={now} markerBasis={markerBasis} />
         ))}
       </View>
-      {company.adapter === CURSOR_API ? cursorFooter : null}
+      {company.adapter === CURSOR_API || company.cursorMonitoring !== undefined ? cursorFooter : null}
     </Metric>
   );
 }
@@ -124,6 +124,7 @@ function CompanyTile({ s, company, active, onPress }: { s: Styles; company: Comp
       onPress={onPress}
     >
       <Text style={s.metricLabel} numberOfLines={1}>{company.name}</Text>
+      {company.cursorMonitoring === false ? <Text style={s.yellow}>{t("cursor.monitoring.off")}</Text> : null}
       <Nums style={[s.metricValue, { fontSize: 20, lineHeight: 24 }]}>{companyFigure(company)}</Nums>
       <Track s={s} pct={pct} color={company.remainingPct === null || !first ? s.p.track : s.c[TONE[first.tone]]} />
       <View style={s.row}>

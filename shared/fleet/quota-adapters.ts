@@ -340,6 +340,8 @@ export interface PlanSource {
   id: string;
   name?: string;
   adapter?: unknown;
+  /** Display-only state on assembled plans; independent of dispatch eligibility. */
+  cursorMonitoring?: boolean;
   usageProvider?: string;
   providers?: readonly string[];
   cycleDay?: number;
@@ -570,6 +572,8 @@ export interface CompanyEntry {
   key: string;
   planId: string;
   adapter: AdapterId;
+  /** Retains Cursor identity when its reader falls back to manual. */
+  cursorMonitoring?: boolean;
   /** Company card title. */
   cardName: string;
   /** Name on reset-coupon lines. */
@@ -588,7 +592,8 @@ export function companyCatalog(plans: readonly PlanSource[], switches?: Partial<
     const name = typeof plan.name === "string" && plan.name ? plan.name : plan.id;
     const providers = providersOf(plan);
     const subPools = Object.fromEntries(spec.subWindows.map((sub) => [sub.key, subPoolId(plan, adapter, sub.key)]));
-    return { key: companyKeyOf(plan), planId: plan.id, adapter, cardName: spec.cardName ?? name, couponName: spec.couponName ?? name, providers: [...new Set(providers)], subPools };
+    const cursorMonitoring = plan.cursorMonitoring ?? (baseAdapterOf(plan) === CURSOR_API ? adapter === CURSOR_API : undefined);
+    return { ...(cursorMonitoring !== undefined ? { cursorMonitoring } : {}), key: companyKeyOf(plan), planId: plan.id, adapter, cardName: spec.cardName ?? name, couponName: spec.couponName ?? name, providers: [...new Set(providers)], subPools };
   });
 }
 

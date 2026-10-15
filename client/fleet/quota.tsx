@@ -96,7 +96,7 @@ function CompanySection({ s, data, antigravityInSummary, confirming, message, on
         showPace
         markerBasis="remaining"
         now={Date.now()}
-        cursorFooter={<CursorLinkButtons s={s} link={data.cursorLink} />}
+        cursorFooter={<CursorLinkButtons s={s} link={data.cursorLink} monitoring={data.companies?.find(company => company.cursorMonitoring !== undefined)?.cursorMonitoring} />}
       />
       <CouponRecheck s={s} confirming={confirming} message={message} onPress={onRecheck} />
     </Section>

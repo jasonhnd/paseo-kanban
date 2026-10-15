@@ -31,8 +31,8 @@ test("fresh-root transfer keeps Cursor off and exposes that state through RPC an
   assert.equal(adapterSwitches(fleet)[CURSOR_API], false);
   const board = await buildUsage(paseo, "7d");
   assert.equal(board.plans[0].adapter, MANUAL);
-  assert.equal((board.plans[0] as any).cursorMonitoring, false);
-  const card = board.companies![0] as any;
+  assert.equal(board.plans[0].cursorMonitoring, false);
+  const card = board.companies![0];
   assert.equal(card.cursorMonitoring, false);
   assert.equal(card.notice, t("cursor.monitoring.off"));
   assert.equal(board.pools![plan.id].dispatchable, false);
@@ -51,7 +51,7 @@ test("legacy markers keep monitoring on independently of dispatch and disabledPo
   for (const marker of ["cursor-usage.json", "cursor-login-state.json"]) {
     await writeFile(join(legacy, marker), "{}");
     const switches = adapterSwitches(legacy);
-    const entry = companyCatalog([{ id: "demo-cursor", adapter: CURSOR_API, providers: ["cursor"] }], switches)[0] as any;
+    const entry = companyCatalog([{ id: "demo-cursor", adapter: CURSOR_API, providers: ["cursor"] }], switches)[0];
     assert.equal(entry.adapter, CURSOR_API);
     assert.equal(entry.cursorMonitoring, true);
     await rm(join(legacy, marker));
@@ -59,9 +59,9 @@ test("legacy markers keep monitoring on independently of dispatch and disabledPo
   for (const dispatch of [true, false]) for (const disabledPools of [[], ["demo-cursor"]]) {
     await writeFile(join(legacy, "afc.config.json"), JSON.stringify({ disabledPools, adapters: { [CURSOR_API]: true } }));
     assert.equal(adapterSwitches(legacy)[CURSOR_API], true);
-    const entry = companyCatalog([{ id: "demo-cursor", adapter: CURSOR_API, ...{ dispatch } }], adapterSwitches(legacy))[0] as any;
+    const entry = companyCatalog([{ id: "demo-cursor", adapter: CURSOR_API, ...{ dispatch } }], adapterSwitches(legacy))[0];
     assert.equal(entry.cursorMonitoring, true);
   }
-  const ordinary = companyCatalog([{ id: "demo-manual", adapter: MANUAL, providers: ["cursor"] }])[0] as any;
+  const ordinary = companyCatalog([{ id: "demo-manual", adapter: MANUAL, providers: ["cursor"] }])[0];
   assert.equal(ordinary.cursorMonitoring, undefined);
 });

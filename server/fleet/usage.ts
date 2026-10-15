@@ -8,6 +8,7 @@ import { activeDispatchPriority, type DispatchPriority, poolStatusPriority, reso
 import {
   type AdapterSwitches,
   adapterOf,
+  baseAdapterOf,
   ANTIGRAVITY_CLI,
   CLAUDE_CLI,
   CODEX_CLI,
@@ -294,6 +295,7 @@ function planOf(cfg: PlanConfig, planConfigs: PlanConfig[], ctx: PlanContext): U
     id: cfg.id,
     name: cfg.name,
     adapter,
+    ...(baseAdapterOf(cfg) === CURSOR_API ? { cursorMonitoring: ctx.switches[CURSOR_API] } : {}),
     ...(cfg.cycleDay ? { cycleDay: cfg.cycleDay } : {}),
     ...(cfg.quotaCycle ? { quotaCycle: cfg.quotaCycle } : {}),
     ...(cfg.quotaCycle || cfg.manualOverride !== undefined || cfg.quotaProtection ? { quotaProtection: cfg.quotaProtection ?? "pause" } : {}),
