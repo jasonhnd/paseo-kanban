@@ -1,18 +1,27 @@
 # 变更记录
 
-单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.9` 是当前未公开、待独立审查的候选。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
+单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.10` 是当前未公开、待独立审查的候选。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
 
 ## 未发布
 
-### 修复
+## 0.1.0-rc.10 — 待审查与发布
+
+本地候选 tag 为 `v0.1.0-rc.10`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.9 tag 绝不挪动。
+
+### 修复（Fixed）
 
 - 全局 Kanban leader（`supervisorAgentId`）可恢复所有项目卡片的清理，其他项目权限范围不变。`resume-cleanup <卡号> --discard-unmerged` 只允许项目登记的 leader 或 Kanban leader 丢弃自有临时分支：先列出完整提交 SHA／标题，审计授权 leader 和丢弃提交，再走正常清理删除干净的 worktree、分支并归档 workspace。卡令牌、执行者、审查者不能使用；副本仍在时，tip、基准变化或未提交改动会暂停移除。副本删除后，基准前进不阻止删除已批准 tip；tip 改变或删分支重试耗尽时，保留分支、撤销授权并通知 leader，清理正常收束。不加参数时 `not_merged` 行为不变。修复 [GitHub issue #2](https://github.com/jasonhnd/paseo-kanban/issues/2)。
+
 - 清理一张卡时，只删除这张卡记录过的 agent：runs、任务列、令牌，以及打开事件里的 agentId，再加上从这些 agent 派生出来的子 agent。只是共用目录或 workspace 的 agent 会留下来，包括另一张早已完成的卡的执行和审查 agent。标签写成这张卡、但记录属于另一张卡的 agent 不会被清掉。清理说明只写别的卡的 agent 还在用这个目录，不点出那些 agent。见 [GitHub issue #3](https://github.com/jasonhnd/paseo-kanban/issues/3)。
-### 修复（Fixed）
 
 - 绑定的 Paseo 工作区被宿主归档，或在一次成功的工作区列表里找不到时，进行中或审查中的卡改为 needs_human，不再无限期停在 running 且没有活着的 agent。执行和杂活守则写明：不要在本卡临时 worktree 里把 PR 的 head 分支 checkout 成当前分支；用独立本地分支或 ref 推送，或直接 gh pr merge 且不 checkout head。Kanban <leader>（supervisorAgentId）或该项目已登记的 <leader> 可以用 complete --on-behalf 代交消失的 agent 的活。complete 事件记下 onBehalf。其余身份仍拒绝。doctor 仍然不改卡片。见 [GitHub issue #3](https://github.com/jasonhnd/paseo-kanban/issues/3)。
 
 - 工作区查询期间若卡片状态、agent 或工作区绑定发生变化，迟到结果不再应用。代交信息会持久化，等待必需 checks 或重载后仍保留真实代交者。已由负责人提交的 blocked 恢复卡在 checks 通过后自动进入待验收，无需再次 complete；新的阻塞、失败的 checks 和必需审查仍会拦住。 解除阻塞或重新派工会使原先等待 checks 的代交提交失效，包括同一 agent 开始新一轮；迟到结果不能代替新 worker 交活。
+
+### 注意（Notes）
+
+- package 与根 lock 版本统一为 `0.1.0-rc.10`。Node 仍为 `>=24.21.0`，Paseo daemon/app 仍要求 `>=0.11.0 <0.12.0`。依赖选择、schema 和契约版本不变，没有新增自动数据迁移或导入。既有开发／构建依赖告警未修复。
+- 精确 rc.10 门禁只使用 rc.10 回执。此前 rc.9 或单项修复结果不代表整合候选通过。GitHub 冷安装、整合真实浏览器和已安装宿主生命周期、原生 app、手机、已认证 provider 闭环、其他平台与生产恢复仍未验证。本次准备不做生产切换。
 
 ## 0.1.0-rc.9 — 待审查与发布
 
