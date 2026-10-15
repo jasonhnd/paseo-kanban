@@ -8,6 +8,7 @@ Eight release candidates are recorded here. `0.1.0-rc.8` is the current unpublis
 ### Fixed
 
 - A manual `--reviews` card can request changes while its target is still `in_review`. The target returns to rework and the review round counts once, the same as a rejection from `reviewing`. A second rejection still stops for a leader ruling, and the third still stops for a person. Approving that review moves only an unclaimed `in_review` target to acceptance and does not count a round. Creating the review card does not claim the target, so an inline reviewer can still take `in_review`. See GitHub issue #1.
+- That approval runs the target's own required GitHub checks before the unclaimed target can enter acceptance. The review card's contract is not the source of that decision, so a default local-only review cannot skip the target's checks. Checks that are still running leave the target in `in_review` and the review card in `reviewing`. A failed check sends the target back to rework without counting a review round. A check query error refuses the approval. Those three outcomes do not notify acceptance or release the target's executor. See GitHub issue #1.
 
 ## 0.1.0-rc.8 — pending review and publication
 
