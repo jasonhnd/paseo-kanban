@@ -5,6 +5,10 @@ Ten release candidates are recorded here. `0.1.0-rc.10` is the current unpublish
 
 ## Unreleased
 
+### Fixed
+
+- Cursor cards retain an explicit monitoring-off warning and an opt-in action after a transfer to a fresh data root, including when their effective quota source is manual. Connect Cursor remains discoverable while monitoring is off, with guidance to enable the reader and authorize again in the browser. Optional readers still default to off, credentials are not imported, and dispatch eligibility stays separate from monitoring. After authorization, the card reports that it is waiting for the next scheduled sample without advancing the last quota timestamp. See [GitHub issue #4](https://github.com/jasonhnd/paseo-kanban/issues/4).
+
 ## 0.1.0-rc.10 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.10`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.9 tags are never moved.

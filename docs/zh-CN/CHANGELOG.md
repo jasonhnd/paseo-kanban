@@ -4,6 +4,10 @@
 
 ## 未发布
 
+### 修复（Fixed）
+
+- 迁到新数据根后，Cursor 额度卡即使回退为手抄来源，也会明确提示自动监控已关闭并提供开启入口。关闭监控时仍能找到「连接 Cursor」，并引导先开启读取器、再重新在浏览器授权。可选读取器仍默认关闭，不导入凭证，派活资格与监控独立。授权后提示等待下一次定时采样，不刷新上次额度读取的时间戳。参见 [GitHub issue #4](https://github.com/jasonhnd/paseo-kanban/issues/4)。
+
 ## 0.1.0-rc.10 — 待审查与发布
 
 本地候选 tag 为 `v0.1.0-rc.10`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.9 tag 绝不挪动。

@@ -71,3 +71,24 @@ provider 登录由用户掌握，不借其他应用认证文件，不把生产�
 测试只用匿名 home、fresh `KANBAN_DATA_DIR`、明确且未占用的 loopback listener、私有 `TMPDIR`。取消旧变量，白名单 child env，显式关闭可选适配器；不连个人 daemon、不读凭证／生产资料。清理前停本卡进程；编译用的 `PASEO_SERVER_DIR` 只指单独安装的公开宿主包。
 
 状态、审计、备份、日志、凭证保持私有，只分享手动脱敏诊断片段。[English](../DATA.md) · [安全](SECURITY.md) · [兼容性](COMPATIBILITY.md) · [发布与恢复](RELEASE.md)
+
+## 迁移后的 Cursor 自动监控
+
+新装时可选读取器仍默认关闭。旧数据根中，未显式设置的
+`adapters["cursor-api"]` 只因存在使用标记（`cursor-usage.json` 或
+`cursor-login-state.json`）而保持开启。这些文件属于生成状态，不是可迁移配置。
+新的 `fleet/` 根中没有这些标记时，未设置的开关会判为关闭；保留的手抄百分比
+不能证明自动监控仍在运行。
+
+Cursor 额度卡会明确显示「Cursor 自动监控已关闭」。可点击卡上的
+「开启 Cursor 自动监控」，或在「设置 > 可选读取器」开启 Cursor 并保存。
+再回到额度页，点击「连接 Cursor」，重新在浏览器授权。监控关闭时连接按钮
+仍然可见，但在开启监控前不可用。读取器定时器在下次加载插件时启动；
+额度页的读取请求也共用每小时采样时段。授权后显示「已授权，等待下一次定时采样」，
+用于区分已保存授权和已完成额度读取；不会额外强制采样，也不会刷新旧读数的时间戳。
+
+套餐的 `dispatch: false` 与 Fleet 配置中的 `disabledPools` 控制派活资格，
+不会关闭监控，也不会完成 Cursor 授权。开启 Cursor 读取器同样不会打开套餐的
+派活资格；可以保持原有派活设置并单独开启监控。凭证始终不导入，
+不要通过复制 Cursor token 文件来恢复连接。完整文件边界参见
+[手动迁移](../MANUAL-MIGRATION.md)。
