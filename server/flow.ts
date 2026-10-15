@@ -87,6 +87,25 @@ export interface CompleteOnBehalf {
   actorAgentId?: string | null;
 }
 
+interface StoredOnBehalf {
+  onBehalf: true;
+  actorAgentId: string;
+  note: string;
+  blockedEventId?: number | null;
+}
+
+function latestBlockEvent(id: number): number | null {
+  const row = getDb().prepare("SELECT id FROM events WHERE task_id = ? AND kind = 'blocked' ORDER BY id DESC LIMIT 1").get(id) as { id: number } | undefined;
+  return row?.id ?? null;
+}
+
+/** Internal submission metadata, outside the caller-provided handoff. */
+function storedOnBehalf(task: TaskRow): StoredOnBehalf | null {
+  const saved = safeParse<{ completion?: Partial<StoredOnBehalf> }>(task.handoff_json)?.completion;
+  if (saved?.onBehalf !== true || typeof saved.actorAgentId !== "string" || !saved.actorAgentId.trim() || typeof saved.note !== "string") return null;
+  return { onBehalf: true, actorAgentId: saved.actorAgentId, note: saved.note, blockedEventId: saved.blockedEventId };
+}
+
 export function completeTask(id: number, actorRole: "executor", summary: string, handoff: unknown, options?: CompleteOnBehalf): TaskRow;
 export function completeTask(id: number, actorRole: string, summary: string, handoff: unknown, options?: CompleteOnBehalf): TaskRow | Promise<TaskRow>;
 export function completeTask(id: number, actorRole: string, summary: string, handoff: unknown, options?: CompleteOnBehalf): TaskRow | Promise<TaskRow> {
@@ -103,13 +122,14 @@ export function completeTask(id: number, actorRole: string, summary: string, han
     throw new KanbanError("forbidden", t("flow.error.cannotComplete", { role: roleLabel(actorRole) }), { role: actorRole });
   }
   const actor = onBehalf ? behalfActor : actorRole;
-  const behalf = onBehalf ? { onBehalf: true, actorAgentId: options?.actorAgentId ?? null, note: t("flow.onBehalf.note") } : {};
+  const behalf = onBehalf ? { onBehalf: true, actorAgentId: behalfActor, note: t("flow.onBehalf.note") } : {};
   const wait = waitingOn(handoff);
   if (actorRole === "executor") noteObservedBranch(task, actorRole);
   const warning = completionWorkspaceWarning(task);
   const handoffWarnings = completionHandoffWarnings(handoff);
   const stored = JSON.stringify({ summary: [text, warning].filter(Boolean).join("\n\n"), handoff: handoff ?? null,
     ...(handoffWarnings.length ? { submissionWarnings: handoffWarnings } : {}),
+    ...(onBehalf ? { completion: { ...behalf, ...(task.status === "blocked" ? { blockedEventId: latestBlockEvent(id) } : {}) } } : {}),
   });
   const diagnostics: PrBindingDiagnostics = {};
   const bound = writeContract(rememberPullRequest(task.contract_json, handoff, text, {
@@ -1222,7 +1242,7 @@ let pollCursor = 0;
 /** Re-check cards waiting on required GitHub checks before they can enter acceptance. */
 export async function pollAwaitingPr(budgetMs = PR_POLL_BUDGET_MS): Promise<number[]> {
   const deadline = Date.now() + budgetMs;
-  const all = getDb().prepare("SELECT id FROM tasks WHERE status IN ('reviewing', 'running') ORDER BY id").all() as unknown as Array<{ id: number }>;
+  const all = getDb().prepare("SELECT id FROM tasks WHERE status IN ('reviewing', 'running', 'blocked') ORDER BY id").all() as unknown as Array<{ id: number }>;
   // Start after the card the last round stopped on, so a slow card cannot starve the ones behind it.
   const rows = [...all.filter((row) => row.id > pollCursor), ...all.filter((row) => row.id <= pollCursor)];
   const moved: number[] = [];
@@ -1232,20 +1252,32 @@ export async function pollAwaitingPr(budgetMs = PR_POLL_BUDGET_MS): Promise<numb
       const task = getTask(row.id);
       const state = readContract(task.contract_json);
       if (state.kind !== "github" || !state.awaiting) return;
-      if (task.status === "running" && task.role === "executor") return;
+      if (task.status !== "reviewing" && task.status !== "running" && task.status !== "blocked") return;
+      if (task.status !== "reviewing" && taskSubmitsToReview(task)) return;
+      const behalf = storedOnBehalf(task);
+      // Only a leader's explicit submission of this exact blocked state may
+      // resume. A later block is a new decision, not a completed CI wait.
+      if (task.status === "blocked" && (!COMPLETERS.has(task.role) || !behalf
+        || behalf.blockedEventId == null || behalf.blockedEventId !== latestBlockEvent(task.id))) return;
+      const actor = behalf?.actorAgentId ?? "scheduler";
       pollCursor = task.id;
       const verdict = await evaluateContract(state, undefined, { deadline });
+      const fresh = getTask(task.id);
+      if (fresh.status !== task.status || fresh.agent_id !== task.agent_id
+        || fresh.contract_json !== task.contract_json || fresh.handoff_json !== task.handoff_json
+        || (task.status === "blocked" && behalf?.blockedEventId !== latestBlockEvent(task.id))) return;
       if (verdict.kind === "pass") {
         saveContract(task.id, writeContract({ ...state, awaiting: false }));
         if (task.status === "reviewing") approveNow(task.id, verdict.summary, "scheduler");
         else {
           const saved = storedSummary(task, verdict.summary);
-          enterAcceptance(task.id, task.status, "scheduler", saved.summary, saved.stored);
+          enterAcceptance(task.id, task.status, actor, saved.summary, saved.stored,
+            behalf ? { onBehalf: true, actorAgentId: behalf.actorAgentId, note: behalf.note } : {});
         }
         moved.push(task.id);
       } else if (verdict.kind === "fail") {
         if (task.status === "reviewing") returnForChecks(task.id, verdict, "scheduler");
-        else holdChecks(task.id, task.status, "scheduler", verdict);
+        else holdChecks(task.id, task.status, actor, verdict);
         moved.push(task.id);
       } else if (verdict.kind === "wait" || verdict.kind === "error") {
         setHold(task.id, verdict.summary);

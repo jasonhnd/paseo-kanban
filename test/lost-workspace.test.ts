@@ -401,9 +401,9 @@ describe("complete --on-behalf", () => {
       assert.equal(event?.onBehalf, true);
       assert.equal(event?.note, catalog("zh-CN")["flow.onBehalf.note"]);
       assert.equal(event?.summary, "Leader submitted while checks pending");
-      const ended = getDb().prepare("SELECT ended_at, outcome FROM runs WHERE task_id = ?").get(task.id) as { ended_at: string | null; outcome: string };
+      const ended = getDb().prepare("SELECT ended_at, end_kind FROM runs WHERE task_id = ?").get(task.id) as { ended_at: string | null; end_kind: string };
       assert.ok(ended.ended_at);
-      assert.equal(ended.outcome, "complete");
+      assert.equal(ended.end_kind, "complete");
       assert.deepEqual(await pollAwaitingPr(), []);
       assert.equal(events(task.id, "complete").length, 1);
     });
