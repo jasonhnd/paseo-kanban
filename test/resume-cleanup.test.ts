@@ -4,15 +4,20 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, beforeEach, it } from "node:test";
-import { readCleanupEvents } from "../server/archive-book";
+import { DELETE_BRANCH_RETRY_LIMIT, readCleanupEvents } from "../server/archive-book";
+import { setWakeSender } from "../server/bus";
 import { kanbanHelp, runKanban } from "../server/cli";
 import { drainCleanups, flushCleanups, installCleanup } from "../server/cleanup";
+import { discardAuthorization } from "../server/cleanup-discard";
 import { loadConfig, saveConfig } from "../server/config";
 import { closeDb, getDb } from "../server/db";
+import { runGit, type GitRunner } from "../server/git";
 import { setMissingCwdHooks, resetMissingCwdForTests } from "../server/missing-cwd";
 import { appendEvent, createTask, getTask } from "../server/store";
 import { settleTempWorkspace, tempCleanupDue } from "../server/temp-workspace";
 import { issueToken } from "../server/tokens";
+import { resetAgentAliveCheck, setAgentAliveCheck } from "../server/wake";
+import { createdWorktree, ownedWorktree } from "../server/worktree-gc";
 
 const dir = mkdtempSync(join(tmpdir(), "resume-cleanup-"));
 const trees = join(dir, "trees");
@@ -24,13 +29,17 @@ mkdirSync(process.env.KANBAN_AGENTS_DIR);
 const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 const env = (id: string) => ({ PASEO_AGENT_ID: id });
 let serial = 0;
+const sent: string[] = [];
 
 beforeEach(() => {
   getDb().exec("DELETE FROM tokens");
   saveConfig({ ...loadConfig(), supervisorAgentId: "board-leader", supervisors: { demo: "project-leader", other: "other-leader" } });
   setMissingCwdHooks({ listAgents: () => [] });
+  sent.length = 0;
+  setAgentAliveCheck(id => id === "project-leader" || id === "board-leader");
+  setWakeSender((id, text) => { sent.push(`${id}\n${text}`); });
 });
-after(() => { resetMissingCwdForTests(); closeDb(); rmSync(dir, { recursive: true, force: true }); });
+after(() => { resetMissingCwdForTests(); resetAgentAliveCheck(); setWakeSender(() => {}); closeDb(); rmSync(dir, { recursive: true, force: true }); });
 
 function fixture() {
   const root = join(dir, `repo-${++serial}`);
@@ -57,12 +66,18 @@ function fixture() {
 }
 type Fixture = ReturnType<typeof fixture>;
 const rows = (id: number, kind: string) => getDb().prepare("SELECT actor, data_json FROM events WHERE task_id = ? AND kind = ? ORDER BY id").all(id, kind) as Array<{ actor: string; data_json: string }>;
-async function settle(f: Fixture, archives: string[], beforeArchive?: () => void) {
-  return settleTempWorkspace({ task: getTask(f.id), events: readCleanupEvents(f.id), now: new Date(),
+async function settle(f: Fixture, archives: string[], beforeArchive?: () => void, options: { now?: Date; run?: GitRunner } = {}) {
+  return settleTempWorkspace({ task: getTask(f.id), events: readCleanupEvents(f.id), now: options.now ?? new Date(), run: options.run,
     record: data => appendEvent(f.id, "cleanup", null, null, "kanban", data),
     decideWorkspace: async () => { beforeArchive?.(); return { action: "archive", workspaceId: f.workspaceId, directory: f.directory }; },
     archiveWorkspace: async id => { archives.push(id); },
   });
+}
+const grantFor = (f: Fixture) => discardAuthorization(getTask(f.id), ownedWorktree(f.id, createdWorktree(f.id))!);
+function advanceTip(f: Fixture): string {
+  const tip = git(f.root, "commit-tree", `${f.branch}^{tree}`, "-p", f.branch, "-m", "Later branch work");
+  git(f.root, "update-ref", `refs/heads/${f.branch}`, tip);
+  return tip;
 }
 
 it("lets the Kanban leader resume another project's stopped cleanup", async () => {
@@ -241,4 +256,98 @@ it("performs approved no-PR cleanup through the normal periodic tick", async () 
   assert.equal(git(f.root, "branch", "--list", f.branch), "");
   assert.equal(rows(f.id, "cleanup_discarded").length, 1);
   assert.equal(rows(f.id, "temp_workspace_cleaned").length, 1);
+});
+
+it("deletes the audited tip after its copy is gone and the base advances", async () => {
+  const f = fixture();
+  await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("project-leader"));
+  git(f.root, "worktree", "remove", f.directory);
+  git(f.root, "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "Base advanced after removal");
+  assert.equal(await settle(f, []), "settled");
+  assert.equal(git(f.root, "branch", "--list", f.branch), "");
+  assert.equal(rows(f.id, "cleanup_discarded").length, 1);
+  assert.equal(JSON.parse(rows(f.id, "temp_workspace_cleaned")[0].data_json).keptBranch, false);
+});
+
+it("revokes a changed tip after removal, keeps the branch and wakes its project leader", async () => {
+  const f = fixture();
+  await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("project-leader"));
+  git(f.root, "worktree", "remove", f.directory);
+  const newer = advanceTip(f);
+  assert.equal(await settle(f, []), "settled");
+  assert.equal(git(f.root, "rev-parse", f.branch), newer);
+  assert.equal(grantFor(f), null);
+  assert.equal(rows(f.id, "cleanup_discard_revoked").length, 1);
+  assert.equal(rows(f.id, "cleanup_discarded").length, 0);
+  assert.equal(JSON.parse(rows(f.id, "temp_workspace_cleaned")[0].data_json).keptBranch, true);
+  assert.ok(readCleanupEvents(f.id).some(row => row.action === "keep_branch" && row.ok));
+  assert.equal(JSON.parse(rows(f.id, "wake_branch_kept")[0].data_json).agentId, "project-leader");
+  assert.equal(sent.filter(text => text.startsWith("project-leader\n")).length, 1);
+  // A crash before the final mark must not revive the revoked grant, even if the old tip returns.
+  getDb().prepare("DELETE FROM events WHERE task_id = ? AND kind = 'temp_workspace_cleaned'").run(f.id);
+  git(f.root, "update-ref", `refs/heads/${f.branch}`, f.commits[0].sha);
+  assert.equal(await settle(f, []), "settled");
+  assert.equal(git(f.root, "rev-parse", f.branch), f.commits[0].sha);
+  assert.equal(grantFor(f), null);
+  assert.equal(rows(f.id, "wake_branch_kept").length, 1);
+});
+
+it("retries a real ref lock after dropping the copy even when the base advances", async () => {
+  const f = fixture();
+  await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("project-leader"));
+  const lock = join(f.root, ".git", `${`refs/heads/${f.branch}`}.lock`);
+  writeFileSync(lock, "");
+  const now = Date.now();
+  assert.equal(await settle(f, [], undefined, { now: new Date(now) }), "pending");
+  assert.equal(existsSync(f.directory), false);
+  assert.ok(readCleanupEvents(f.id).some(row => row.action === "drop_directory" && row.ok));
+  assert.equal(tempCleanupDue(getTask(f.id), new Date(now + 1)), false);
+  rmSync(lock);
+  git(f.root, "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "Base advanced during retry");
+  assert.equal(await settle(f, [], undefined, { now: new Date(now + 61_000) }), "settled");
+  assert.equal(git(f.root, "branch", "--list", f.branch), "");
+  assert.equal(rows(f.id, "cleanup_discarded").length, 1);
+});
+
+it("settles with a revoked grant, kept branch and leader wake after bounded deletion failures", async () => {
+  const f = fixture();
+  await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("project-leader"));
+  const lock = join(f.root, ".git", `${`refs/heads/${f.branch}`}.lock`);
+  writeFileSync(lock, "");
+  const now = Date.now();
+  let attempts = 0;
+  const run: GitRunner = (cwd, args) => { if (args[0] === "update-ref") attempts += 1; return runGit(cwd, args); };
+  for (let i = 0; i < DELETE_BRANCH_RETRY_LIMIT; i += 1) {
+    assert.equal(await settle(f, [], undefined, { now: new Date(now + i * 24 * 60 * 60_000), run }),
+      i === DELETE_BRANCH_RETRY_LIMIT - 1 ? "settled" : "pending");
+    if (i === 0) git(f.root, "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "Base advanced while locked");
+  }
+  rmSync(lock);
+  assert.equal(attempts, DELETE_BRANCH_RETRY_LIMIT);
+  assert.equal(grantFor(f), null);
+  assert.equal(git(f.root, "rev-parse", f.branch), f.commits[0].sha);
+  assert.equal(JSON.parse(rows(f.id, "temp_workspace_cleaned")[0].data_json).keptBranch, true);
+  assert.equal(rows(f.id, "cleanup_discard_revoked").length, 1);
+  assert.equal(JSON.parse(rows(f.id, "wake_branch_kept")[0].data_json).agentId, "project-leader");
+  assert.equal(await settle(f, [], undefined, { now: new Date(now + 20 * 24 * 60 * 60_000), run }), "settled");
+  assert.equal(attempts, DELETE_BRANCH_RETRY_LIMIT);
+});
+
+it("does not discard a tip that changes between inspection and compare-and-delete", async () => {
+  const f = fixture();
+  await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("project-leader"));
+  let newer = "";
+  const run: GitRunner = (cwd, args) => {
+    if (args[0] === "update-ref" && !newer) newer = advanceTip(f);
+    return runGit(cwd, args);
+  };
+  const now = Date.now();
+  assert.equal(await settle(f, [], undefined, { now: new Date(now), run }), "pending");
+  assert.equal(existsSync(f.directory), false);
+  assert.equal(git(f.root, "rev-parse", f.branch), newer);
+  assert.equal(await settle(f, [], undefined, { now: new Date(now + 61_000), run }), "settled");
+  assert.equal(git(f.root, "rev-parse", f.branch), newer);
+  assert.equal(grantFor(f), null);
+  assert.equal(rows(f.id, "cleanup_discarded").length, 0);
+  assert.equal(rows(f.id, "wake_branch_kept").length, 1);
 });
