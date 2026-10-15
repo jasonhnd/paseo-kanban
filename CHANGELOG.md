@@ -1,7 +1,13 @@
 # Changelog
 
 The single plugin has one version and CHANGELOG. Distribution is through Git.
-Eight release candidates are recorded here. `0.1.0-rc.8` is the current unpublished candidate, pending independent review. Public prerelease rc.7 was published on 2026-10-14 and its GitHub Release exists. It remains frozen at `2d6942643edb977072f8818b3d0c764b2ce1a057` (annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`). Public prerelease rc.6 was published on 2026-10-13 and remains frozen at `c70df59d8516b7ecc9350ce5833fb177bafc335b` (annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`). Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
+Eight release candidates are recorded here. `0.1.0-rc.8` is the current unpublished candidate, pending independent review. Fixes after that candidate are listed under Unreleased and are not part of rc.8. Public prerelease rc.7 was published on 2026-10-14 and its GitHub Release exists. It remains frozen at `2d6942643edb977072f8818b3d0c764b2ce1a057` (annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`). Public prerelease rc.6 was published on 2026-10-13 and remains frozen at `c70df59d8516b7ecc9350ce5833fb177bafc335b` (annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`). Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
+
+## Unreleased
+
+### Fixed
+
+- A manual `--reviews` card can request changes while its target is still `in_review`. The target returns to rework and the review round counts once, the same as a rejection from `reviewing`. A second rejection still stops for a leader ruling, and the third still stops for a person. Approving that review moves only an unclaimed `in_review` target to acceptance and does not count a round. Creating the review card does not claim the target, so an inline reviewer can still take `in_review`. See GitHub issue #1.
 
 ## 0.1.0-rc.8 — pending review and publication
 
