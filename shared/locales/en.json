@@ -837,6 +837,7 @@
   "flow.conflict.redo": "After git rebase {base}, redo the conflicting parts and complete again only when all three checks pass.",
   "flow.conflict.reviewNote": "This is a conflict rework. The review only needs to check the diff after the rebase (git range-diff) and whether the conflict resolution kept both sides' behaviour.",
   "flow.error.cannotApprove": "Cannot approve the review from \"{status}\"",
+  "flow.error.unclaimedApprove": "Cannot approve this review while {card} is still waiting for review. The project <leader> rules a pass, then accepts the card.",
   "flow.error.cannotComplete": "{role} cannot complete cards",
   "flow.error.cannotReject": "Cannot send back from \"{status}\"",
   "flow.error.cannotReturn": "Cannot send back from \"{status}\"",

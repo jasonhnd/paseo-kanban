@@ -8,7 +8,7 @@ const NEXT: Record<Status, readonly Status[]> = {
   waiting: ["ready", "blocked", "archived"],
   ready: ["running", "reviewing", "waiting", "blocked", "archived"],
   running: ["in_review", "acceptance", "ready", "blocked", "archived"],
-  in_review: ["reviewing", "rework", "acceptance", "blocked", "archived"],
+  in_review: ["reviewing", "rework", "blocked", "archived"],
   reviewing: ["acceptance", "rework", "in_review", "ready", "blocked", "archived", "done"],
   rework: ["running", "acceptance", "blocked", "archived"],
   acceptance: ["done", "rework", "blocked", "archived"],
