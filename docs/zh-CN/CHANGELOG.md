@@ -8,7 +8,7 @@
 
 - 绑定的 Paseo 工作区被宿主归档，或在一次成功的工作区列表里找不到时，进行中或审查中的卡改为 needs_human，不再无限期停在 running 且没有活着的 agent。执行和杂活守则写明：不要在本卡临时 worktree 里把 PR 的 head 分支 checkout 成当前分支；用独立本地分支或 ref 推送，或直接 gh pr merge 且不 checkout head。Kanban <leader>（supervisorAgentId）或该项目已登记的 <leader> 可以用 complete --on-behalf 代交消失的 agent 的活。complete 事件记下 onBehalf。其余身份仍拒绝。doctor 仍然不改卡片。见 [GitHub issue #3](https://github.com/jasonhnd/paseo-kanban/issues/3)。
 
-- 工作区查询期间若卡片状态、agent 或工作区绑定发生变化，迟到结果不再应用。代交信息会持久化，等待必需 checks 或重载后仍保留真实代交者。已由负责人提交的 blocked 恢复卡在 checks 通过后自动进入待验收，无需再次 complete；新的阻塞、失败的 checks 和必需审查仍会拦住。
+- 工作区查询期间若卡片状态、agent 或工作区绑定发生变化，迟到结果不再应用。代交信息会持久化，等待必需 checks 或重载后仍保留真实代交者。已由负责人提交的 blocked 恢复卡在 checks 通过后自动进入待验收，无需再次 complete；新的阻塞、失败的 checks 和必需审查仍会拦住。 解除阻塞或重新派工会使原先等待 checks 的代交提交失效，包括同一 agent 开始新一轮；迟到结果不能代替新 worker 交活。
 
 ## 0.1.0-rc.9 — 待审查与发布
 
