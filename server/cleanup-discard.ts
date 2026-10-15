@@ -27,12 +27,15 @@ function eligible(task: TaskRow, owned: OwnedWorktree): boolean {
     owned.branch !== owned.base && !isProtectedBranch(owned.branch) && samePath(task.workspace_path, owned.directory);
 }
 
-/** A grant is limited to one cleanup generation, owned copy and exact branch/base tips. */
+/** A grant is limited to one cleanup generation and owned copy; a revoked latest grant never falls back to an older one. */
 export function discardAuthorization(task: TaskRow, owned: OwnedWorktree): DiscardAuthorization | null {
   const row = getDb().prepare(`SELECT id, actor, data_json FROM events c WHERE c.task_id = ?
     AND c.kind = 'cleanup_discard_authorized' AND ${currentCleanupSql("c", "c.task_id")} ORDER BY c.id DESC LIMIT 1`)
     .get(task.id) as { id: number; actor: string; data_json: string } | undefined;
   if (!row) return null;
+  if (getDb().prepare(`SELECT 1 FROM events c WHERE c.task_id = ? AND c.kind = 'cleanup_discard_revoked'
+    AND ${currentCleanupSql("c", "c.task_id")} AND json_extract(c.data_json, '$.authorizationId') = ? LIMIT 1`)
+    .get(task.id, row.id)) return null;
   const grant = JSON.parse(row.data_json) as DiscardAuthorization;
   return grant.cleanupGeneration === cleanupGeneration(task.id) && grant.branch === owned.branch && grant.base === owned.base &&
     samePath(grant.root, owned.root) && samePath(grant.directory, owned.directory) && grant.workspaceId === task.paseo_workspace_id
@@ -46,27 +49,39 @@ function discardCompleted(taskId: number, grant: DiscardAuthorization): boolean 
     .get(taskId, grant.head, grant.branch, grant.directory);
 }
 
-function directoryMissing(directory: string): boolean {
+export function discardCopyMissing(directory: string): boolean {
   try { lstatSync(directory); } catch (error) { return (error as NodeJS.ErrnoException).code === "ENOENT"; }
   return false;
+}
+
+function targetStillValid(task: TaskRow, owned: OwnedWorktree, grant: DiscardAuthorization): boolean {
+  return eligible(task, owned) && grant.cleanupGeneration === cleanupGeneration(task.id) && grant.workspaceId === task.paseo_workspace_id;
+}
+
+export function revokeDiscardAuthorization(task: TaskRow, grant: DiscardAuthorization, reason: string): void {
+  appendEvent(task.id, "cleanup_discard_revoked", null, null, "kanban", { ...grant, reason, authorizedBy: grant.actor });
 }
 
 /** Fail closed after any awaited read. Directory removal uses the ordinary clean-worktree path. */
 export async function discardStillValid(task: TaskRow, owned: OwnedWorktree, grant: DiscardAuthorization, run: GitRunner): Promise<boolean> {
   const current = getTask(task.id);
-  if (!eligible(current, owned) || grant.cleanupGeneration !== cleanupGeneration(task.id) ||
-      grant.workspaceId !== current.paseo_workspace_id) return false;
+  if (!targetStillValid(current, owned, grant)) return false;
   const head = await run(owned.root, ["rev-parse", "--verify", headRef(owned.branch)]);
-  const base = await run(owned.root, ["rev-parse", "--verify", headRef(owned.base)]);
-  if (head.code !== 0 && discardCompleted(task.id, grant) && directoryMissing(owned.directory)) {
-    const missing = await run(owned.root, ["show-ref", "--verify", "--quiet", headRef(owned.branch)]);
-    return missing.code === 1;
+  if (discardCopyMissing(owned.directory)) {
+    // The copy is retired. Its audited tip remains the deletion boundary even when base advances.
+    if (head.code === 0) return head.stdout.trim() === grant.head;
+    if (discardCompleted(task.id, grant)) {
+      const missing = await run(owned.root, ["show-ref", "--verify", "--quiet", headRef(owned.branch)]);
+      return missing.code === 1;
+    }
+    return false;
   }
+  const base = await run(owned.root, ["rev-parse", "--verify", headRef(owned.base)]);
   if (head.code !== 0 || base.code !== 0 || head.stdout.trim() !== grant.head || base.stdout.trim() !== grant.baseOid) return false;
   const state = directoryState(owned.directory);
   if (state === "missing") {
     // existsSync also hides read failures. Only ENOENT proves a prior removal.
-    return directoryMissing(owned.directory);
+    return discardCopyMissing(owned.directory);
   }
   if (state !== "present") return false;
   const top = await run(owned.directory, ["rev-parse", "--show-toplevel"]);
@@ -105,14 +120,29 @@ export async function authorizeDiscard(taskId: number, actor: string): Promise<D
   } finally { release(); }
 }
 
-/** Compare-and-delete only the audited tip, after normal workspace/worktree retirement. */
-export async function deleteDiscardedBranch(task: TaskRow, owned: OwnedWorktree, grant: DiscardAuthorization, run: GitRunner): Promise<boolean> {
-  if (!(await discardStillValid(task, owned, grant, run))) return false;
-  if (discardCompleted(task.id, grant)) return true;
+/** Compare-and-delete only the audited tip after retirement. Changed tips are kept; I/O failures use the normal bounded retry. */
+export async function deleteDiscardedBranch(task: TaskRow, owned: OwnedWorktree, grant: DiscardAuthorization, run: GitRunner):
+Promise<{ ok: true; basis: string; kept?: boolean } | { ok: false; error: string }> {
+  if (!targetStillValid(getTask(task.id), owned, grant) || !discardCopyMissing(owned.directory) ||
+      discardAuthorization(getTask(task.id), owned)?.authorizationId !== grant.authorizationId) {
+    return { ok: false, error: t("cleanupDiscard.changed") };
+  }
+  const head = await run(owned.root, ["rev-parse", "--verify", headRef(owned.branch)]);
+  if (head.code !== 0) {
+    const missing = await run(owned.root, ["show-ref", "--verify", "--quiet", headRef(owned.branch)]);
+    return missing.code === 1 ? { ok: true, basis: t("worktreeGc.basis.branchGone") }
+      : { ok: false, error: (head.stderr || head.stdout || t("cleanupDiscard.unreadable")).trim() };
+  }
+  if (discardCompleted(task.id, grant)) return { ok: true, kept: true, basis: t("cleanupDiscard.recreatedKept", { branch: owned.branch }) };
+  if (head.stdout.trim() !== grant.head) return { ok: true, kept: true,
+    basis: t("cleanupDiscard.tipChangedKept", { branch: owned.branch, approved: grant.head, actual: head.stdout.trim() }) };
   const listed = await run(owned.root, ["worktree", "list", "--porcelain"]);
-  if (listed.code !== 0 || listed.stdout.split("\n").includes(`branch ${headRef(owned.branch)}`)) return false;
+  if (listed.code !== 0) return { ok: false, error: (listed.stderr || listed.stdout || t("cleanupDiscard.unreadable")).trim() };
+  if (listed.stdout.split("\n").includes(`branch ${headRef(owned.branch)}`)) {
+    return { ok: true, kept: true, basis: t("cleanupDiscard.checkedOutKept", { branch: owned.branch }) };
+  }
   const deleted = await run(owned.root, ["update-ref", "-d", headRef(owned.branch), grant.head]);
-  if (deleted.code !== 0) return false;
+  if (deleted.code !== 0) return { ok: false, error: (deleted.stderr || deleted.stdout || t("tempWorkspace.branch.notDeleted")).trim() };
   appendEvent(task.id, "cleanup_discarded", null, null, grant.actor, { ...grant });
-  return true;
+  return { ok: true, basis: "discard_unmerged" };
 }

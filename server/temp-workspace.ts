@@ -22,7 +22,7 @@ import { branchFailureKind, branchAlreadyGone, createdWorktree, deleteOwnedBranc
 import { readWorktreeCreated, correctedFromDirectories, reconcileRecordedDirectory } from "./worktree-record";
 import { cleanupGeneration, cleanupMark, currentCleanupSql } from "./cleanup-state";
 import { removeArchivedClaudeProjects } from "./native-sessions";
-import { deleteDiscardedBranch, discardAuthorization, discardStillValid } from "./cleanup-discard";
+import { deleteDiscardedBranch, discardAuthorization, discardCopyMissing, discardStillValid, revokeDiscardAuthorization } from "./cleanup-discard";
 
 function failure(result: { stderr: string; stdout: string }, fallback: string): string {
   return (result.stderr || result.stdout || fallback).trim();
@@ -740,6 +740,9 @@ export async function settleTempWorkspace(input: {
   const discard = discardAuthorization(task, owned);
   const discardReady = async (): Promise<boolean> => {
     if (!discard) return canContinue();
+    // With the copy already gone, let the branch step keep/revoke or retry with its normal cap.
+    // It must not wait forever for a new authorization that requires the removed copy.
+    if (discardCopyMissing(owned.directory)) return canContinue();
     if (!canContinue() || !(await discardStillValid(task, owned, discard, run)) || !canContinue()) {
       record({ action: "skip_worktree", directory: owned.directory, branch: owned.branch, ok: false,
         reason: "discard_changed", error: t("cleanupDiscard.changed"),
@@ -1081,17 +1084,13 @@ export async function settleTempWorkspace(input: {
     if (!retryReady(events, "delete_branch", owned.directory, input.now)) return "pending";
     const inspectionError = owned.readOnly ? await deleteReadOnlyBranch(task.id, owned, run) : null;
     const deleted = discard
-      ? { ok: await deleteDiscardedBranch(task, owned, discard, run), error: t("cleanupDiscard.changed"), basis: "discard_unmerged" }
+      ? await deleteDiscardedBranch(task, owned, discard, run)
       : owned.readOnly
       ? { ok: !inspectionError, error: inspectionError ?? undefined, basis: readOnlyReason ?? t("tempWorkspace.branch.readOnlyUnchanged") }
       : await deleteOwnedBranch(task, owned, run, input.run, pushedFlag, isDirectoryOnlyBasis(pushedBasis), pushedBasis);
+    if (!canContinue()) return "pending";
     let basis = deleted.ok ? deleted.basis : undefined;
     if (!deleted.ok) {
-      if (discard) {
-        record({ action: "delete_branch", directory: owned.directory, branch: owned.branch, ok: false,
-          reason: "discard_changed", error: t("cleanupDiscard.changed") });
-        return "pending";
-      }
       const error = deleted.error ?? t("tempWorkspace.branch.notDeleted");
       const kind = branchFailureKind(error);
       if (kind === "gone") {
@@ -1118,6 +1117,10 @@ export async function settleTempWorkspace(input: {
     } else if ("kept" in deleted && deleted.kept) {
       keepBranch = true;
       addComment(task.id, "kanban", t("tempWorkspace.branch.keptComment", { basis: String(deleted.basis) }));
+    }
+    if (discard && keepBranch) {
+      revokeDiscardAuthorization(task, discard, basis ?? t("tempWorkspace.branch.notDeleted"));
+      notifyBranchKept(task.id, t("tempWorkspace.branch.keptComment", { basis: basis ?? "" }));
     }
     record({
       action: keepBranch ? "keep_branch" : "delete_branch",

@@ -129,6 +129,7 @@ for (const leader of ["project-leader", "board-leader"]) {
     assert.equal(JSON.parse(rows(f.id, "temp_workspace_cleaned")[0].data_json).keptBranch, false);
     // Restart after the discard receipt, before the final cleanup marks were persisted.
     getDb().prepare("DELETE FROM events WHERE task_id = ? AND (kind = 'temp_workspace_cleaned' OR (kind = 'cleanup' AND json_extract(data_json, '$.action') = 'delete_branch'))").run(f.id);
+    git(f.root, "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "Base advanced after discard receipt");
     assert.equal(await settle(f, archives), "settled");
     assert.equal(rows(f.id, "cleanup_discarded").length, 1, "no duplicate discard receipt");
     assert.deepEqual(archives, [f.workspaceId]);
@@ -272,6 +273,8 @@ it("deletes the audited tip after its copy is gone and the base advances", async
 it("revokes a changed tip after removal, keeps the branch and wakes its project leader", async () => {
   const f = fixture();
   await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("project-leader"));
+  await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("board-leader"));
+  assert.equal(rows(f.id, "cleanup_discard_authorized").length, 2);
   git(f.root, "worktree", "remove", f.directory);
   const newer = advanceTip(f);
   assert.equal(await settle(f, []), "settled");
@@ -295,7 +298,7 @@ it("revokes a changed tip after removal, keeps the branch and wakes its project 
 it("retries a real ref lock after dropping the copy even when the base advances", async () => {
   const f = fixture();
   await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("project-leader"));
-  const lock = join(f.root, ".git", `${`refs/heads/${f.branch}`}.lock`);
+  const lock = join(f.root, ".git", "refs", "heads", `${f.branch}.lock`);
   writeFileSync(lock, "");
   const now = Date.now();
   assert.equal(await settle(f, [], undefined, { now: new Date(now) }), "pending");
@@ -312,7 +315,7 @@ it("retries a real ref lock after dropping the copy even when the base advances"
 it("settles with a revoked grant, kept branch and leader wake after bounded deletion failures", async () => {
   const f = fixture();
   await runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("project-leader"));
-  const lock = join(f.root, ".git", `${`refs/heads/${f.branch}`}.lock`);
+  const lock = join(f.root, ".git", "refs", "heads", `${f.branch}.lock`);
   writeFileSync(lock, "");
   const now = Date.now();
   let attempts = 0;
