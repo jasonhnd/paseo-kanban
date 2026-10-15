@@ -2,7 +2,7 @@
 // Issue 3, problem 1: a host-archived card workspace must not leave the card running,
 // and a registered leader must be able to hand in for the disappeared agent.
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -13,8 +13,8 @@ import type { AgentLauncher } from "../server/dispatch";
 import { KanbanError } from "../server/errors";
 import { completeTask, pollAwaitingPr } from "../server/flow";
 import { MISSING_CONFIRM_MS, resetReconcileForTests } from "../server/schedule";
-import { blockTask, createTask, getTask } from "../server/store";
-import { readContract, setGhRunner, type GhRunner } from "../server/pr";
+import { blockTask, claimStatus, createTask, getTask, openExecutorRun, unblockTask } from "../server/store";
+import { readContract, resetCheckCache, setGhRunner, type GhRunner } from "../server/pr";
 import { issueToken, type Identity } from "../server/tokens";
 import { handleTool } from "../server/tools";
 import { protocolFor } from "../server/protocol";
@@ -408,6 +408,100 @@ describe("complete --on-behalf", () => {
       assert.equal(events(task.id, "complete").length, 1);
     });
   }
+
+  function assertWorkerStillRunning(id: number, agentId: string): void {
+    const task = getTask(id);
+    assert.equal(task.status, "running");
+    assert.equal(task.agent_id, agentId);
+    assert.equal(events(id, "complete").length, 0);
+    const run = getDb().prepare("SELECT ended_at FROM runs WHERE task_id = ? ORDER BY id DESC LIMIT 1").get(id) as { ended_at: string | null };
+    assert.equal(run.ended_at, null);
+    assert.equal(events(id, "release_agent").some((event) => event.agentId === agentId), false);
+  }
+
+  function nextRun(id: number, agentId: string): void {
+    getDb().prepare("UPDATE runs SET ended_at = ?, end_kind = 'replaced' WHERE task_id = ? AND ended_at IS NULL").run(start.toISOString(), id);
+    getDb().prepare("UPDATE tasks SET agent_id = ?, executor_agent_id = ? WHERE id = ?").run(agentId, agentId, id);
+    openExecutorRun(id);
+  }
+
+  for (const submittedBlocked of [false, true]) {
+    it(`invalidates pending delegated checks after unblock and reassignment (${submittedBlocked ? "submitted blocked" : "submitted running"})`, async () => {
+      const task = await pendingBatch(submittedBlocked);
+      if (!submittedBlocked) blockTask(task.id, "needs_human", "Worker disappeared after submission", "test");
+      assert.equal(unblockTask(task.id, "supervisor").status, "ready");
+      assert.equal(getTask(task.id).agent_id, null);
+      claimStatus(task.id, "ready", "running", "test");
+      nextRun(task.id, "replacement-agent");
+      closeDb();
+      setGhRunner(checks("pass"));
+      assert.deepEqual(await pollAwaitingPr(), []);
+      assertWorkerStillRunning(task.id, "replacement-agent");
+      assert.equal(readContract(getTask(task.id).contract_json).awaiting, false);
+      assert.deepEqual(await pollAwaitingPr(), []);
+      // The new worker can still submit its own work under the same checks gate.
+      await completeTask(task.id, "batch", "Replacement worker finished", { ...handoff, pr });
+      assert.equal(getTask(task.id).status, "acceptance");
+      assert.equal(events(task.id, "complete")[0]?.actor, "batch");
+      assert.equal(events(task.id, "complete")[0]?.onBehalf, undefined);
+    });
+  }
+
+  it("invalidates the old submission even when unblock resumes the same agent and run", async () => {
+    const task = await pendingBatch(true);
+    const agents = join(dir, "agents", "demo");
+    mkdirSync(agents, { recursive: true });
+    writeFileSync(join(agents, "old-agent.json"), JSON.stringify({ id: "old-agent", cwd: dir, archivedAt: null }));
+    assert.equal(unblockTask(task.id, "supervisor").status, "running");
+    setGhRunner(checks("pass"));
+    assert.deepEqual(await pollAwaitingPr(), []);
+    assertWorkerStillRunning(task.id, "old-agent");
+  });
+
+  it("does not apply an old delegate's checks to a new run on the same agent", async () => {
+    const task = await pendingBatch(false);
+    nextRun(task.id, "old-agent");
+    setGhRunner(checks("pass"));
+    assert.deepEqual(await pollAwaitingPr(), []);
+    assertWorkerStillRunning(task.id, "old-agent");
+  });
+
+  it("rechecks the submission generation after a checks lookup is already in flight", async () => {
+    const task = await pendingBatch(false);
+    resetCheckCache();
+    let entered!: () => void;
+    let resume!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const pending = new Promise<void>((resolve) => { resume = resolve; });
+    const pass = checks("pass");
+    setGhRunner(async (args) => {
+      if (args.join(" ").startsWith("pr view")) {
+        entered();
+        await pending;
+      }
+      return pass(args);
+    });
+    const polling = pollAwaitingPr();
+    await started;
+    nextRun(task.id, "old-agent");
+    resume();
+    assert.deepEqual(await polling, []);
+    assertWorkerStillRunning(task.id, "old-agent");
+  });
+
+  it("requires a fresh hand-in when a legacy delegate has no submission generation", async () => {
+    const task = await pendingBatch(false);
+    const saved = JSON.parse(getTask(task.id).handoff_json!);
+    delete saved.completion.generation;
+    getDb().prepare("UPDATE tasks SET handoff_json = ? WHERE id = ?").run(JSON.stringify(saved), task.id);
+    setGhRunner(checks("pass"));
+    assert.deepEqual(await pollAwaitingPr(), []);
+    assertWorkerStillRunning(task.id, "old-agent");
+    assert.equal(readContract(getTask(task.id).contract_json).awaiting, false);
+    await handleTool("kanban_complete", { id: task.id, summary: "Fresh leader hand-in", handoff: { ...handoff, pr }, onBehalf: true }, null, leader(projectLeader));
+    assert.equal(getTask(task.id).status, "acceptance");
+    assert.equal(events(task.id, "complete")[0]?.actorAgentId, projectLeader);
+  });
 
   it("keeps the submitted recovery blocked on lookup errors and failed required checks", async () => {
     const task = await pendingBatch(true);
