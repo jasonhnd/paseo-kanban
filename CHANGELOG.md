@@ -1,13 +1,22 @@
 # Changelog
 
 The single plugin has one version and CHANGELOG. Distribution is through Git.
-Ten release candidates are recorded here. `0.1.0-rc.10` is the current unpublished candidate, pending independent review. Public prerelease rc.9 was published on 2026-10-15 and its GitHub Release exists, frozen at `701594d452f24dcbf115aabcedd4e9be9f5f6bcb` (annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`). Public prerelease rc.8 was published on 2026-10-14 and its GitHub Release exists. It remains frozen at `0af33ec7e49891bf3dba2549cb8b6b83487bba4c` (annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`). Public prerelease rc.7 was published on 2026-10-14 and its GitHub Release exists. It remains frozen at `2d6942643edb977072f8818b3d0c764b2ce1a057` (annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`). Public prerelease rc.6 was published on 2026-10-13 and remains frozen at `c70df59d8516b7ecc9350ce5833fb177bafc335b` (annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`). Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
+Eleven release candidates are recorded here. `0.1.0-rc.11` is the current unpublished candidate, pending independent review. Public prerelease rc.10 was published on 2026-10-15 and its GitHub Release exists, frozen at `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129` (annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`). Public prerelease rc.9 was published on 2026-10-15 and its GitHub Release exists, frozen at `701594d452f24dcbf115aabcedd4e9be9f5f6bcb` (annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`). Public prerelease rc.8 was published on 2026-10-14 and its GitHub Release exists. It remains frozen at `0af33ec7e49891bf3dba2549cb8b6b83487bba4c` (annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`). Public prerelease rc.7 was published on 2026-10-14 and its GitHub Release exists. It remains frozen at `2d6942643edb977072f8818b3d0c764b2ce1a057` (annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`). Public prerelease rc.6 was published on 2026-10-13 and remains frozen at `c70df59d8516b7ecc9350ce5833fb177bafc335b` (annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`). Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
 
 ## Unreleased
+
+## 0.1.0-rc.11 — pending review and publication
+
+Local candidate tag: `v0.1.0-rc.11`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.10 tags are never moved.
 
 ### Fixed
 
 - Cursor cards retain an explicit monitoring-off warning and an opt-in action after a transfer to a fresh data root, including when their effective quota source is manual. Connect Cursor remains discoverable while monitoring is off, with guidance to enable the reader and authorize again in the browser. Optional readers still default to off, credentials are not imported, and dispatch eligibility stays separate from monitoring. After authorization, the card reports that it is waiting for the next scheduled sample without advancing the last quota timestamp. See [GitHub issue #4](https://github.com/jasonhnd/paseo-kanban/issues/4).
+
+### Notes
+
+- Package and root lock versions agree on `0.1.0-rc.11`. Node remains `>=24.21.0`, and Paseo daemon/app requirements remain `>=0.11.0 <0.12.0`. Dependency selections, schema and contract versions are unchanged; no automatic data migration or credential import is introduced. The 20 dev/build dependency alerts remain.
+- Exact rc.11 verification uses only rc.11 receipts. Earlier rc.10 installations and issue-specific results do not pass this combined candidate. GitHub cold installs, integrated real-browser and installed-host lifecycle, native app, phones, authenticated provider cycles, other platforms and production recovery remain unverified for rc.11. This preparation does not perform the production switch.
 
 ## 0.1.0-rc.10 — pending review and publication
 

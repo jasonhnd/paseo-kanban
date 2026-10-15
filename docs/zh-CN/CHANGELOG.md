@@ -1,12 +1,21 @@
 # 变更记录
 
-单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.10` 是当前未公开、待独立审查的候选。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
+单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.10` 是当前未公开、待独立审查的候选。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。 已公开预发布 rc.10 于 2026-10-15 发布，GitHub Release 存在，冻结在 `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129`（annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`）。
 
 ## 未发布
+
+## 0.1.0-rc.11 — 待审查与发布
+
+本地候选 tag 为 `v0.1.0-rc.11`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.10 tag 绝不挪动。
 
 ### 修复（Fixed）
 
 - 迁到新数据根后，Cursor 额度卡即使回退为手抄来源，也会明确提示自动监控已关闭并提供开启入口。关闭监控时仍能找到「连接 Cursor」，并引导先开启读取器、再重新在浏览器授权。可选读取器仍默认关闭，不导入凭证，派活资格与监控独立。授权后提示等待下一次定时采样，不刷新上次额度读取的时间戳。参见 [GitHub issue #4](https://github.com/jasonhnd/paseo-kanban/issues/4)。
+
+### 注意（Notes）
+
+- package 与根 lock 版本统一为 `0.1.0-rc.11`。Node 仍为 `>=24.21.0`，Paseo daemon/app 仍要求 `>=0.11.0 <0.12.0`。依赖选择、schema 和契约版本不变，没有新增自动数据迁移或凭证导入。20 个开发／构建依赖告警保留。
+- 精确 rc.11 门禁只使用 rc.11 回执。此前 rc.10 安装及单项修复结果不代表整合候选通过。rc.11 的 GitHub 冷安装、整合真实浏览器和已安装宿主生命周期、原生 app、手机、已认证 provider 闭环、其他平台与生产恢复仍未验证。本次准备不做生产切换。
 
 ## 0.1.0-rc.10 — 待审查与发布
 
