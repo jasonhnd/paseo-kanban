@@ -65,3 +65,24 @@ test("legacy markers keep monitoring on independently of dispatch and disabledPo
   const ordinary = companyCatalog([{ id: "demo-manual", adapter: MANUAL, providers: ["cursor"] }])[0];
   assert.equal(ordinary.cursorMonitoring, undefined);
 });
+
+
+test("authorization survives stored-reading normalization until a scheduled sample completes", async () => {
+  const { authorizedCursorReading, combineCursorReading } = await import("../cursor-usage");
+  const { normalizeStoredReading } = await import("../cursor-parse");
+  const { withCursorLink } = await import("../usage-view");
+  const { showCursorConnect, showCursorDisconnect } = await import("../../../shared/fleet/quota-plans-view");
+  const pending = normalizeStoredReading(authorizedCursorReading(null))!;
+  assert.equal(pending.readAt, "");
+  assert.equal(pending.awaitingSample, true);
+  const board = await buildUsage(paseo, "7d");
+  const shown = withCursorLink(board, [], pending);
+  assert.equal(shown.cursorLink?.state, "authorized");
+  assert.equal(shown.cursorLink?.message, t("cursor.monitoring.authorized"));
+  assert.equal(showCursorConnect("authorized"), false);
+  assert.equal(showCursorDisconnect("authorized"), true);
+  const next = combineCursorReading({ readAt: new Date().toISOString(), nowMs: Date.now(), attemptedOfficial: false,
+    official: null, screen: null, previous: pending, screenRead: false });
+  assert.equal(next.awaitingSample, undefined);
+  assert.equal(withCursorLink(board, [], next).cursorLink?.state, "unlinked");
+});

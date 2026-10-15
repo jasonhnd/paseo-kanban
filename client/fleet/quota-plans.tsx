@@ -201,7 +201,7 @@ export function CursorLinkButtons({ s, link, monitoring }: { s: Styles; link: Bo
         </Pressable>
       </> : null}
       <CursorLinkRow s={s} state={state} busy={busy} disabled={off} onConnect={() => run(() => connect({}))} onDisconnect={() => run(() => disconnect({}))} />
-      {!off && state === "unlinked" && link?.message ? <Text style={s.muted}>{link.message}</Text> : null}
+      {!off && (state === "unlinked" || state === "authorized") && link?.message ? <Text style={s.muted}>{link.message}</Text> : null}
       {note ? <Text style={s.muted}>{note}</Text> : null}
     </View>
   );

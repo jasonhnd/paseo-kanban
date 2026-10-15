@@ -198,11 +198,11 @@ export function cursorConnectLabel(busy: boolean, state: string): string {
 }
 
 export function showCursorConnect(state: string): boolean {
-  return state !== "connected";
+  return state !== "connected" && state !== "authorized";
 }
 
 export function showCursorDisconnect(state: string): boolean {
-  return state === "connected" || state === "broken";
+  return state === "connected" || state === "authorized" || state === "broken";
 }
 
 export function priceButtonLabel(price: number | null): string {

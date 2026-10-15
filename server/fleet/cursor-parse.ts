@@ -160,6 +160,7 @@ export function normalizeStoredReading(parsed: unknown): CursorUsageReading | nu
     ...(raw.lastKnown && typeof raw.lastKnown.autoPct === "number" && Number.isFinite(raw.lastKnown.autoPct) && typeof raw.lastKnown.readAt === "string"
       ? { lastKnown: { autoPct: raw.lastKnown.autoPct, readAt: raw.lastKnown.readAt, resetsAt: typeof raw.lastKnown.resetsAt === "string" ? raw.lastKnown.resetsAt : null } } : {}),
     readAt: raw.readAt,
+    ...(raw.awaitingSample === true ? { awaitingSample: true } : {}),
     ok: raw.ok,
     error,
     includedPct: num(raw.includedPct),

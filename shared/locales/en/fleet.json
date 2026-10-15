@@ -453,6 +453,7 @@
   "cursor.usage.screenNotRead": "Nothing read from the CLI screen",
   "cursor.usage.staleOfficial": "The card still shows the last successful official reading",
   "cursor.usage.statusUnknown": "cursor-agent status did not confirm login; screen not opened",
+  "cursor.monitoring.authorized": "Authorized, waiting for the next scheduled sample. Connecting uses the same hourly sampling slot; authorization does not force an extra read.",
   "cursor.monitoring.off": "Cursor automatic monitoring is off",
   "cursor.monitoring.guide": "Enable monitoring here or in Settings > Optional adapters, then choose Connect Cursor and authorize again in your browser. Credentials are not transferred to a new data root. Dispatch eligibility is separate.",
   "cursor.monitoring.enable": "Enable Cursor monitoring",

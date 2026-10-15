@@ -453,6 +453,7 @@
   "cursor.usage.screenNotRead": "命令行画面没有读到",
   "cursor.usage.staleOfficial": "卡片上仍是上次成功的官方读数",
   "cursor.usage.statusUnknown": "cursor-agent status 没有确认已登录，没有打开界面",
+  "cursor.monitoring.authorized": "已授权，等待下一次定时采样。连接请求共用每小时采样时段，授权不会强制增加一次读取。",
   "cursor.monitoring.off": "Cursor 自动监控已关闭",
   "cursor.monitoring.guide": "在此开启监控，或前往设置 > 可选读取器，然后点击「连接 Cursor」并重新在浏览器授权。凭证不会迁入新数据根。派活资格与监控独立。",
   "cursor.monitoring.enable": "开启 Cursor 自动监控",

@@ -6,7 +6,7 @@ import { ANTIGRAVITY_CLI, CURSOR_API, isMonthlyWindow } from "../../shared/fleet
 import type { CompanyCursorRead, CompanyProviderWindow } from "../../shared/fleet/quota-companies";
 import type { BoardUsage, UsagePlan } from "../../shared/fleet/usage";
 import { cursorLinkOverride, msgUnlinked, type CursorUsageReading } from "./cursor-usage";
-import { tAll, type MessageKey } from "../../shared/fleet/i18n";
+import { t, tAll, type MessageKey } from "../../shared/fleet/i18n";
 import type { CursorReadMeta, PoolStatus } from "./pools";
 import { quotaDisplayExpiry, validQuotaTime } from "../../shared/fleet/quota-time";
 
@@ -167,6 +167,7 @@ function cursorLinkOf(reading: CursorUsageReading | null): NonNullable<BoardUsag
   const waiting = cursorLinkOverride();
   if (waiting) return waiting;
   if (reading?.linkBroken || reading?.linkState === "broken") return { state: "broken", message: "" };
+  if (reading?.awaitingSample) return { state: "authorized", message: t("cursor.monitoring.authorized") };
   if (reading?.linkState === "connected" || reading?.source === "official") return { state: "connected", message: "" };
   return { state: "unlinked", message: msgUnlinked() };
 }
@@ -174,7 +175,7 @@ function cursorLinkOf(reading: CursorUsageReading | null): NonNullable<BoardUsag
 export function withCursorLink(board: BoardUsage, companies: BoardUsage["companies"], reading: CursorUsageReading | null): BoardUsage {
   const cursorLink = cursorLinkOf(reading);
   const shown = (companies ?? []).map((card) => (
-    card.adapter === CURSOR_API && cursorLink.state === "waiting" ? { ...card, notice: cursorLink.message } : card
+    card.adapter === CURSOR_API && (cursorLink.state === "waiting" || cursorLink.state === "authorized") ? { ...card, notice: cursorLink.message } : card
   ));
   return { ...board, companies: shown, cursorLink };
 }

@@ -100,6 +100,8 @@ export interface CursorUsageReading {
   /** Last actual successful Auto reading, so failure cannot clear a known exhausted pool. */
   lastKnown?: { autoPct: number; readAt: string; resetsAt: string | null };
   readAt: string;
+  /** Authorization succeeded, but the shared sampling slot has not run again. No credential data. */
+  awaitingSample?: boolean;
   ok: boolean;
   error: string | null;
   includedPct: number | null;
@@ -469,7 +471,8 @@ export function combineCursorReading(input: {
     const lastKnown = reading.ok && reading.autoPct !== null ? { autoPct: reading.autoPct, readAt: reading.readAt, resetsAt: reading.resetsAt }
       : input.previous?.lastKnown ?? (input.previous?.ok && input.previous.autoPct !== null
         ? { autoPct: input.previous.autoPct, readAt: input.previous.readAt, resetsAt: input.previous.resetsAt } : undefined);
-    return { ...reading, homeAlarm: alarm, screenRead: screenOn, ...(lastKnown ? { lastKnown } : {}) };
+    const { awaitingSample: _pending, ...sampled } = reading;
+    return { ...sampled, homeAlarm: alarm, screenRead: screenOn, ...(lastKnown ? { lastKnown } : {}) };
   };
   const stayBroken = !input.attemptedOfficial && (input.previous?.linkState === "broken" || input.previous?.linkBroken === true);
   if (stayBroken) {
@@ -719,6 +722,12 @@ async function rememberNotice(notice: string, linkState: "unlinked" | "broken", 
   await writeJson(CURSOR_USAGE_FILE, { ...base, linkState, linkBroken: linkState === "broken", notice, homeAlarm });
 }
 
+/** Preserve the actual quota timestamp; authorization is not a new quota sample. */
+export function authorizedCursorReading(previous: CursorUsageReading | null): CursorUsageReading {
+  return { ...(previous ?? emptyReading("", "", false)), awaitingSample: true, linkState: "connected",
+    linkBroken: false, loggedOut: false, notice: t("cursor.monitoring.authorized") };
+}
+
 async function watchLogin(generation: number, attempt: ReturnType<typeof createLoginAttempt>): Promise<void> {
   const deadline = Date.now() + CURSOR_LOGIN_WAIT_MS;
   try {
@@ -741,6 +750,7 @@ async function watchLogin(generation: number, attempt: ReturnType<typeof createL
         return;
       }
       waitingMessage = null;
+      if (adapterOn(CURSOR_API)) await writeJson(CURSOR_USAGE_FILE, authorizedCursorReading(await readCursorUsageFile()));
       requestCursorCapture();
       return;
     }

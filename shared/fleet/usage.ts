@@ -223,7 +223,7 @@ export const boardUsageRpc = defineRpc({
     companies: z.array(companyCardSchema).optional(),
     /** AFC's own Cursor login. No token is included. */
     cursorLink: z.object({
-      state: z.enum(["unlinked", "waiting", "connected", "broken"]),
+      state: z.enum(["unlinked", "waiting", "authorized", "connected", "broken"]),
       message: z.string(),
     }).optional(),
   }),
