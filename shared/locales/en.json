@@ -1780,6 +1780,7 @@
   "tempMark.note.pending": "Waiting to land: {card} ({detail})",
   "tempMark.note.temp": "Temporary workspace: {card} (cleaned up automatically when done)",
   "tempWorkspace.agents.deleteFailed": "delete failed",
+  "tempWorkspace.agents.foreignDirectory": "Other cards' agents still use this directory",
   "tempWorkspace.agents.stillPointing": "Agents still point at this directory: {agents}",
   "tempWorkspace.agents.unreadable": "Cannot tell whether the agents are still running",
   "tempWorkspace.agents.unreadableList": "Cannot tell whether the agents are still running: {agents}",

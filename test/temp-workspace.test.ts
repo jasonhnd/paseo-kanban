@@ -3160,7 +3160,7 @@ describe("temporary workspace cleanup", () => {
     rmSync(agentFile("inspect-file-agent"), { force: true });
   });
 
-  it("leaves a finished review card's running agent, then deletes it once the turn is idle", async () => {
+  it("does not delete a finished review card's agent that shares the directory", async () => {
     const card = await landedTemp("review-busy-share", "share");
     const sibling = createTask({
       project: "review-busy-share",
@@ -3182,19 +3182,24 @@ describe("temporary workspace cleanup", () => {
       markDone(card.id);
       await drainCleanups(start);
       assert.equal(existsSync(agentFile(reviewAgent)), true);
+      assert.equal(existsSync(agentFile(card.agentId)), false);
       assert.equal(existsSync(card.directory), true);
       assert.equal(eventRows(card.id).some((row) => row.kind === "temp_workspace_cleaned"), false);
       const waits = () => cleanupRows(card.id).filter((row) => row.action === "wait_turn" && row.agentId === reviewAgent);
-      assert.equal(waits().length, 1);
-      assert.equal(waits()[0]?.retryAt, undefined);
-      assert.equal(waits()[0]?.reason, zhCN("archiveBook.reason.waitTurn"));
+      assert.equal(waits().length, 0);
+      const held = () => cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false);
+      assert.equal(held().length, 1);
+      assert.equal(held()[0]?.error, zhCN("tempWorkspace.agents.foreignDirectory"));
+      assert.equal(String(held()[0]?.error).includes(reviewAgent), false);
       await drainCleanups(new Date(start.getTime() + 1_000));
       assert.equal(existsSync(agentFile(reviewAgent)), true);
-      assert.equal(waits().length, 1);
+      assert.equal(waits().length, 0);
       reviewBusy = false;
       await drainCleanups(new Date(start.getTime() + 2_000));
-      await assertCleaned(card.root, card.id, card.branch, card.directory, box.archives());
-      assert.equal(existsSync(agentFile(reviewAgent)), false);
+      assert.equal(box.archives(), 0);
+      assert.equal(existsSync(card.directory), true);
+      assert.equal(existsSync(agentFile(reviewAgent)), true);
+      assert.equal(eventRows(card.id).some((row) => row.kind === "agent_purged" && row.data_json.includes(reviewAgent)), false);
       const reviewWaits = cleanupRows(sibling.id).filter((row) => row.action === "wait_turn" && row.agentId === reviewAgent);
       assert.equal(reviewWaits.length >= 1, true);
       const retryAt = Date.parse(String(reviewWaits[0]?.retryAt));
@@ -3209,7 +3214,7 @@ describe("temporary workspace cleanup", () => {
     }
   });
 
-  it("keeps the directory when another card's agent query throws, then deletes it once the query works", async () => {
+  it("keeps the directory while another card's agent shares it, without querying that agent", async () => {
     const card = await landedTemp("review-query-share", "query-share");
     const sibling = createTask({
       project: "review-query-share",
@@ -3236,24 +3241,28 @@ describe("temporary workspace cleanup", () => {
       assert.equal(existsSync(agentFile(reviewAgent)), true);
       assert.equal(existsSync(card.directory), true);
       assert.equal(eventRows(card.id).some((row) => row.kind === "temp_workspace_cleaned"), false);
-      const errors = cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false && String(row.error ?? "").includes(zhCNPart("cleanup.error.unreadable", 0, 9)));
+      const errors = cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false);
       assert.equal(errors.length, 1);
+      assert.equal(errors[0]?.error, zhCN("tempWorkspace.agents.foreignDirectory"));
+      assert.equal(String(errors[0]?.error).includes(reviewAgent), false);
       assert.equal(typeof errors[0]?.retryAt, "string");
       await drainCleanups(new Date(start.getTime() + 30_000));
       assert.equal(existsSync(agentFile(reviewAgent)), true);
       assert.equal(existsSync(card.directory), true);
-      assert.equal(cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false && String(row.error ?? "").includes(zhCNPart("cleanup.error.unreadable", 0, 9))).length, 1);
+      assert.equal(cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false).length, 1);
       broken = false;
       await drainCleanups(new Date(start.getTime() + 61_000));
-      await assertCleaned(card.root, card.id, card.branch, card.directory, box.archives());
-      assert.equal(existsSync(agentFile(reviewAgent)), false);
+      assert.equal(box.archives(), 0);
+      assert.equal(existsSync(card.directory), true);
+      assert.equal(existsSync(agentFile(reviewAgent)), true);
+      assert.equal(eventRows(card.id).some((row) => row.kind === "agent_purged" && row.data_json.includes(reviewAgent)), false);
     } finally {
       rmSync(agentFile(reviewAgent), { force: true });
       release();
     }
   });
 
-  it("keeps the directory when cleanupOps cannot ask Paseo and the other agent's file looks idle", async () => {
+  it("keeps the directory while another card's agent file is present, even when Paseo cannot be asked", async () => {
     const card = await landedTemp("review-query-file", "query-file");
     const sibling = createTask({
       project: "review-query-file",
@@ -3277,16 +3286,21 @@ describe("temporary workspace cleanup", () => {
       assert.equal(existsSync(agentFile(reviewAgent)), true);
       assert.equal(existsSync(card.directory), true);
       assert.equal(eventRows(card.id).some((row) => row.kind === "temp_workspace_cleaned"), false);
-      const errors = cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false && String(row.error ?? "").includes(zhCNPart("cleanup.error.unreadable", 0, 9)));
+      const errors = cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false);
       assert.equal(errors.length, 1);
+      assert.equal(errors[0]?.error, zhCN("tempWorkspace.agents.foreignDirectory"));
+      assert.equal(String(errors[0]?.error).includes(reviewAgent), false);
       assert.equal(typeof errors[0]?.retryAt, "string");
       await drainCleanups(new Date(start.getTime() + 30_000));
       assert.equal(existsSync(card.directory), true);
-      assert.equal(cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false && String(row.error ?? "").includes(zhCNPart("cleanup.error.unreadable", 0, 9))).length, 1);
+      assert.equal(existsSync(agentFile(reviewAgent)), true);
+      assert.equal(cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false).length, 1);
       broken = false;
       await drainCleanups(new Date(start.getTime() + 61_000));
-      await assertCleaned(card.root, card.id, card.branch, card.directory, box.archives());
-      assert.equal(existsSync(agentFile(reviewAgent)), false);
+      assert.equal(box.archives(), 0);
+      assert.equal(existsSync(card.directory), true);
+      assert.equal(existsSync(agentFile(reviewAgent)), true);
+      assert.equal(eventRows(card.id).some((row) => row.kind === "agent_purged" && row.data_json.includes(reviewAgent)), false);
     } finally {
       rmSync(agentFile(reviewAgent), { force: true });
       release();

@@ -2,7 +2,7 @@
 import { existsSync, realpathSync } from "./perf-fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { translate, t } from "../shared/i18n";
-import { nextRetryAt, readCleanupEvents, retryReady, waitReason, type CleanupRecord } from "./archive-book";
+import { agentsOpenedBy, nextRetryAt, readCleanupEvents, retryReady, waitReason, type CleanupRecord } from "./archive-book";
 import { judgedWorktree } from "./branch-observed";
 import { deleteSquashedBranch, headRef, isProtectedBranch, originRef, refOk, runGit, type GitResult, type GitRunner } from "./git";
 import { canonicalPath, paseoWorktreesRoot } from "./paths";
@@ -614,17 +614,19 @@ export async function deleteOwnedBranch(
 }
 
 async function retainOrUnknown(
+  task: TaskRow,
   directory: string,
   activity?: AgentActivity,
 ): Promise<{ kept: CwdAgent[] | "unknown" } | { hold: Attempt }> {
   try {
-    const result = await retainAgentsBeforeDirectoryRemoval(directory, activity);
+    const result = await retainAgentsBeforeDirectoryRemoval(directory, activity, { taskId: task.id, recorded: new Set(agentsOpenedBy(task)) });
     if (result.unread.length > 0) {
       const onlyList = result.unread.length === 1 && result.unread[0] === agentListUnreadReason();
       const error = onlyList ? agentListUnreadReason() : t("worktreeGc.agents.unreadable", { detail: result.unread.join(t("common.listSep")) });
       return { hold: { kind: "error", error } };
     }
     if (result.waiting.length > 0) return { hold: { kind: "waiting", agentIds: result.waiting } };
+    if (result.outside.length > 0) return { hold: { kind: "error", error: t("tempWorkspace.agents.foreignDirectory") } };
     return { kept: result.kept };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -658,7 +660,7 @@ async function attempt(task: TaskRow, owned: OwnedWorktree, run: GitRunner, now:
     const status = await run(owned.directory, ["status", "--porcelain"]);
     if (status.code !== 0) return { kind: "error", error: (status.stderr || status.stdout || t("worktreeGc.gitFailed", { command: "git status" })).trim() };
     if (status.stdout.trim()) return { kind: "error", error: dirtyWorktreeError() };
-    const retained = await retainOrUnknown(owned.directory, activity);
+    const retained = await retainOrUnknown(task, owned.directory, activity);
     if ("hold" in retained) return retained.hold;
     const removed = await run(owned.root, ["worktree", "remove", owned.directory]);
     if (removed.code !== 0) {
@@ -667,7 +669,7 @@ async function attempt(task: TaskRow, owned: OwnedWorktree, run: GitRunner, now:
     const placed = placeAfterRemoval(task.id, owned.directory, retained.kept);
     if (placed) return placed;
   } else {
-    const retained = await retainOrUnknown(owned.directory, activity);
+    const retained = await retainOrUnknown(task, owned.directory, activity);
     if ("hold" in retained) return retained.hold;
     const placed = placeAfterRemoval(task.id, owned.directory, retained.kept);
     if (placed) return placed;

@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { zhCN } from "./helpers/locale";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -156,16 +157,17 @@ describe("cleanup purges only the agents this card recorded", () => {
     assert.equal(existsSync(agentPath(reviewer)), true);
     assert.equal(existsSync(directory), true);
     assert.equal(archives, 0);
-    for (const taskId of [card.id, other.id]) {
-      for (const row of eventData(taskId, "agent_purged")) {
-        assert.equal(namesAgent(row, executor), false);
-        assert.equal(namesAgent(row, reviewer), false);
-      }
-      for (const row of eventData(taskId, "cleanup")) {
-        assert.equal(namesAgent(row, executor), false);
-        assert.equal(namesAgent(row, reviewer), false);
-      }
+    for (const row of [...eventData(card.id, "agent_purged"), ...eventData(card.id, "cleanup")]) {
+      assert.equal(namesAgent(row, executor), false);
+      assert.equal(namesAgent(row, reviewer), false);
     }
+    for (const row of eventData(other.id, "agent_purged")) {
+      assert.equal(namesAgent(row, executor), false);
+      assert.equal(namesAgent(row, reviewer), false);
+    }
+    const held = eventData(card.id, "cleanup").filter((row) => row.action === "purge_agents" && row.ok === false);
+    assert.equal(held.length, 1);
+    assert.equal(held[0]?.error, zhCN("tempWorkspace.agents.foreignDirectory"));
     assert.equal(eventData(card.id, "agent_purged").some((row) => row.agentId === own), true);
   });
 
@@ -264,6 +266,9 @@ describe("cleanup purges only the agents this card recorded", () => {
     assert.equal(cleanup.some((event) => event.action === "remove_worktree" && event.ok === true), false);
     assert.equal(cleanup.some((event) => event.action === "wait_turn" && event.agentId === neighbor), false);
     assert.equal(cleanup.some((event) => JSON.stringify(event).includes(neighbor)), false);
+    const held = cleanup.filter((event) => event.action === "remove_worktree" && event.ok === false);
+    assert.equal(held.length, 1);
+    assert.equal(held[0]?.error, zhCN("tempWorkspace.agents.foreignDirectory"));
     assert.equal(eventData(other.id, "agent_purged").length, 0);
   });
 });

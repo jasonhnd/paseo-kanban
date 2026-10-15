@@ -5,6 +5,10 @@ Nine release candidates are recorded here. `0.1.0-rc.9` is the current unpublish
 
 ## Unreleased
 
+### Fixed
+
+- Cleaning a card now deletes only the agents that card recorded: runs, the task columns, tokens, and open events, plus a child spawned from one of those agents. Agents that only share the directory or workspace stay, including another finished card's executor and reviewer. An agent whose label names this card but whose record belongs to another card is not purged. The cleanup note says that other cards' agents still use the directory and does not name those agents. See [GitHub issue #3](https://github.com/jasonhnd/paseo-kanban/issues/3).
+
 ## 0.1.0-rc.9 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.9`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.8 tags are never moved.

@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { DatabaseSync } from "node:sqlite";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { archiveSucceeded, cleanupFinished, readCleanupEvents } from "./archive-book";
+import { agentsOpenedBy, archiveSucceeded, cleanupFinished, readCleanupEvents } from "./archive-book";
 import { addBoardWakeMark, hasBoardWakeMark } from "./board-wake-marks";
 import { DEFAULT_MISSING_CWD_PATROL_MS, loadConfig, loadConfigForReport } from "./config";
 import { getDb } from "./db";
@@ -462,6 +462,54 @@ function finished(status: string): boolean {
   return status === "done" || status === "archived";
 }
 
+export interface CardAgentScope {
+  taskId: number;
+  recorded: ReadonlySet<string>;
+}
+
+/** True when another card's runs, columns, tokens, or open events name this agent. */
+function recordedOnAnotherCard(agentId: string, taskId: number): boolean {
+  const db = getDb();
+  const linked = db
+    .prepare(
+      `SELECT 1 AS n FROM runs WHERE agent_id = ? AND task_id != ?
+       UNION SELECT 1 FROM tasks WHERE id != ? AND (agent_id = ? OR executor_agent_id = ?)
+       UNION SELECT 1 FROM tokens WHERE agent_id = ? AND task_id != ?
+       LIMIT 1`,
+    )
+    .get(agentId, taskId, taskId, agentId, agentId, agentId, taskId);
+  if (linked) return true;
+  const events = db
+    .prepare("SELECT data_json FROM events WHERE task_id != ? AND kind IN ('agent_opened', 'started', 'resumed', 'registered')")
+    .all(taskId) as Array<{ data_json: string }>;
+  for (const row of events) {
+    try {
+      const data = JSON.parse(row.data_json) as { agentId?: unknown };
+      if (data.agentId === agentId) return true;
+    } catch {
+      // ignore a broken event
+    }
+  }
+  return false;
+}
+
+/**
+ * This card's recorded agents, plus a child spawned from one of them.
+ * A child that another card recorded stays that card's agent.
+ */
+function agentInScope(agent: CwdAgent, scope: CardAgentScope): boolean {
+  if (scope.recorded.has(agent.id)) return true;
+  const parent = parentAgentId(agent.labels);
+  if (!parent || !scope.recorded.has(parent)) return false;
+  return !recordedOnAnotherCard(agent.id, scope.taskId);
+}
+
+/** Kanban agent this card did not open. Directory cleanup must not query, record, or delete it. */
+export function agentOutsideCardScope(agent: CwdAgent, scope: CardAgentScope): boolean {
+  if (agentInScope(agent, scope)) return false;
+  return kanbanOpened(agent.id, agent.labels);
+}
+
 export function purgeDecision(agent: CwdAgent): { ok: true; cards: CardLink[]; summary: string } | { ok: false; reason: string } {
   if (!kanbanOpened(agent.id, agent.labels)) return { ok: false, reason: t("missingCwd.purge.notKanban") };
   const cards = cardsForAgent(agent.id, agent.labels);
@@ -531,16 +579,23 @@ export type AgentRunState = "busy" | "idle" | "gone" | "unknown";
 export async function retainAgentsBeforeDirectoryRemoval(
   directory: string,
   running?: (agentId: string) => Promise<AgentRunState>,
-): Promise<{ kept: CwdAgent[]; purged: string[]; waiting: string[]; unread: string[] }> {
+  scope?: CardAgentScope,
+): Promise<{ kept: CwdAgent[]; purged: string[]; waiting: string[]; unread: string[]; outside: string[] }> {
   const listed = readCwdAgentList();
-  if (listed == null) return { kept: [], purged: [], waiting: [], unread: [agentListUnreadReason()] };
+  if (listed == null) return { kept: [], purged: [], waiting: [], unread: [agentListUnreadReason()], outside: [] };
   const touching = agentsTouching(directory, listed);
   const kept: CwdAgent[] = [];
   const purged: string[] = [];
   const waiting: string[] = [];
   const unread: string[] = [];
+  const outside: string[] = [];
   const readAgent = createNativeAgentReader();
   for (const agent of touching) {
+    // Another card's agent shares this directory. Leave it, and do not ask whether it is running.
+    if (scope && agentOutsideCardScope(agent, scope)) {
+      outside.push(agent.id);
+      continue;
+    }
     if (running) {
       let state: AgentRunState;
       try {
@@ -565,7 +620,7 @@ export async function retainAgentsBeforeDirectoryRemoval(
     if (outcome === "purged") purged.push(agent.id);
     else kept.push(agent);
   }
-  return { kept, purged, waiting, unread };
+  return { kept, purged, waiting, unread, outside };
 }
 
 function placeholderText(reason: string, agentIds: string[]): string {
@@ -1092,17 +1147,7 @@ export async function purgeCardAgents(taskId: number, options?: { dryRun?: boole
   if (!finished(task.status)) {
     throw new KanbanError("invalid", t("missingCwd.purge.notFinished", { card: cardMark(taskId), status: statusLabel(task.status) }));
   }
-  const ids = new Set<string>();
-  const db = getDb();
-  if (task.agent_id) ids.add(task.agent_id);
-  if (task.executor_agent_id) ids.add(task.executor_agent_id);
-  const runs = db.prepare("SELECT agent_id FROM runs WHERE task_id = ? AND agent_id IS NOT NULL").all(taskId) as Array<{ agent_id: string }>;
-  for (const row of runs) ids.add(row.agent_id);
-  const tokens = db.prepare("SELECT agent_id FROM tokens WHERE task_id = ? AND agent_id IS NOT NULL").all(taskId) as Array<{ agent_id: string }>;
-  for (const row of tokens) ids.add(row.agent_id);
-  for (const agent of loadCwdAgents()) {
-    if (agent.labels.kanban_task === String(taskId)) ids.add(agent.id);
-  }
+  const ids = new Set(agentsOpenedBy(task));
   const readAgent = createNativeAgentReader();
   const lines: PurgePlanLine[] = [];
   const deleted: string[] = [];

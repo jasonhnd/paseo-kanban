@@ -4,6 +4,10 @@
 
 ## 未发布
 
+### 修复
+
+- 清理一张卡时，只删除这张卡记录过的 agent：runs、任务列、令牌，以及打开事件里的 agentId，再加上从这些 agent 派生出来的子 agent。只是共用目录或 workspace 的 agent 会留下来，包括另一张早已完成的卡的执行和审查 agent。标签写成这张卡、但记录属于另一张卡的 agent 不会被清掉。清理说明只写别的卡的 agent 还在用这个目录，不点出那些 agent。见 [GitHub issue #3](https://github.com/jasonhnd/paseo-kanban/issues/3)。
+
 ## 0.1.0-rc.9 — 待审查与发布
 
 本地候选 tag 为 `v0.1.0-rc.9`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.8 tag 绝不挪动。
