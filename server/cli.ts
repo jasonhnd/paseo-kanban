@@ -30,7 +30,7 @@ import { resumeCleanup } from "./archive-book";
 import { rebindTask } from "./rebind";
 import { startTask, type AgentLauncher } from "./dispatch";
 import { addTaskTags, getTask } from "./store";
-import type { Identity } from "./tokens";
+import { identityFromToken, type Identity } from "./tokens";
 import { formatResult, handleTool } from "./tools";
 import { openReadonlyDb } from "./db";
 import { auditWrite, withWriteTransport } from "./write-source";
@@ -348,7 +348,10 @@ async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEn
     return { text: result.text, deleted: result.deleted, dryRun };
   }
   if (parsed.cmd === "resume-cleanup") {
-    if (identity.role !== "supervisor" || identity.taskId != null) throw new KanbanError("forbidden", t("cli.onlyLeader.resumeCleanup"));
+    // Guest tokens may resolve through the agent's current leader registration.
+    // Preserve the original card binding when deciding cleanup authority.
+    const cardToken = env.KANBAN_TOKEN?.trim() ? identityFromToken(env.KANBAN_TOKEN.trim()).taskId != null : false;
+    if (identity.role !== "supervisor" || identity.taskId != null || cardToken) throw new KanbanError("forbidden", t("cli.onlyLeader.resumeCleanup"));
     const taskId = resolveTaskId(parsed.positionals[0] ?? parsed.flag("id") ?? "");
     const discard = parsed.flag("discard-unmerged");
     if (discard !== undefined && discard !== "true") throw new KanbanError("invalid", t("cleanupDiscard.flag"));
