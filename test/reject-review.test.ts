@@ -10,7 +10,7 @@ import { kanbanHelp, runKanban } from "../server/cli";
 import { closeDb, getDb } from "../server/db";
 import { startTask } from "./helpers/compat-dispatch";
 import { KanbanError } from "../server/errors";
-import { rejectTask, requestChanges } from "../server/flow";
+import { approveTask, rejectTask, requestChanges } from "../server/flow";
 import type { Profile } from "../server/profiles";
 import { runTick } from "./helpers/compat-schedule";
 import { blockTask, createTask, getTask, listBoard, setFinishedListener } from "../server/store";
@@ -372,6 +372,110 @@ describe("reject and reviewed cards", () => {
     assert.equal(again.blocked_at, null);
     assert.equal(again.hold_reason, null);
     assert.equal(again.cooldown_until, null);
+  });
+
+  it("sends an in_review target back when a manual review requests changes", () => {
+    const original = createTask({ project: "queued", title: "Taken over", role: "executor", workspacePath: dir, brief: "Submitted work" });
+    getDb()
+      .prepare("UPDATE tasks SET status = 'in_review', review_round = 0, executor_agent_id = 'exec-live', agent_id = 'exec-live', handoff_json = ? WHERE id = ?")
+      .run(handoff("Submitted work"), original.id);
+    const review = createTask({
+      project: "queued",
+      title: "Manual review",
+      role: "reviewer",
+      workspacePath: dir,
+      reviewOf: original.id,
+    });
+    assert.equal(getTask(original.id).status, "in_review");
+    getDb().prepare("UPDATE tasks SET status = 'reviewing', agent_id = 'reviewer-1' WHERE id = ?").run(review.id);
+    const done = requestChanges(review.id, "Add tests", "Boundary unspecified", "reviewer");
+    assert.equal(done.id, review.id);
+    assert.equal(done.status, "done");
+    const again = getTask(original.id);
+    assert.equal(again.status, "rework");
+    assert.equal(again.review_round, 1);
+    assert.equal(again.executor_agent_id, "exec-live");
+    const event = getDb()
+      .prepare("SELECT from_status, to_status, data_json FROM events WHERE task_id = ? AND kind = 'request_changes'")
+      .get(original.id) as { from_status: string; to_status: string; data_json: string };
+    assert.equal(event.from_status, "in_review");
+    assert.equal(event.to_status, "rework");
+    assert.equal(JSON.parse(event.data_json).reviewRound, 1);
+  });
+
+  it("parks the second linked rejection when the target is still in_review", () => {
+    const original = createTask({ project: "queued-hold", title: "Taken over again", role: "executor", workspacePath: dir, brief: "Submitted work" });
+    getDb()
+      .prepare("UPDATE tasks SET status = 'in_review', review_round = 1, executor_agent_id = 'exec-live', agent_id = 'exec-live' WHERE id = ?")
+      .run(original.id);
+    const review = createTask({
+      project: "queued-hold",
+      title: "Second manual review",
+      role: "reviewer",
+      workspacePath: dir,
+      reviewOf: original.id,
+    });
+    getDb().prepare("UPDATE tasks SET status = 'reviewing', agent_id = 'reviewer-2' WHERE id = ?").run(review.id);
+    const done = requestChanges(review.id, "Still failing", "Add the missing case", "reviewer");
+    assert.equal(done.status, "done");
+    const held = getTask(original.id);
+    assert.equal(held.status, "rework");
+    assert.equal(held.review_round, 2);
+    assert.equal(held.agent_id, null);
+    assert.equal(held.executor_agent_id, "exec-live");
+    const hold = getDb().prepare("SELECT COUNT(*) AS n FROM events WHERE task_id = ? AND kind = 'review_leader_hold'").get(original.id) as { n: number };
+    assert.equal(hold.n, 1);
+  });
+
+  it("moves an in_review target to acceptance when the manual review approves", async () => {
+    const original = createTask({ project: "queued-ok", title: "Taken over", role: "executor", workspacePath: dir, brief: "Submitted work" });
+    getDb()
+      .prepare("UPDATE tasks SET status = 'in_review', review_round = 0, executor_agent_id = 'exec-live', agent_id = 'exec-live', handoff_json = ? WHERE id = ?")
+      .run(handoff("Submitted work"), original.id);
+    const review = createTask({
+      project: "queued-ok",
+      title: "Manual review",
+      role: "reviewer",
+      workspacePath: dir,
+      reviewOf: original.id,
+    });
+    getDb().prepare("UPDATE tasks SET status = 'reviewing', agent_id = 'reviewer-1' WHERE id = ?").run(review.id);
+    const approved = await approveTask(review.id, "Looks right", "reviewer");
+    assert.equal(approved.id, review.id);
+    assert.equal(approved.status, "acceptance");
+    const again = getTask(original.id);
+    assert.equal(again.status, "acceptance");
+    assert.equal(again.review_round, 0);
+    const event = getDb()
+      .prepare("SELECT from_status, to_status FROM events WHERE task_id = ? AND kind = 'approve'")
+      .get(original.id) as { from_status: string; to_status: string };
+    assert.equal(event.from_status, "in_review");
+    assert.equal(event.to_status, "acceptance");
+  });
+
+  it("does not claim the target when the manual review card is created", () => {
+    const original = createTask({ project: "queued-create", title: "Still queued", role: "executor", workspacePath: dir });
+    getDb().prepare("UPDATE tasks SET status = 'in_review', executor_agent_id = 'exec-live' WHERE id = ?").run(original.id);
+    createTask({
+      project: "queued-create",
+      title: "Manual review",
+      role: "reviewer",
+      workspacePath: dir,
+      reviewOf: original.id,
+    });
+    assert.equal(getTask(original.id).status, "in_review");
+    assert.equal(getTask(original.id).executor_agent_id, "exec-live");
+  });
+
+  it("still refuses request-changes on an in_review card that has no linked review", () => {
+    const original = createTask({ project: "queued-direct", title: "Waiting inline", role: "executor", workspacePath: dir });
+    getDb().prepare("UPDATE tasks SET status = 'in_review', executor_agent_id = 'exec-live', agent_id = 'exec-live' WHERE id = ?").run(original.id);
+    assert.throws(
+      () => requestChanges(original.id, "Add tests", "Boundary unspecified", "reviewer"),
+      (err: unknown) => err instanceof KanbanError && err.code === "illegal_transition",
+    );
+    assert.equal(getTask(original.id).status, "in_review");
+    assert.equal(getTask(original.id).review_round, 0);
   });
 
   it("parks a third rejection of a finished card in Doing", () => {
