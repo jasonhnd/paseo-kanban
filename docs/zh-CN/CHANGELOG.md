@@ -1,8 +1,12 @@
 # 变更记录
 
-单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.15` 是当前未公开、待独立审查的候选。已公开预发布 rc.14 于 2026-10-16 发布，GitHub Release 存在，冻结在 `25dfc5f352b3577b4b9810eab652ae60bac53c55`（annotated object `292c50ae341db5ac43589e678c328da56470d5fa`）。已公开预发布 rc.12 于 2026-10-16 发布，GitHub Release 存在，冻结在 `4162cbca1acb2aa70ad1d5fb77c0c78f25c68ab2`（annotated object `a5d68644e9d02206e2cf07ee7d32005f59801ee9`）。已公开预发布 rc.11 于 2026-10-15 发布，GitHub Release 存在，冻结在 `09963b85e0d7c9c5d881aa39e3c65ebbb719b7a0`（annotated object `042413d64aeee4f41c34120b4b3af4003c685741`）。已公开预发布 rc.10 于 2026-10-15 发布，GitHub Release 存在，冻结在 `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129`（annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`）。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
+单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.16` 是当前未公开、待独立审查的候选。已公开预发布 rc.15 于 2026-10-16 发布，GitHub Release 存在，冻结在 `0f64d2009fd7fefefbc41edff8a79144c6411548`（annotated object `8919725b05cef190395f2a9ddaaebae7490cc0fe`）。已公开预发布 rc.12 于 2026-10-16 发布，GitHub Release 存在，冻结在 `4162cbca1acb2aa70ad1d5fb77c0c78f25c68ab2`（annotated object `a5d68644e9d02206e2cf07ee7d32005f59801ee9`）。已公开预发布 rc.11 于 2026-10-15 发布，GitHub Release 存在，冻结在 `09963b85e0d7c9c5d881aa39e3c65ebbb719b7a0`（annotated object `042413d64aeee4f41c34120b4b3af4003c685741`）。已公开预发布 rc.10 于 2026-10-15 发布，GitHub Release 存在，冻结在 `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129`（annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`）。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
 
 ## 未发布
+
+## 0.1.0-rc.16 — 待审查与发布
+
+本地候选 tag 为 `v0.1.0-rc.16`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.15 tag 绝不挪动。
 
 ### 变更（Changed）
 
@@ -11,6 +15,9 @@
 ### 说明（Notes）
 
 - 对外文档与发布说明仅用英文，中文文档保留在 docs/zh-CN。全新安装跟随系统语言，已明确选择的语言不变（新增测试覆盖）。
+- package 与根 lock 版本统一为 `0.1.0-rc.16`。Node 仍要求 `>=24.21.0`，Paseo daemon/app 仍要求 `>=0.11.0 <0.12.0`。相对 rc.15，依赖选择、schema 和契约版本不变。唯一新增的存储文件是 `paseo-projects.json`，用来缓存上次读到的 Paseo 项目列表；不引入自动数据或凭证导入。保留 20 个开发／构建依赖告警。
+- 插件连上 Paseo 期间每 30 秒读取一次项目列表。最后一个项目从 Paseo 移除后，约需 60 至 90 秒才会隐藏，因为空列表必须相隔至少 60 秒看到两次。没有已知目录的项目一律视为仍在 Paseo。生产配置里每个项目是否都写了 `workspacePath` 未验证。
+- 精确 rc.16 验证只计 rc.16 回执；此前 rc.15 与组件成绩不认证本候选。GitHub 冷安装、合并后候选的真实浏览器挂载、已安装宿主生命周期、含待恢复定时卡的升级／回退、原生 app、手机、已认证 provider 闭环、其他平台与生产恢复仍未验证。本次准备不执行生产切换。
 
 ## 0.1.0-rc.15 — 待审查与发布
 

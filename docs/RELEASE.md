@@ -1,6 +1,6 @@
 # Git release and recovery checklist
 
-This batch prepares the single plugin for **Git-only prerelease `0.1.0-rc.15`**. Its immutable tag `v0.1.0-rc.15` and GitHub prerelease are **unpublished until the GitHub Release record exists**. The public repository is `https://github.com/jasonhnd/paseo-kanban`, branch `integration/single-plugin-reviewed`; the verified public code baseline is `c106efb88a659931d01f40a236001823473561a8`, tree `581ff56cbd944b6d4244129c80a8aeb3bd8c01e2`. `v0.1.0-rc.1` is the local preparation tag for `22958ff54c955c1a90683f786d3ebb8b9ae88470` and is not moved; that preparation was metadata and docs only and was not published. `v0.1.0-rc.2` remains frozen at `8be11b6144b6cc7b81bcf741a360acf18111001f` (annotated object `0e16a0c43de421db583a31b3dee7b6e6b67e6b82`), unpublished. `v0.1.0-rc.3` remains frozen at `61cce0d8ba07e8bf01fe7239ddf0ceeaf5983df4` (tree `633c99456b05cdbf7156f5c3ab1149451a767738`, annotated object `7e288e22f42598a651edef407dcdb82871c3d9de`), unpublished and rejected for publication because stale default policy could reopen a stopped pool or ignore a matrix pause. This candidate retains rc.4's reviewed default-policy, artifact-acceptance, decision-panel and managed-command-path fixes. rc.5 clears obsolete current blocked/cooldown state after successful new runs, corrects stale-policy diagnostics, updates client entries and media, and raises the Node minimum. The old rc.4 commit `a3c03fcc8dcc14237df0ea8ca3df29a19cceed7c` and annotated tag object `d2f0eaea4bfe3cdd747602329abbbf4892b187f5` remain unchanged; explicit legacy compatibility behavior is unchanged. No stable release, npm publication, official registry listing or production switch is declared or authorized here.
+This batch prepares the single plugin for **Git-only prerelease `0.1.0-rc.16`**. Its immutable tag `v0.1.0-rc.16` and GitHub prerelease are **unpublished until the GitHub Release record exists**. The public repository is `https://github.com/jasonhnd/paseo-kanban`, branch `integration/single-plugin-reviewed`; the verified public code baseline is `c106efb88a659931d01f40a236001823473561a8`, tree `581ff56cbd944b6d4244129c80a8aeb3bd8c01e2`. `v0.1.0-rc.1` is the local preparation tag for `22958ff54c955c1a90683f786d3ebb8b9ae88470` and is not moved; that preparation was metadata and docs only and was not published. `v0.1.0-rc.2` remains frozen at `8be11b6144b6cc7b81bcf741a360acf18111001f` (annotated object `0e16a0c43de421db583a31b3dee7b6e6b67e6b82`), unpublished. `v0.1.0-rc.3` remains frozen at `61cce0d8ba07e8bf01fe7239ddf0ceeaf5983df4` (tree `633c99456b05cdbf7156f5c3ab1149451a767738`, annotated object `7e288e22f42598a651edef407dcdb82871c3d9de`), unpublished and rejected for publication because stale default policy could reopen a stopped pool or ignore a matrix pause. This candidate retains rc.4's reviewed default-policy, artifact-acceptance, decision-panel and managed-command-path fixes. rc.5 clears obsolete current blocked/cooldown state after successful new runs, corrects stale-policy diagnostics, updates client entries and media, and raises the Node minimum. The old rc.4 commit `a3c03fcc8dcc14237df0ea8ca3df29a19cceed7c` and annotated tag object `d2f0eaea4bfe3cdd747602329abbbf4892b187f5` remain unchanged; explicit legacy compatibility behavior is unchanged. No stable release, npm publication, official registry listing or production switch is declared or authorized here.
 
 rc.6 adds bounded transient read retries and corrects host-qualified Board links, homepage Command Center scope and manifest-icon documentation. Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`, annotated object `44f501a2a6cda150b92d9fa9b5dfa48d03e7af5e`. Its observations do not certify rc.6. The 20 retained dev/build dependency alerts (5 moderate, 15 high) are installed by Git preparation; the recorded audit found no upstream patched versions for the two root advisories and non-force audit fix made no change. See the current [changelog](../CHANGELOG.md).
 
@@ -22,27 +22,29 @@ rc.14 fixes [issue #8](https://github.com/jasonhnd/paseo-kanban/issues/8): norma
 
 rc.15 fixes a shared temporary-directory cleanup race: when the directory-level agent purge failed because another card's agent still pointed at the directory, a reconcile sweep that ran before the retry time could record the purge as done after looking only at the finished card's own agents, and archive and directory removal then proceeded. The sweep now settles that failure only after its retry time, only when the agent list is readable and no agent of any card points at the directory, and a reconciled row no longer counts as a finished directory-level purge in the cleanup job. Another card's agent keeps the directory, as before. There is no corresponding GitHub issue. Public prerelease rc.14 was published on 2026-10-16 and its GitHub Release exists, frozen at `25dfc5f352b3577b4b9810eab652ae60bac53c55` (annotated object `292c50ae341db5ac43589e678c328da56470d5fa`). Its observations do not certify rc.15; only new exact rc.15 receipts count. Dependency selections, schema and contract versions are unchanged relative to rc.14. Pending-wait upgrade/rollback and authenticated-provider delivery remain unverified.
 
+rc.16 makes the board follow Paseo's project list: a board project is matched to a Paseo project by directory (names are never compared), and a project whose directory is no longer a Paseo project is left out of the leader panel, paused area, home overview, by-project tab and board; it gets no reminder, wake or dispatch, and its cards and history are kept. When Paseo cannot be read, the last list that was read is kept; an empty list is believed only after two successful empty answers at least 60 seconds apart. Public docs and release notes are English-only, Chinese docs stay under `docs/zh-CN`, and a fresh installation follows the system language. Public prerelease rc.15 was published on 2026-10-16 and its GitHub Release exists, frozen at `0f64d2009fd7fefefbc41edff8a79144c6411548` (annotated object `8919725b05cef190395f2a9ddaaebae7490cc0fe`). Its observations do not certify rc.16; only new exact rc.16 receipts count. Dependency selections, schema and contract versions are unchanged relative to rc.15. A real-browser mount of the merged candidate, pending-wait upgrade/rollback and authenticated-provider delivery remain unverified.
+
 ## Version and evidence policy
 
 The combined plugin has one package/version/CHANGELOG and runtime id `paseo-kanban`. In 0.x, use patches for compatible fixes and minors for new features or breaking configuration/behavior. From 1.x, use SemVer. Contract/schema versions are separate; compatible additions retain their version, while breaking changes need an explicit migration/recovery plan.
 
-A Git branch is mutable. This RC plan requires an immutable tag and GitHub prerelease, aligned with package/lock/CHANGELOG. Save the full reviewed commit and tree as well as the tag object/metadata; review and scan annotated tag identity/content. Never move, overwrite or reuse a tag, even to correct a release. Local `v0.1.0-rc.1` already names `22958ff54c955c1a90683f786d3ebb8b9ae88470` and is not moved. The next unused number chosen for this candidate is `0.1.0-rc.15`. Confirm rc.15 is unused both locally and remotely before creating its annotated tag; frozen rc.1 through rc.14 objects remain unchanged. Public prerelease rc.14 was published on 2026-10-16. The publishing owner must check the remote refs and GitHub Release record again. Preserve c106 as the previous verified public code baseline, not a previous versioned release.
+A Git branch is mutable. This RC plan requires an immutable tag and GitHub prerelease, aligned with package/lock/CHANGELOG. Save the full reviewed commit and tree as well as the tag object/metadata; review and scan annotated tag identity/content. Never move, overwrite or reuse a tag, even to correct a release. Local `v0.1.0-rc.1` already names `22958ff54c955c1a90683f786d3ebb8b9ae88470` and is not moved. The next unused number chosen for this candidate is `0.1.0-rc.16`. Confirm rc.16 is unused both locally and remotely before creating its annotated tag; frozen rc.1 through rc.15 objects remain unchanged. Public prerelease rc.15 was published on 2026-10-16. The publishing owner must check the remote refs and GitHub Release record again. Preserve c106 as the previous verified public code baseline, not a previous versioned release.
 
 Prepared RC notes may use a version heading marked **pending publication**; never add a release date or claim an available tag until verified. Notes must state host range, data/contract changes, existing dependency alerts and real test limits. Official 0.11.2 Git acquisition uses revision/`--ref`; its manifest schema has no consumed plugin version field. Keep package.json, package-lock.json's top level and root package version aligned; do not invent a manifest field. Do not turn source-only checks into app/provider certification.
 
 ## RC publication plan — pending
 
-The release title is **Paseo Kanban v0.1.0-rc.15** and the GitHub Release must be a **prerelease**. Its body must identify the exact reviewed public RC commit/tree, link the English/Chinese changelogs, state compatibility/access/data risks and distinguish prior c106 evidence from RC verification. Prepare the body for review before publishing; never include private paths, identities, configuration, credentials or evidence repositories.
+The release title is **Paseo Kanban v0.1.0-rc.16** and the GitHub Release must be a **prerelease**. Its body must identify the exact reviewed public RC commit/tree, link the English/Chinese changelogs, state compatibility/access/data risks and distinguish prior c106 evidence from RC verification. Prepare the body for review before publishing; never include private paths, identities, configuration, credentials or evidence repositories.
 
 Only the separately authorized publishing owner may publish the approved commit/tag and create the prerelease after different-model review and leader acceptance. That owner must rerun the exact outgoing branch/tag privacy/history/identity gates, confirm the remote peeled tag equals the reviewed commit, and verify the GitHub Release uses that tag with prerelease=true. No force, tag replacement, npm publication or registry submission is part of this plan.
 
 **These commands are planned for after that remote confirmation, not evidence that the pending tag exists:**
 
 ```sh
-paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.15 --json
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.16 --json
 paseo plugin ls paseo-kanban --json
-paseo plugin update paseo-kanban --check --ref v0.1.0-rc.15 --json
-paseo plugin update paseo-kanban --ref v0.1.0-rc.15 --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.16 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.16 --json
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -61,7 +63,7 @@ Relative to c106, this RC retains reviewed artifact acceptance, decision-panel b
 
 ## Retained limits
 
-These limits stay in force for `0.1.0-rc.15`:
+These limits stay in force for `0.1.0-rc.16`:
 
 - Information exports can lag a removed checkout by about 600 seconds. Use the current installed path and wait for both exports. Their agreement is necessary but does not prove command writes work; the action checks in [updating and recovery](#updating-and-recovery) are mandatory.
 - Undo for a closed decision exists only in the mounted panel. Navigation or reload removes Undo. The stored done state and zero count remain.
@@ -77,21 +79,21 @@ Prepare the bilingual release body for review. Replace these tokens only as whol
 
 | Token | Replacement |
 |---|---|
-| `{{RC_VERSION}}` | `0.1.0-rc.15` |
-| `{{RC_TAG}}` | `v0.1.0-rc.15` |
+| `{{RC_VERSION}}` | `0.1.0-rc.16` |
+| `{{RC_TAG}}` | `v0.1.0-rc.16` |
 | `{{RC_COMMIT}}` | full reviewed commit |
 | `{{RC_TREE}}` | that commit's tree |
 | `{{UTC_DATE}}` | UTC calendar date `YYYY-MM-DD` of the body being prepared |
 
 `{{INSTALL_STATUS}}` is exactly one of these two paragraphs.
 
-Published, only when the GitHub Release for `v0.1.0-rc.15` exists, is a prerelease, and its target commit equals `{{RC_COMMIT}}`:
+Published, only when the GitHub Release for `v0.1.0-rc.16` exists, is a prerelease, and its target commit equals `{{RC_COMMIT}}`:
 
-`The GitHub Release record for v0.1.0-rc.15 on {{UTC_DATE}} targets {{RC_COMMIT}}. Install with --ref v0.1.0-rc.15.`
+`The GitHub Release record for v0.1.0-rc.16 on {{UTC_DATE}} targets {{RC_COMMIT}}. Install with --ref v0.1.0-rc.16.`
 
 Unpublished, while that Release record is absent:
 
-`No GitHub Release record for v0.1.0-rc.15 exists as of {{UTC_DATE}}. The candidate is unpublished. Do not install v0.1.0-rc.15 from GitHub. v0.1.0-rc.1 was local preparation only; rc.1 and rc.2 were not published.`
+`No GitHub Release record for v0.1.0-rc.16 exists as of {{UTC_DATE}}. The candidate is unpublished. Do not install v0.1.0-rc.16 from GitHub. v0.1.0-rc.1 was local preparation only; rc.1 and rc.2 were not published.`
 
 The prepared draft uses the unpublished paragraph. A later publisher replaces that whole paragraph with the published paragraph. The UTC date is the body preparation date until a published Release record supplies its own date. The body must not include private paths, identities, configuration, credentials or evidence repositories.
 
