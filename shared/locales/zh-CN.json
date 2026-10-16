@@ -735,7 +735,7 @@
   "doctor.matrix.missing": "派活矩阵不在",
   "doctor.matrix.missingSuggestion": "派活会等有效的 Fleet 策略快照。检查 Fleet 策略配置和采集模块。",
   "doctor.matrix.stale": "派活矩阵过期",
-  "doctor.matrix.staleSuggestion": "让看板 重写 dispatch-matrix.json。",
+  "doctor.matrix.staleSuggestion": "让看板重写 dispatch-matrix.json。",
   "doctor.matrix.unknown": "派活矩阵读不到",
   "doctor.matrix.unknownSuggestion": "看 dispatch-matrix.json 的权限。失败不当成没有矩阵。",
   "doctor.minutes": "{minutes} 分钟",
