@@ -630,6 +630,16 @@ export async function runDoctor(input: DoctorRunInput = {}): Promise<DoctorRepor
   /** The project a finding belongs to: named by the finding, or through its card. */
   const ownerOf = (finding: DoctorFinding): string | null => {
     if (finding.project != null) return finding.project;
+    const related = RELATED_CARDS.get(finding);
+    if (related && related.length > 0) {
+      // Several cards share one leftover: it is a removed project's only when every card is known and left Paseo.
+      const owners = related.map((card) => tasks.find((item) => markOf(item) === card)?.project ?? null);
+      if (owners.every((owner): owner is string => owner != null && leftPaseo.has(owner))) {
+        for (const owner of owners) skippedProjects.add(owner as string);
+        return owners[0];
+      }
+      return null;
+    }
     const task = tasks.find((item) => (finding.taskId != null && item.id === finding.taskId) || (finding.card != null && markOf(item) === finding.card));
     return task?.project ?? null;
   };
@@ -1157,6 +1167,9 @@ async function safetyOf(
   return { text: t("doctor.safety.text", { verdict, bits: bits.join(t("common.comma")), command }) };
 }
 
+/** Every card a directory leftover mentions, so a leftover shared by cards of removed projects can be left out. */
+const RELATED_CARDS = new WeakMap<DoctorFinding, string[]>();
+
 function checkDirectories(sources: DoctorSources, tasks: DocTask[], add: (finding: DoctorFinding) => void): { done: boolean; unread: string[] } {
   const dirs = sources.dirs;
   if (!dirs) return { done: false, unread: [] };
@@ -1222,7 +1235,7 @@ function checkDirectories(sources: DoctorSources, tasks: DocTask[], add: (findin
           ?? agent.title?.match(/\b[A-Z][A-Z0-9]*_\d+\b/i)?.[0];
         return code ? [code] : [];
       }))];
-      add({
+      const leftover: DoctorFinding = {
         id: `dir:placeholder:${resolve(dir)}`,
         severity: retained.length > 0 ? "yellow" : "red",
         check: "directory",
@@ -1235,7 +1248,9 @@ function checkDirectories(sources: DoctorSources, tasks: DocTask[], add: (findin
         suggestion: retained.length > 0
           ? t("doctor.dir.placeholder.purge", { commands: cards.length > 0 ? cards.map((card) => ` purge-agents ${card}`).join(t("common.semicolon")) : t("doctor.dir.placeholder.purgeAny") })
           : t("doctor.dir.placeholder.delete"),
-      });
+      };
+      RELATED_CARDS.set(leftover, cards);
+      add(leftover);
       continue;
     }
     if (dirs.worktrees.some((path) => samePath(path, dir))) continue;

@@ -27,6 +27,12 @@ const READ_TIMEOUT_MS = 8_000;
 const CLI_TIMEOUT_MS = 8_000;
 /** Newest cards per project that tell the board where the project lives when the config does not say. */
 const CARD_DIRECTORIES_PER_PROJECT = 30;
+/**
+ * An empty answer is believed only when a later successful empty answer comes at least this long after
+ * the first one of the run. A daemon that has just started may list nothing for a moment, and that must
+ * not stop every project from taking cards.
+ */
+export const EMPTY_LIST_CONFIRM_MS = 60_000;
 
 export interface PaseoProject {
   id: string;
@@ -37,7 +43,10 @@ export interface PaseoProject {
 
 interface Stored {
   readAt: string;
-  projects: PaseoProject[];
+  /** The list in force. Null while Paseo has never been believed (only a first, unconfirmed empty answer so far). */
+  projects: PaseoProject[] | null;
+  /** When the current run of empty answers began. Cleared by any non-empty answer. */
+  pendingEmptyAt?: string | null;
 }
 
 /** What `paseo.projects.list()` needs to answer. A narrower type than PaseoApi keeps tests small. */
@@ -121,12 +130,39 @@ function writeStored(value: Stored): void {
   }
 }
 
-/** Remember a list read from Paseo (possibly empty), in memory and for other processes. */
-export function recordPaseoProjects(projects: PaseoProject[], now: Date = new Date()): void {
-  memory = { readAt: now.toISOString(), projects };
+function remember(value: Stored): void {
+  memory = value;
   cardDirectories = null;
-  writeStored(memory);
+  writeStored(value);
   fileKey = null;
+}
+
+/** Take a list as the list in force, in memory and for other processes. */
+export function recordPaseoProjects(projects: PaseoProject[], now: Date = new Date()): void {
+  remember({ readAt: now.toISOString(), projects, pendingEmptyAt: null });
+}
+
+/**
+ * Take a successful read. A non-empty list is in force at once. An empty one is first only noted; it
+ * takes over once a later empty answer comes at least EMPTY_LIST_CONFIRM_MS after the first of the run.
+ * Until then the previous list stays (before any list was believed, nothing is filtered).
+ */
+export function observePaseoProjects(projects: PaseoProject[], now: Date = new Date()): void {
+  if (projects.length > 0) {
+    recordPaseoProjects(projects, now);
+    return;
+  }
+  const previous = currentStored();
+  const first = previous?.pendingEmptyAt ? Date.parse(previous.pendingEmptyAt) : Number.NaN;
+  if (Number.isFinite(first) && now.getTime() - first >= EMPTY_LIST_CONFIRM_MS) {
+    recordPaseoProjects([], now);
+    return;
+  }
+  remember({
+    readAt: previous?.readAt ?? now.toISOString(),
+    projects: previous?.projects ?? null,
+    pendingEmptyAt: Number.isFinite(first) ? previous!.pendingEmptyAt : now.toISOString(),
+  });
 }
 
 function readStored(): Stored | null {
@@ -145,32 +181,39 @@ function readStored(): Stored | null {
   fileValue = null;
   try {
     const raw = JSON.parse(String(readFileSync(path, "utf8"))) as { readAt?: unknown; projects?: unknown };
-    if (typeof raw.readAt !== "string" || !Array.isArray(raw.projects)) throw new Error("unexpected shape");
-    const projects = raw.projects.flatMap((row): PaseoProject[] => {
+    if (typeof raw.readAt !== "string" || !(Array.isArray(raw.projects) || raw.projects === null)) throw new Error("unexpected shape");
+    const projects = raw.projects === null ? null : raw.projects.flatMap((row): PaseoProject[] => {
       const item = row as Record<string, unknown> | null;
       const path = normalizeProjectPath(item?.path);
       return path ? [{ id: String(item?.id ?? ""), name: String(item?.name ?? ""), path }] : [];
     });
-    fileValue = { readAt: raw.readAt, projects };
+    const pending = (raw as { pendingEmptyAt?: unknown }).pendingEmptyAt;
+    fileValue = { readAt: raw.readAt, projects, pendingEmptyAt: typeof pending === "string" ? pending : null };
   } catch (err) {
     logOnce(`${path} is not usable, treating Paseo as never read: ${err instanceof Error ? err.message : String(err)}`);
   }
   return fileValue;
 }
 
-/** The newer of this process's list and the stored one. Null before the first successful read. */
-function currentList(): Stored | null {
+/** The newer of this process's state and the stored one. */
+function currentStored(): Stored | null {
   const stored = readStored();
   if (memory && stored) return memory.readAt >= stored.readAt ? memory : stored;
   return memory ?? stored;
 }
 
-/** When the list in use was read, or null when it never was. */
+/** The list in force, or null before any list was believed. */
+function currentList(): (Stored & { projects: PaseoProject[] }) | null {
+  const state = currentStored();
+  return state?.projects ? (state as Stored & { projects: PaseoProject[] }) : null;
+}
+
+/** When the list in use was read, or null when there is none. */
 export function paseoProjectsReadAt(): string | null {
   return currentList()?.readAt ?? null;
 }
 
-/** Directories of the projects Paseo lists, or null when Paseo has never been read. */
+/** Directories of the projects Paseo lists, or null when no list is in force. */
 export function paseoProjectPaths(): ReadonlySet<string> | null {
   const list = currentList();
   return list ? new Set(list.projects.map((project) => project.path)) : null;
@@ -188,13 +231,14 @@ async function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
 
 /**
  * Read the project list through the Paseo client and keep it. Returns false, and keeps the previous
- * list, only when Paseo cannot be read or answers with an unexpected shape. A successful empty list
- * is the answer: every project with a known directory has then left Paseo.
+ * list, only when Paseo cannot be read or answers with an unexpected shape. A successful empty list is
+ * believed once it has been seen twice, a minute apart (see observePaseoProjects); then every project
+ * with a known directory has left Paseo.
  */
 export async function refreshPaseoProjects(paseo: ProjectLister, options: { timeoutMs?: number; now?: Date } = {}): Promise<boolean> {
   try {
     const projects = parsePaseoProjectList(await withTimeout(Promise.resolve((paseo.projects.list as () => Promise<unknown>)()), options.timeoutMs ?? READ_TIMEOUT_MS));
-    recordPaseoProjects(projects, options.now);
+    observePaseoProjects(projects, options.now);
     lastLogged = null;
     return true;
   } catch (err) {
@@ -210,7 +254,7 @@ export function refreshPaseoProjectsFromCli(
 ): boolean {
   try {
     const projects = parseCliProjectList(run());
-    recordPaseoProjects(projects, options.now);
+    observePaseoProjects(projects, options.now);
     lastLogged = null;
     return true;
   } catch (err) {

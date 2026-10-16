@@ -163,25 +163,60 @@ describe("keeping the last good list when Paseo cannot be read", () => {
     assert.equal(isProjectRemoved("beta"), false);
   });
 
-  it("takes a successful empty list as the answer: the last project can be removed", async () => {
+  const EMPTY = { projects: { list: async () => ({ projects: [] }) } };
+  const at = (seconds: number) => new Date(NOW.getTime() + seconds * 1000);
+
+  it("does not hide anything on a single empty answer", async () => {
     recordPaseoProjects([entry("a", ALPHA)]);
-    assert.equal(await refreshPaseoProjects({ projects: { list: async () => ({ projects: [] }) } }, { now: NOW }), true);
+    assert.equal(await refreshPaseoProjects(EMPTY, { now: at(0) }), true);
+    assert.equal(isProjectRemoved("alpha"), false);
+    await handleTool("kanban_create", { project: "alpha", title: "still open", role: "executor" }, null, LEADER);
+    // Two quick empty answers are still one moment: the second is less than a minute after the first.
+    assert.equal(await refreshPaseoProjects(EMPTY, { now: at(30) }), true);
+    assert.equal(await refreshPaseoProjects(EMPTY, { now: at(59) }), true);
+    assert.equal(isProjectRemoved("alpha"), false);
+  });
+
+  it("believes an empty list when a second empty answer comes a minute after the first, and keeps it", async () => {
+    recordPaseoProjects([entry("a", ALPHA)]);
+    await refreshPaseoProjects(EMPTY, { now: at(0) });
+    await refreshPaseoProjects(EMPTY, { now: at(30) });
+    assert.equal(await refreshPaseoProjects(EMPTY, { now: at(60) }), true);
     assert.equal(isProjectRemoved("alpha"), true);
     assert.deepEqual([...removedProjects()].sort(), ["alpha", "beta"]);
     await assert.rejects(() => handleTool("kanban_create", { project: "alpha", title: "x", role: "executor" }, null, LEADER), /Paseo/);
-    open("alpha", "history");
-    assert.deepEqual(listBoard(undefined, { archived: false }).tasks, []);
-    // The empty list is stored, and a fresh process keeps it.
+    assert.deepEqual(JSON.parse(readFileSync(paseoProjectsPath(), "utf8")).projects, []);
     resetPaseoProjects();
     assert.equal(isProjectRemoved("alpha"), true);
-    assert.deepEqual(JSON.parse(readFileSync(paseoProjectsPath(), "utf8")).projects, []);
   });
 
-  it("takes a first successful empty list too, through the client and the command line", async () => {
-    assert.equal(await refreshPaseoProjects({ projects: { list: async () => ({ projects: [] }) } }), true);
+  it("starts the run again when a non-empty answer comes in between", async () => {
+    recordPaseoProjects([entry("a", ALPHA)]);
+    await refreshPaseoProjects(EMPTY, { now: at(0) });
+    assert.equal(await refreshPaseoProjects({ projects: { list: async () => ({ projects: [{ projectId: "p", projectDisplayName: "A", projectRootPath: ALPHA }] }) } }, { now: at(40) }), true);
+    assert.equal(await refreshPaseoProjects(EMPTY, { now: at(70) }), true);
+    assert.equal(isProjectRemoved("alpha"), false);
+    assert.equal(await refreshPaseoProjects(EMPTY, { now: at(100) }), true);
+    assert.equal(isProjectRemoved("alpha"), false);
+    await refreshPaseoProjects(EMPTY, { now: at(131) });
     assert.equal(isProjectRemoved("alpha"), true);
-    resetPaseoProjects({ clearFile: true });
-    assert.equal(refreshPaseoProjectsFromCli(() => "[]"), true);
+  });
+
+  it("remembers the pending empty answer for another process, and a failed read does not count", async () => {
+    recordPaseoProjects([entry("a", ALPHA)]);
+    await refreshPaseoProjects(EMPTY, { now: at(0) });
+    resetPaseoProjects();
+    assert.equal(await refreshPaseoProjects({ projects: { list: async () => { throw new Error("down"); } } }, { now: at(90) }), false);
+    assert.equal(isProjectRemoved("alpha"), false);
+    assert.equal(await refreshPaseoProjects(EMPTY, { now: at(90) }), true);
+    assert.equal(isProjectRemoved("alpha"), true);
+  });
+
+  it("filters nothing while only unconfirmed empty answers have been seen, through the client and the command line", async () => {
+    assert.equal(await refreshPaseoProjects(EMPTY, { now: at(0) }), true);
+    assert.equal(paseoProjectPaths(), null);
+    assert.equal(isProjectRemoved("alpha"), false);
+    assert.equal(refreshPaseoProjectsFromCli(() => "[]", { now: at(61) }), true);
     assert.equal(isProjectRemoved("alpha"), true);
     assert.equal(isProjectRemoved("nodir"), false);
   });
@@ -340,6 +375,37 @@ describe("doctor", () => {
     assert.deepEqual(placeholders.map((item) => item.object), [other]);
     assert.equal(report.findings.some((item) => item.card != null && item.card.startsWith("ALPHA") && item.severity !== "info"), false);
     assert.equal(report.findings.filter((item) => item.id.startsWith("paseo-project:removed")).length, 1);
+  });
+
+  async function sharedPlaceholder(first: string, second: string): Promise<DoctorReport> {
+    const one = open(first, "shares a leftover");
+    const two = open(second, "shares the same leftover");
+    const place = join(dir, "worktrees", "shared-placeholder");
+    clearDoctorSafetyCache();
+    return runDoctor({
+      now: NOW, wake: false, persist: false,
+      sources: {
+        dirs: { root: join(dir, "worktrees"), worktrees: [], list: () => [place], placeholderAgents: () => ["one-agent", "two-agent"] },
+        agents: { agents: [
+          { id: "one-agent", archived: true, labels: { kanban_task: String(one.id) } },
+          { id: "two-agent", archived: true, labels: { kanban_task: String(two.id) } },
+        ], paseoIds: [] },
+      },
+    });
+  }
+
+  it("leaves out a directory leftover shared by two cards of the same removed project", async () => {
+    recordPaseoProjects([entry("b", BETA)]);
+    const report = await sharedPlaceholder("alpha", "alpha");
+    assert.equal(report.findings.some((item) => item.severity !== "info"), false);
+    assert.equal(report.findings.some((item) => item.id.startsWith("dir:placeholder:")), false);
+    assert.equal(report.findings.filter((item) => item.id.startsWith("paseo-project:removed")).length, 1);
+  });
+
+  it("still reports a leftover shared by a removed project's card and a card still in Paseo", async () => {
+    recordPaseoProjects([entry("b", BETA)]);
+    const report = await sharedPlaceholder("alpha", "beta");
+    assert.equal(report.findings.find((item) => item.id.startsWith("dir:placeholder:"))?.severity, "yellow");
   });
 
   it("adds no note when nothing left Paseo", async () => {

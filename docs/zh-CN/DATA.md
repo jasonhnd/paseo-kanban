@@ -27,7 +27,7 @@ Paseo 的项目列表（`paseo project ls`）是唯一的项目名单。看板�
 
 - **按目录对照，不按名字。** 对照前去掉 `dir:` 前缀和末尾斜杠，并解开符号链接，所以 Paseo 里换了名字的项目仍能对上。项目的目录是 `kanban.config.json` 里的 `projects.<名>.workspacePath`；没写时取它最近几张卡的仓库根目录（目录卡、lane 卡，以及临时 worktree 记下的根目录）。没有任何已知目录的项目，一律不当作已移除。
 - **已不在 Paseo 的项目**：从 leader 面板、暂停区、首页、按项目页和看板里消失；不发 leader 提醒、不唤醒、不催、不请它换班、不发升级失败通知；`create`、`register`、`start` 和为它启动 leader 都会被拒绝并说明原因。卡片和历史保留：`kanban show` 可看单张卡，`kanban list --include-removed` 可列出。体检对它不报红或黄，只有一条信息，写明跳过了哪些项目。把目录重新加回 Paseo，项目原样回来。
-- **读不到 Paseo 时**（daemon 不通、超时或答案异常），沿用上一次成功读到、存在 `paseo-projects.json` 里的列表；成功读到的空列表也是答案，不算失败：所有有已知目录的项目随之视为已不在 Paseo。从未成功读到过时不过滤任何项目，和以前一样。运行中的插件在连上 Paseo 时、之后每 30 秒通过 Paseo 客户端读取；命令行在存档超过两分钟时调用 `paseo project ls --json`，`kanban start` 用自己的客户端读取。
+- **读不到 Paseo 时**（daemon 不通、超时或答案异常），沿用上一次成功读到、存在 `paseo-projects.json` 里的列表；空列表要连续两次成功读到、且两次相隔至少 60 秒才算数（刚启动的 daemon 可能短暂列表为空）；在那之前沿用上一次非空列表，中间出现非空答案就重新计数。算数之后，所有有已知目录的项目视为已不在 Paseo。从未成功读到过时不过滤任何项目，和以前一样。运行中的插件在连上 Paseo 时、之后每 30 秒通过 Paseo 客户端读取；命令行在存档超过两分钟时调用 `paseo project ls --json`，`kanban start` 用自己的客户端读取。
 - **`paused-projects.json` 只放「在 Paseo 里、临时暂停」的项目。** 已不在 Paseo 的项目即使还在其中，也按上面处理，不显示为暂停。
 
 ## 文件、进程和网络
