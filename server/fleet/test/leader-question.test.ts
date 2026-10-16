@@ -63,6 +63,30 @@ test("quoted, fenced and agent-input questions remain ignored", () => {
   assert.equal(unregisteredQuestion("demo", { ...reply(), prompt: "DEMO_0001 wake" }, []), null);
 });
 
+test("Chinese title and short options match without a recent timestamp or id", () => {
+  const title = "\u9009\u62e9\u6570\u636e\u5e93\u8fc1\u79fb\u65b9\u6848";
+  const detail = "A: \u5148\u505a\u5907\u4efd\nB: \u6682\u7f13\u8fc1\u79fb\n\u63a8\u8350 A";
+  assert.equal(unregisteredQuestion("demo", reply(`${title}\n${detail}`), [{ ...decision, title, detail }]), null);
+});
+
+test("recommendation reasoning plus one substantive option can identify a retelling", () => {
+  assert.equal(unregisteredQuestion("demo", reply(
+    "Which approach?\nA: Deploy the staging build\nB: Something else\nRecommend A: validate the rollout gradually",
+  ), [decision]), null);
+});
+
+test("a matching title with completely different options remains a new question", () => {
+  assert.ok(unregisteredQuestion("demo", reply(
+    `${decision.title}\nA: Store encrypted backups locally\nB: Upload backups to remote storage\nRecommend B`,
+  ), [decision]));
+});
+
+test("only a current open decision id in that question can identify it", () => {
+  const text = `Unusual question ${decision.id}\nA: Yes\nB: No\nRecommend A`;
+  assert.equal(unregisteredQuestion("demo", reply(text), [decision]), null);
+  assert.ok(unregisteredQuestion("demo", reply(text), [{ ...decision, status: "done" }]));
+});
+
 test("English and Chinese reminder text identifies the board as the automatic source", () => {
   for (const locale of ["en", "zh-CN"]) {
     const messages = JSON.parse(readFileSync(new URL(`../../../shared/locales/${locale}/fleet.json`, import.meta.url), "utf8"));

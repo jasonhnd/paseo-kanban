@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ageMs } from "./decisions";
+import { parseDecisionCard } from "./decision-card";
 import { t, tAll } from "./i18n";
 import { weekStatsSchema } from "./leader-week";
 import { withoutPaused } from "./paused";
@@ -41,12 +42,11 @@ export interface LeaderReply {
   /** The input this reply answered. Absent = unknown, treated as the user. */
   prompt?: string;
 }
-export interface RegisteredDecision { project: string; createdAt: string }
+export interface RegisteredDecision {
+  id: string; project: string; status: string; title: string; detail: string; createdAt: string;
+}
 
-export const REGISTER_WINDOW_MS = 15 * 60_000;
 const EXCERPT_LINES = 4;
-/** Registered-decision id such as d1005-091216-1. Looked for in the whole reply, quotes and code blocks included. */
-const DECISION_ID = /(?<![A-Za-z0-9])d\d+-\d+-\d+/i;
 const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
 /** Option letters may be followed by ASCII marks or by the full-width marks of the catalog's other languages. */
 function optionLine(letter: string): RegExp {
@@ -75,6 +75,12 @@ function isAdviceLine(line: string): boolean {
 
 /** The paragraph holding lettered options A and B plus a recommendation (in it or in the next paragraph), from its lead-in line, at most 4 lines. */
 export function questionExcerpt(text: string): string | null {
+  return questionCandidates(text)[0]?.excerpt ?? null;
+}
+
+/** Keep the full question for matching, even when the panel excerpt is shortened. */
+function questionCandidates(text: string): Array<{ text: string; excerpt: string }> {
+  const questions: Array<{ text: string; excerpt: string }> = [];
   const optionA = optionLine("A"), optionB = optionLine("B");
   const paragraphs = text.split(/\n\s*\n/).map((p) => p.split("\n").map((l) => l.trimEnd()).filter((l) => l.trim()));
   for (const [i, lines] of paragraphs.entries()) {
@@ -87,27 +93,53 @@ export function questionExcerpt(text: string): string | null {
       if (picked.length < EXCERPT_LINES) picked.push(advice);
       else picked[EXCERPT_LINES - 1] = advice;
     }
-    return picked.join("\n");
+    const heading = a === 0 && i > 0 && !paragraphs[i - 1].some((l) => optionA.test(l) || optionB.test(l))
+      ? paragraphs[i - 1].slice(-1) : [];
+    questions.push({ text: [...heading, ...lines, ...(lines.includes(advice) ? [] : [advice])].join("\n"), excerpt: picked.join("\n") });
   }
-  return null;
+  return questions;
 }
 
-/**
- * Reported only when all hold: lettered options A/B with a recommendation, no registered-decision id anywhere in the text,
- * no decision of this project registered within 15 minutes of the reply, and the input was not from another agent.
- */
+const normalized = (text: string) => text.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]+/gu)?.join("") ?? "";
+/** Word pairs for spaced languages, character pairs for Han text; punctuation/markdown are immaterial. */
+function phraseUnits(text: string): string[] {
+  return text.normalize("NFKC").toLowerCase().replace(/\p{Script=Han}/gu, " $& ").match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+/** At least six Han characters or three words (12 letters); short generic choices cannot establish identity. */
+function phraseMatches(phrase: string, text: string): boolean {
+  const units = phraseUnits(phrase);
+  const han = units.filter((unit) => /\p{Script=Han}/u.test(unit)).length;
+  if (han < 6 && (units.length < 3 || normalized(phrase).length < 12)) return false;
+  const pairs = (parts: string[]) => new Set(parts.slice(1).map((unit, i) => `${parts[i]} ${unit}`));
+  const needle = pairs(units), haystack = pairs(phraseUnits(text));
+  // 60% adjacent-pair coverage tolerates one inserted word in a four-word option.
+  // Also require 80% of its distinct units, so generic fragments cannot suffice.
+  const words = new Set(units), available = new Set(phraseUnits(text));
+  return [...needle].filter((pair) => haystack.has(pair)).length / needle.size >= 0.6
+    && [...words].filter((word) => available.has(word)).length / words.size >= 0.8;
+}
+
+function matchesDecision(question: string, decision: RegisteredDecision): boolean {
+  if (decision.id && new RegExp(`(?<![\\w-])${escapeRegex(decision.id)}(?![\\w-])`, "i").test(question)) return true;
+  const asked = parseDecisionCard("", question), stored = parseDecisionCard(decision.title, decision.detail);
+  const options = stored.options.filter((option) => asked.options.some((other) => phraseMatches(option.text, other.text)));
+  const sameChoice = stored.options.some((option) => normalized(option.text)
+    && asked.options.some((other) => normalized(option.text) === normalized(other.text)));
+  return (phraseMatches(decision.title, asked.context) && sameChoice)
+    || options.length >= 2
+    || (options.length >= 1 && phraseMatches(stored.reason, asked.reason));
+}
+
+/** Match each question against this project's current open decisions, with no creation-time cutoff. */
 export function unregisteredQuestion(
   project: string, latest: LeaderReply | null, decisions: readonly RegisteredDecision[],
 ): LeaderReply | null {
   if (!latest?.text.trim() || !Number.isFinite(Date.parse(latest.at)) || isAgentInput(latest.prompt)) return null;
-  // A reply that re-tells an already registered decision is not an unregistered question, wherever the id sits.
-  if (DECISION_ID.test(latest.text)) return null;
   const text = latest.text.replace(/```[\s\S]*?```/g, "").replace(/^\s*>.*$/gm, "");
-  const replyAt = Date.parse(latest.at);
-  if (decisions.some((d) => d.project.toLowerCase() === project.toLowerCase()
-    && Math.abs(Date.parse(d.createdAt) - replyAt) <= REGISTER_WINDOW_MS)) return null;
-  const excerpt = questionExcerpt(text);
-  return excerpt ? { text: excerpt, at: latest.at } : null;
+  const open = decisions.filter((d) => d.status === "open" && d.project.toLowerCase() === project.toLowerCase());
+  const question = questionCandidates(text).find((q) => !open.some((d) => matchesDecision(q.text, d)));
+  return question ? { text: question.excerpt, at: latest.at } : null;
 }
 
 export function isWorkAction(action: LeaderAction): boolean {
