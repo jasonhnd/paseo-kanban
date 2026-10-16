@@ -5,6 +5,10 @@ Fourteen release candidates are recorded here. `0.1.0-rc.14` is the current unpu
 
 ## Unreleased
 
+### Fixed
+
+- A shared temporary directory could be cleaned up while another card's agent still pointed at it. When the directory-level agent purge failed because such an agent was present, a reconcile sweep that ran before the retry time looked only at the finished card's own agents and recorded the purge as done; archive and directory removal then proceeded. The sweep now treats that failure as done only after the retry time and only when the agent list is readable and no agent of any card points at the directory, and a reconciled row no longer counts as a finished directory-level purge in the cleanup job. Another card's agent keeps the directory, as before.
+
 ## 0.1.0-rc.14 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.14`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.13 tags are never moved.
