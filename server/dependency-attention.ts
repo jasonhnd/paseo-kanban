@@ -13,7 +13,7 @@ import { appendEvent, getTask } from "./store";
 import { triageRecipient } from "./wake";
 import { statusLabel } from "../shared/labels";
 import { guardCard, safeParse, withTimeout } from "./guard";
-import { isProjectPaused } from "./paused";
+import { isProjectDormant } from "./paused";
 import { t } from "../shared/i18n";
 
 export const PREREQUISITE_IDLE_MS = 30 * 60_000;
@@ -51,7 +51,7 @@ async function scanPrerequisiteAttentionOnce(options: {
     const task = getTask(rowId);
     const acceptanceRound = task.status === 'acceptance' ? acceptanceEntry(task).id : null;
     if (task.status !== 'acceptance' && task.status !== 'rework') return;
-    if (isProjectPaused(task.project)) return;
+    if (isProjectDormant(task.project)) return;
     const children = waitingSuccessors(task.id);
     if (!children.length) return;
     const entry = getDb().prepare(

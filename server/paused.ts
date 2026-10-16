@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { readFileSync, statSync } from "node:fs";
 import { cockpitStateFile } from "./afc-sources";
+import { isProjectRemoved } from "./paseo-projects";
 
 const FILE_NAME = "paused-projects.json";
 
@@ -70,6 +71,15 @@ export function readPausedProjects(): ReadonlySet<string> {
   }
 }
 
+/** Paused in AFC. The list holds only projects that are still in Paseo and are paused for a while. */
 export function isProjectPaused(project: string | null | undefined): boolean {
   return Boolean(project) && readPausedProjects().has(project!.trim());
+}
+
+/**
+ * Quiet for the board: paused in AFC, or no longer a Paseo project. Wakes, reminders, nudges and
+ * dispatch all check this. A project that left Paseo is quiet even when it is also on the paused list.
+ */
+export function isProjectDormant(project: string | null | undefined): boolean {
+  return isProjectPaused(project) || isProjectRemoved(project);
 }

@@ -2,6 +2,7 @@
 // Settings page read/write. The file is kanban.config.json. A write is refused when the caller's
 // revision is stale, when the file is broken, or when the document is not a valid edit. Unknown
 // top-level keys are kept. A fresh data directory is seeded once, from the example, on read.
+import { removedProjects } from "./paseo-projects";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
@@ -180,6 +181,8 @@ function toDocument(config: KanbanConfig): SettingsDocument {
 function viewFromConfig(config: KanbanConfig, revision: string, extras: Pick<SettingsRead, "candidates" | "candidatesNote">, env: NodeJS.ProcessEnv): SettingsRead {
   const stored = config.language ?? LEGACY_LANGUAGE;
   const language = languageSetting(config, env);
+  // A leader of a project that left Paseo is not listed; the registration itself stays in the config.
+  const removed = removedProjects(config);
   return {
     language,
     revision,
@@ -189,6 +192,7 @@ function viewFromConfig(config: KanbanConfig, revision: string, extras: Pick<Set
     candidatesNote: extras.candidatesNote,
     candidates: extras.candidates,
     leaders: Object.entries(config.supervisors)
+      .filter(([project]) => !removed.has(project))
       .map(([project, agentId]) => ({ project, agentId }))
       .sort((a, b) => a.project.localeCompare(b.project)),
     fallbackLeader: config.supervisorAgentId,

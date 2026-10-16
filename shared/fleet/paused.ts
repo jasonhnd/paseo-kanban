@@ -45,3 +45,24 @@ export function countsWithoutPaused<T extends { status: string; count: number }>
   for (const row of byProject) if (keys.has(row.project.trim().toLowerCase())) removed.set(row.status, (removed.get(row.status) ?? 0) + row.count);
   return counts.map((c) => ({ ...c, count: Math.max(0, c.count - (removed.get(c.status) ?? 0)) }));
 }
+
+/**
+ * Projects that get no reminders, nudges or waking: those paused in AFC plus those that left Paseo.
+ * A project in both keeps its paused row.
+ */
+export function quietProjects(paused: readonly PausedProject[], removed: Iterable<string>): PausedProject[] {
+  const keys = new Set(pausedKeys(paused));
+  const extra: PausedProject[] = [];
+  for (const project of removed) {
+    const key = project.trim().toLowerCase();
+    if (!key || keys.has(key)) continue;
+    keys.add(key);
+    extra.push({ project: project.trim(), since: "", note: "" });
+  }
+  return [...paused, ...extra];
+}
+
+/** The paused list as shown to people: a project that left Paseo is not paused, it is gone. */
+export function shownPaused(paused: readonly PausedProject[], removed: Iterable<string>): PausedProject[] {
+  return withoutPaused(paused, [...removed].map((project) => ({ project })));
+}

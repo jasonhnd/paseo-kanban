@@ -51,6 +51,7 @@ import { type AgentRecord, readAgentRecords } from "./records";
 import type { BoardSummary } from "../contract";
 import { kanbanSource } from "./kanban-source";
 import { kanbanProjectName } from "./paths";
+import { visibleSupervisorSlots } from "./removed";
 import { BIN, cached, type Json, readJson, runJson, STATE_DIR, writeJson } from "./util";
 import { PLANS } from "./usage";
 
@@ -293,7 +294,7 @@ export async function readSupervisorPanel(
       return { ...EMPTY_SUPERVISOR_PANEL, thresholds, tasks, handoffs: await readHandoffs(10) };
     }
     const config = await readJson<Json>(configPath, {});
-    const slots = supervisorSlots(config, kanbanProjectName());
+    const slots = visibleSupervisorSlots(config);
     const recordById = new Map(records.map((rec) => [rec.id, rec]));
     const liveById = new Map(live.map((row) => [row.id, row]));
     const usd = await todayByAgent(records, now).catch(() => new Map<string, number>());

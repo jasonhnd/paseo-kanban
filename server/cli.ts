@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { paseoProjectsReadAt, refreshPaseoProjects, refreshPaseoProjectsFromCli } from "./paseo-projects";
 import { leaderActionNote } from "./protocol";
 import { protocolText } from "./protocol-text";
 import { t } from "../shared/i18n";
@@ -45,7 +46,7 @@ const COMMANDS: Record<string, { flags: readonly string[]; positionals: "none" |
   ping: { flags: [], positionals: "none" },
   audit: { flags: [], positionals: "none" },
   doctor: { flags: ["last"], positionals: "none" },
-  list: { flags: ["project"], positionals: "none" },
+  list: { flags: ["project", "include-removed"], positionals: "none" },
   show: { flags: ["id"], positionals: "one" },
   comment: { flags: ["id", "text"], positionals: "rest" },
   complete: { flags: ["id", "summary", "handoff", "on-behalf"], positionals: "one" },
@@ -387,6 +388,7 @@ async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEn
     const client = createPaseoClient({ url, reconnect: { enabled: false } });
     await client.connect();
     try {
+      await refreshPaseoProjects(client);
       return await startTask(id(), launcherFrom(client), "supervisor", { force });
     } finally {
       await client.close();
@@ -397,6 +399,7 @@ async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEn
   const args: Record<string, unknown> = {
     id: parsed.positionals[0] ?? parsed.flag("id"),
     project: parsed.flag("project"),
+    includeRemoved: parsed.flag("include-removed") === "true",
     scope: parsed.flag("scope"),
     title: parsed.flag("title"),
     role: parsed.flag("role"),
@@ -437,9 +440,21 @@ async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEn
   });
 }
 
+/** The command line has no client: when the stored Paseo project list is old, read it through `paseo project ls`. */
+const PROJECT_LIST_STALE_MS = 120_000;
+const PROJECTS_READ_BY_CLI = new Set(["create", "register", "list"]);
+
+function refreshStaleProjectList(cmd: string): void {
+  if (!PROJECTS_READ_BY_CLI.has(cmd)) return;
+  const readAt = Date.parse(paseoProjectsReadAt() ?? "");
+  if (Number.isFinite(readAt) && Date.now() - readAt < PROJECT_LIST_STALE_MS) return;
+  refreshPaseoProjectsFromCli();
+}
+
 async function main(): Promise<void> {
   applyServerLanguage();
   const parsed = parseKanbanArgs(process.argv.slice(2));
+  refreshStaleProjectList(parsed.cmd);
   print(parsed.json, await runKanban(process.argv.slice(2)));
 }
 

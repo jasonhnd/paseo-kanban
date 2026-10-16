@@ -34,5 +34,6 @@
   "kanban_supervise.description": "Register this session as leader of one configured project. Uses only the caller's identity. A live previous leader needs an authorized handover. Workers and scheduled agents cannot register. Registration is required before creating cards.",
   "kanban_supervise.param.project": "Configured project name or code.",
   "kanban_grant_read.description": "A registered project <leader> or Kanban <leader> grants this card read access to every card in its project. Submission, completion or archive expires the grant; write permissions stay unchanged.",
-  "kanban_revoke_read.description": "A registered project <leader> or Kanban <leader> revokes this card's project read grant."
+  "kanban_revoke_read.description": "A registered project <leader> or Kanban <leader> revokes this card's project read grant.",
+  "kanban_list.param.includeRemoved": "Also list cards of projects that are no longer in Paseo (hidden by default)."
 }

@@ -1,6 +1,7 @@
 import { loadConfig, projectSupervisor, type KanbanConfig } from "./config";
 import { getDb } from "./db";
 import { findAgentFile } from "./open";
+import { removedProjects } from "./paseo-projects";
 
 /** One line of the by-project tab. Counts ignore archived cards and the project filter. */
 export interface ProjectRow {
@@ -46,7 +47,9 @@ function lastLeaderAction(byActor: Map<string, string> | undefined, leader: stri
   return times.length > 0 ? times.reduce((a, b) => (a > b ? a : b)) : null;
 }
 
-export function projectRows(config: KanbanConfig = loadConfig()): ProjectRow[] {
+/** Lines of the by-project tab. A project that left Paseo is left out unless `includeRemoved` is set. */
+export function projectRows(config: KanbanConfig = loadConfig(), options: { includeRemoved?: boolean } = {}): ProjectRow[] {
+  const removed = options.includeRemoved ? new Set<string>() : removedProjects(config);
   const counts = getDb()
     .prepare(`SELECT project, status, COUNT(*) AS n FROM tasks WHERE status <> 'archived' GROUP BY project, status`)
     .all() as unknown as Array<{ project: string; status: string; n: number }>;
@@ -64,6 +67,7 @@ export function projectRows(config: KanbanConfig = loadConfig()): ProjectRow[] {
   const leaders = [...rows.keys()].map((project) => projectSupervisor(project, config)).filter((leader): leader is string => leader !== null);
   const actions = lastActionsByProject([...new Set(leaders)]);
   return [...rows.values()]
+    .filter((row) => !removed.has(row.project))
     .map((row) => {
       const leader = projectSupervisor(row.project, config);
       const file = leader ? findAgentFile(leader) : null;

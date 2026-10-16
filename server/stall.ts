@@ -9,7 +9,7 @@ import { quietHandoffEligible, settleQuietHandoff } from "./flow";
 import { appendEvent, getTask, stallNoteFor, type TaskRow } from "./store";
 import { roundStartId, wakeKanbanSupervisor } from "./wake";
 import { guardCard, safeParse, withTimeout } from "./guard";
-import { isProjectPaused } from "./paused";
+import { isProjectDormant } from "./paused";
 import { t } from "../shared/i18n";
 
 export interface AgentActivity {
@@ -245,7 +245,7 @@ type StallScan = {
 async function checkStalledCard(rowId: number, input: StallScan, nowMs: number, idleLimit: number): Promise<void> {
   let task = getTask(rowId);
   if ((task.status !== "running" && task.status !== "reviewing") || !task.agent_id) return;
-  if (isProjectPaused(task.project)) return;
+  if (isProjectDormant(task.project)) return;
   let activity: AgentActivity;
   try {
     activity = await withTimeout(() => input.agentActivity!(task.agent_id!), t("stall.call.activity"));

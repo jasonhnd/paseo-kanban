@@ -28,7 +28,7 @@ import { presenceIsGone, type AgentPresence } from "./presence";
 import { archiveInFlight } from "./cleanup";
 import { hookObjects } from "./hook-objects";
 import { storedWaitingOn, waitingOn } from "./external-wait";
-import { isProjectPaused } from "./paused";
+import { isProjectDormant } from "./paused";
 import { completionHandoffWarnings } from "./write-source";
 import { isGoogleProfile } from "./profiles";
 import { t } from "../shared/i18n";
@@ -1194,7 +1194,7 @@ export function applyNudge(taskId: number, finished: boolean, clock?: NudgeClock
   const task = getTask(taskId);
   if (task.status !== "running" && task.status !== "reviewing") return { action: "none", count: task.nudge_count ?? 0 };
   // A paused project is not chased: no reminder, no hand-in, no three-miss block.
-  if (!finished && isProjectPaused(task.project)) return { action: "none", count: task.nudge_count ?? 0 };
+  if (!finished && isProjectDormant(task.project)) return { action: "none", count: task.nudge_count ?? 0 };
   if (!finished && openingQuiet(task, clock)) return { action: "none", count: task.nudge_count ?? 0 };
   // A readable timeline with no running sub-agent means the agent stopped. A progress comment right
   // before the stop is not a reason to wait: only an unreadable timeline falls back to the grace.

@@ -19,8 +19,9 @@ import {
   supervisorIdFor,
 } from "../../shared/fleet/decisions";
 import { t, tAll } from "../../shared/fleet/i18n";
-import { isPausedProject } from "../../shared/fleet/paused";
+import { isPausedProject, quietProjects } from "../../shared/fleet/paused";
 import { readPausedProjects, PAUSED_PROJECTS } from "./paused";
+import { readRemovedProjects } from "./removed";
 import { kanbanConfigPath, rolesBin } from "./paths";
 import { DECISIONS, logSwallowed, readJson, STATE_DIR, writeJson } from "./util";
 
@@ -154,7 +155,7 @@ export async function runDecisionMaintenance(opts: {
     let state = normalizeMaintState(raw);
     const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(now));
     if (state.lastRunDay === day) return { logs: [], messages: [] };
-    const paused = await readPausedProjects(paths.pausedPath ?? PAUSED_PROJECTS);
+    const paused = quietProjects(await readPausedProjects(paths.pausedPath ?? PAUSED_PROJECTS), readRemovedProjects());
     const items = (await readItems(paths.decisionsPath)).filter((item) => !isPausedProject(String(item.project ?? ""), paused));
     const supervisors = await loadSupervisors(paths.kanbanConfigPath);
     const actions = planMaintenance(items, state, now, supervisors);

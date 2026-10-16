@@ -5,7 +5,7 @@ import { currentEpisode, markRestartApplied, observeDaemon, rememberEpisode, res
 import { getDb } from "./db";
 import { reclaimTask } from "./failures";
 import { agentCwdMissing, noteWakeSkipped } from "./missing-cwd";
-import { isProjectPaused } from "./paused";
+import { isProjectDormant } from "./paused";
 import { stallLabel } from "./stall";
 import { appendEvent, getTask, stallNoteFor } from "./store";
 import { wakeKanbanSupervisor } from "./wake";
@@ -136,7 +136,7 @@ export async function scanRestartStalls(input: {
   const scanOne = async (rowId: number): Promise<void> => {
     const task = getTask(rowId);
     if ((task.status !== "running" && task.status !== "reviewing") || !task.agent_id) return;
-    if (isProjectPaused(task.project)) return;
+    if (isProjectDormant(task.project)) return;
     const agentId = task.agent_id;
     const prior = priorRestart(task.id, agentId, episode.id);
     const lastAt = await clockOf(input.lastActivity, agentId);

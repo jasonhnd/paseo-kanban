@@ -20,6 +20,7 @@ import { cardMark, cardMarkOf } from "./card-ref";
 import { completionNextStep } from "./external-wait";
 import { findAgentFile } from "./open";
 import { t } from "../shared/i18n";
+import { removedProjects } from "./paseo-projects";
 import { dragNote } from "../shared/board-view";
 import {
   assigneeLine,
@@ -364,9 +365,11 @@ export function toCard(task: TaskRow, defaultTier: Tier | null, downstreamCount:
  * Cards for the board. `archived: false` leaves archived cards out; the board
  * reads them page by page through listHistory instead.
  */
-export function listBoard(project?: string, options: { archived?: boolean } = {}): { projects: string[]; tasks: BoardCard[] } {
+export function listBoard(project?: string, options: { archived?: boolean; includeRemoved?: boolean } = {}): { projects: string[]; tasks: BoardCard[] } {
   const db = getDb();
-  const projects = asRows<{ project: string }>(db.prepare(`SELECT DISTINCT project FROM tasks ORDER BY project`).all()).map((r) => r.project);
+  // Projects that left Paseo stay in the database but not on the board, unless asked for.
+  const removed = options.includeRemoved ? new Set<string>() : removedProjects();
+  const projects = asRows<{ project: string }>(db.prepare(`SELECT DISTINCT project FROM tasks ORDER BY project`).all()).map((r) => r.project).filter((name) => !removed.has(name));
   const where: string[] = [];
   const params: string[] = [];
   if (project) {
@@ -375,7 +378,7 @@ export function listBoard(project?: string, options: { archived?: boolean } = {}
   }
   if (options.archived === false) where.push("status <> 'archived'");
   const sql = `SELECT * FROM tasks${where.length > 0 ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY priority DESC, id DESC`;
-  const rows = asRows<TaskRow>(db.prepare(sql).all(...params));
+  const rows = asRows<TaskRow>(db.prepare(sql).all(...params)).filter((task) => !removed.has(task.project));
   const loaded = loadDispatchMatrix();
   const defaultTier = loaded.state === "ok" ? loaded.matrix.defaultTier : null;
   const downstream = downstreamCounts();

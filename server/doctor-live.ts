@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { removedProjects } from "./paseo-projects";
 import { execFile } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "./perf-fs";
 import { homedir } from "node:os";
@@ -110,7 +111,11 @@ export function collectRepoRoots(workspaces: DoctorWorkspace[] = []): {
     // Unknown card state must not make a missing checkout look safely unused.
     console.error("[paseo-kanban] doctor unfinished projects", err instanceof Error ? err.message : err);
   }
-  for (const name of Object.keys(loadConfigForReport().projects ?? {})) {
+  const config = loadConfigForReport();
+  let leftPaseo: ReadonlySet<string> = new Set();
+  try { leftPaseo = removedProjects(config); } catch (err) { console.error("[paseo-kanban] doctor removed projects", err instanceof Error ? err.message : String(err)); }
+  for (const name of Object.keys(config.projects ?? {})) {
+    if (leftPaseo.has(name)) continue;
     const path = configuredCheckout(name, workspaces);
     try {
       if (!statSync(path).isDirectory()) {

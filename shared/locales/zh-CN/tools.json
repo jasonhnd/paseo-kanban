@@ -34,5 +34,6 @@
   "kanban_supervise.description": "把本会话登记为某个已配置项目的 <leader>。只使用调用者自己的身份。原 <leader> 仍在时必须先交接。工人和定时任务不能登记。未登记不能建卡。",
   "kanban_supervise.param.project": "已配置的项目名或项目代号。",
   "kanban_grant_read.description": "已登记的本项目<leader>或 Kanban <leader>授予指定卡本项目全部卡只读；交活、完成或归档后失效，写权限不变。",
-  "kanban_revoke_read.description": "已登记的本项目<leader>或 Kanban <leader>撤销指定卡的项目只读权限。"
+  "kanban_revoke_read.description": "已登记的本项目<leader>或 Kanban <leader>撤销指定卡的项目只读权限。",
+  "kanban_list.param.includeRemoved": "同时列出已不在 Paseo 的项目的卡片（默认不显示）。"
 }

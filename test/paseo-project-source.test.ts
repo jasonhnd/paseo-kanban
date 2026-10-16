@@ -266,7 +266,8 @@ describe("doctor", () => {
     const notes = report.findings.filter((item) => item.id.startsWith("paseo-project:removed"));
     assert.equal(notes.length, 1);
     assert.equal(notes[0].severity, "info");
-    assert.match(notes[0].object, /alpha/);
+    assert.match(notes[0].symptom, /alpha/);
+    assert.doesNotMatch(notes[0].symptom, /beta/);
     assert.equal(report.counts.red, 1);
   });
 

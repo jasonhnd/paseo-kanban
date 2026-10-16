@@ -2,18 +2,18 @@ import type { PaseoApi } from "./paseo-api";
 import { t, tAll } from "../../shared/fleet/i18n";
 import type { LeaderSwapInput, LeaderSwapResult } from "../../shared/fleet/leader-command";
 import type { LeaderUsageReport } from "../../shared/fleet/leader-usage";
-import { contextLamp, supervisorSlots, type ShiftPorts, type ShiftAgent } from "../../shared/fleet/supervisor-shift";
+import { contextLamp, type ShiftPorts, type ShiftAgent } from "../../shared/fleet/supervisor-shift";
 import { readLeaderThresholds } from "./adapters/config";
 import { inspectSupervisorShift, loadShiftAgent, readHandoffs, requestSupervisorShift } from "./supervisor-shift";
 import { KANBAN_CONFIG } from "./decisions-maint";
-import { kanbanProjectName } from "./paths";
+import { visibleSupervisorSlots } from "./removed";
 import { readJson } from "./util";
 
 /** Fresh host usage; deliberately avoids the homepage reader, which resumes queued shifts. */
 export async function readLeaderUsage(paseo: PaseoApi, configPath = KANBAN_CONFIG, load = (id: string) => loadShiftAgent(paseo, id)): Promise<LeaderUsageReport> {
   const config = await readJson(configPath, {});
   const thresholds = readLeaderThresholds();
-  const rows = await Promise.all(supervisorSlots(config, kanbanProjectName()).map(async slot => {
+  const rows = await Promise.all(visibleSupervisorSlots(config).map(async slot => {
     const agent = await load(slot.agentId).catch(() => null);
     const tokens = agent?.contextTokens ?? null;
     const lamp = contextLamp(tokens, thresholds);

@@ -3,6 +3,7 @@
 // where is its data and command line) and `exports/board-summary.json` (projects and the cards the
 // cockpit looks at). Both are written atomically into this plugin's exports directory. Only the
 // plugin server writes them; the command line never does.
+import { removedProjects } from "./paseo-projects";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { envelopeFor, writeExport, type BoardCard, type BoardProject, type BoardSummary, type KanbanInfo } from "./contract";
@@ -53,7 +54,8 @@ function isoOrNull(value: string | null | undefined): string | null {
 }
 
 function summaryProjects(config: KanbanConfig): BoardProject[] {
-  const names = [...new Set([...Object.keys(config.projects ?? {}), ...Object.keys(config.supervisors ?? {})])].sort();
+  const removed = removedProjects(config);
+  const names = [...new Set([...Object.keys(config.projects ?? {}), ...Object.keys(config.supervisors ?? {})])].filter((name) => !removed.has(name)).sort();
   return names.map((name) => ({
     name,
     code: displayProjectCode(name, config) ?? "",
@@ -86,7 +88,8 @@ function summaryCards(config: KanbanConfig, now: Date): BoardCard[] {
     WHERE t.status NOT IN ('done', 'archived') OR t.updated_at >= ?
     ORDER BY t.id`).all(since) as unknown as CardRow[];
   const pools = profilePools();
-  return rows.map((row) => ({
+  const removed = removedProjects(config);
+  return rows.filter((row) => !removed.has(row.project)).map((row) => ({
     code: cardMarkOf(row, config),
     project: row.project,
     status: row.status,

@@ -33,6 +33,7 @@ import { lastUserMessageAtOf, planTurn } from "./server/nudge";
 import { agentLink, agentLiveness, directoryForProject, findAgentFile, listAgentChoices, openAgent } from "./server/open";
 import { loadPanelPrefs, readBoardTab, savePanelPrefs, saveBoardTab } from "./server/panel-prefs";
 import { projectRows } from "./server/project-rows";
+import { assertProjectInPaseo, refreshPaseoProjects } from "./server/paseo-projects";
 import { describeDataDir } from "./server/paths";
 import { startExports } from "./server/exports";
 import { primeCliEnv } from "./server/inject";
@@ -66,6 +67,9 @@ function safeDoctorReds(project: string | undefined): ReturnType<typeof doctorRe
     return [];
   }
 }
+
+/** How often the Paseo project list is read again while the plugin runs. */
+const PROJECT_LIST_REFRESH_MS = 30_000;
 
 function fail(err: unknown): { ok: false; message: string } {
   if (err instanceof KanbanError) return { ok: false, message: err.message };
@@ -177,6 +181,7 @@ export default function contribute(server: PluginServerContext) {
     releaseCleanup = installCleanup(cleanupOps(paseo), { keepSweepClock: cleanupBound });
     cleanupBound = true;
     setWakeSender((agentId, text, options) => paseo.agents.ref(agentId).send(text, options));
+    void refreshPaseoProjects(paseo);
   }
 
   const hooks = createLifecycleHooks({
@@ -238,6 +243,13 @@ export default function contribute(server: PluginServerContext) {
   }, 60_000);
   const idleHandle = idleTimer as unknown as { unref?: () => void };
   idleHandle.unref?.();
+  // Paseo's project list decides which board projects still exist. Read it when Paseo binds and every half minute;
+  // a failed read keeps the last list (see server/paseo-projects.ts).
+  const projectListTimer = setInterval(() => {
+    const paseo = binding.current();
+    if (paseo) void refreshPaseoProjects(paseo);
+  }, PROJECT_LIST_REFRESH_MS);
+  (projectListTimer as unknown as { unref?: () => void }).unref?.();
   const stopPatrol = startMissingCwdPatrol();
   const stopPerf = startPerfReporter();
   const stopExports = startExports();
@@ -354,6 +366,7 @@ export default function contribute(server: PluginServerContext) {
       const body = text.trim();
       const name = project.trim();
       if (!name || !body) return { ok: false, message: t("server.intake.empty") };
+      assertProjectInPaseo(name);
       const task = createTask({
         project: name,
         title: body.slice(0, 80),
@@ -448,6 +461,7 @@ export default function contribute(server: PluginServerContext) {
     removeCreated();
     removeWorkspace();
     clearInterval(idleTimer);
+    clearInterval(projectListTimer);
     stopPatrol();
     stopPerf();
     stopExports();

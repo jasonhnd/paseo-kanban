@@ -36,7 +36,7 @@ import { noteQueueHold } from "./queue-hold";
 import { latestReworkFeedback, planReworkReassignment, type ReworkReassignment } from "./rework-reassign";
 import { type DaemonEpisode } from "./daemon-log";
 import { restartBoardMessage, scanRestartStalls } from "./restart-stall";
-import { isProjectPaused } from "./paused";
+import { isProjectDormant } from "./paused";
 import { scanStalled, type AgentActivity } from "./stall";
 import { waitUserHold } from "./wait-user";
 import { appendEvent, blockTask, getTask, setHold, unblockTask, type TaskRow } from "./store";
@@ -204,7 +204,7 @@ function lanesClosed(task: TaskRow, config: KanbanConfig): boolean {
 
 /** Tell the card's creator once. A later tick does not send again. */
 async function wakeLaneCreator(task: TaskRow, send?: TickOptions["send"]): Promise<void> {
-  if (isProjectPaused(task.project)) return;
+  if (isProjectDormant(task.project)) return;
   const who = task.created_by_agent?.trim();
   if (!who) return;
   const woken = getDb().prepare("SELECT id FROM events WHERE task_id = ? AND kind = 'lanes_disabled_woke' LIMIT 1").get(task.id);
@@ -470,7 +470,7 @@ async function tryStart(
 }
 
 async function wakeTriage(task: TaskRow, config: KanbanConfig, send?: TickOptions["send"]): Promise<void> {
-  if (isProjectPaused(task.project)) return;
+  if (isProjectDormant(task.project)) return;
   const who = triageRecipient(task.project, config);
   if (!who) {
     setHold(task.id, t("schedule.noLeader"));

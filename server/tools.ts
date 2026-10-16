@@ -24,6 +24,7 @@ import { getLanguage, t, type Language, type MessageKey } from "../shared/i18n";
 import { toolText, type ToolTextKey } from "./tools-text";
 import { addComment, appendEvent, archiveTask, blockTask, createTask, getDetail, getTask, listBoard, unblockTask } from "./store";
 import { identityFromToken, type Identity } from "./tokens";
+import { assertProjectInPaseo } from "./paseo-projects";
 import { doctorSettings, loadConfig, loadConfigForReport, resolveConfiguredProject } from "./config";
 import { connectAndCollect } from "./doctor-live";
 import { readLastDoctorReport, runDoctor } from "./doctor";
@@ -82,7 +83,7 @@ export function toolDefs(language: Language = getLanguage()): McpTool[] {
   { name: "kanban_show", description: text("kanban_show.description"), inputSchema: { type: "object", properties: { id: CARD_REF } } },
   { name: "kanban_grant_read", description: text("kanban_grant_read.description"), inputSchema: { type: "object", properties: { id: CARD_REF, scope: { type: "string", enum: ["project"] } }, required: ["id", "scope"] } },
   { name: "kanban_revoke_read", description: text("kanban_revoke_read.description"), inputSchema: { type: "object", properties: { id: CARD_REF }, required: ["id"] } },
-  { name: "kanban_list", description: text("kanban_list.description"), inputSchema: { type: "object", properties: { project: { type: "string" } } } },
+  { name: "kanban_list", description: text("kanban_list.description"), inputSchema: { type: "object", properties: { project: { type: "string" }, includeRemoved: { type: "boolean", description: text("kanban_list.param.includeRemoved") } } } },
   {
     name: "kanban_doctor",
     description: text("kanban_doctor.description"),
@@ -167,6 +168,7 @@ function parseReviewOf(value: unknown): number | undefined {
 function createTarget(identity: Identity, args: Record<string, unknown>): { project: string; reviewOf: number | undefined } {
   const raw = String(args.project ?? "");
   const project = raw.trim() ? resolveConfiguredProject(raw, t("tools.action.create")) : raw;
+  if (project) assertProjectInPaseo(project);
   const reviewOf = parseReviewOf(args.reviews);
   if (identity.role === SCHEDULE_ROLE && reviewOf !== undefined) throw new KanbanError("forbidden", scheduleDenial(t("tools.action.pointReview")));
   if (project) assertProjectScope(identity, project, t("tools.action.create"));
@@ -196,7 +198,7 @@ function workerList(identity: Identity, args: Record<string, unknown>): { projec
   if (own && hasProjectRead(own) && typeof args.project === "string" && args.project && args.project !== project && projectNameForCode(args.project) !== project) {
     throw new KanbanError("forbidden", t("readGrants.listOwnProject"));
   }
-  const tasks = listBoard(project).tasks.map((card) => ({
+  const tasks = listBoard(project, { includeRemoved: true }).tasks.map((card) => ({
     id: card.id,
     code: card.code,
     project: card.project,
@@ -329,7 +331,9 @@ async function handleAuthenticatedTool(name: string, args: Record<string, unknow
       return detail;
     }
     case "kanban_list": {
-      if (identity.role === "supervisor") return listBoard(typeof args.project === "string" ? args.project : undefined);
+      if (identity.role === "supervisor") {
+        return listBoard(typeof args.project === "string" ? args.project : undefined, { includeRemoved: args.includeRemoved === true || args.includeRemoved === "true" });
+      }
       return workerList(identity, args);
     }
     case "kanban_grant_read":
@@ -455,6 +459,7 @@ async function handleAuthenticatedTool(name: string, args: Record<string, unknow
     case "kanban_register": {
       const raw = String(args.project ?? "");
       const project = raw.trim() ? resolveConfiguredProject(raw, t("tools.action.register")) : raw;
+      if (project) assertProjectInPaseo(project);
       if (project) assertProjectScope(identity, project, t("tools.action.register"));
       assertBindableAgent(String(args.agent ?? "").trim(), "agent");
       return registerTask({

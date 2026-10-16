@@ -8,6 +8,7 @@ import { LEADER_LABEL } from "../shared/labels";
 import type { LeaderStartState } from "../shared/leader-start";
 import { BOARD_AGENT_ENV } from "./agent-env";
 import { projectSupervisor, resolveConfiguredProject } from "./config";
+import { assertProjectInPaseo } from "./paseo-projects";
 import { withConfigLock } from "./config-lock";
 import { getDb } from "./db";
 import { KanbanError } from "./errors";
@@ -76,6 +77,7 @@ function assertAvailable(project: string): void {
 
 async function selection(input: Selection, host: LeaderStartHost): Promise<{ project: string; profile: Profile; workspace: LeaderWorkspace }> {
   const project = resolveConfiguredProject(input.project, "Start leader");
+  assertProjectInPaseo(project);
   const profile = leaderProfiles().find((item) => item.id === input.profileId);
   if (!profile) throw new KanbanError("invalid", translate(input.language, "leaderStart.error.chooseProfile"));
   const workspace = (await host.workspaces(project)).find((item) => item.id === input.workspaceId);

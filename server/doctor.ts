@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { paseoProjectsReadAt, removedProjects } from "./paseo-projects";
 import { LANGUAGES, t, translate, type MessageKey } from "../shared/i18n";
 import { leaderActionNote } from "./protocol";
 import { tightenFile } from "./data-perms";
@@ -622,8 +623,15 @@ export async function runDoctor(input: DoctorRunInput = {}): Promise<DoctorRepor
     }
     return false;
   };
+  // A project that left Paseo is not checked: no red or yellow for it, only one info line naming it.
+  const leftPaseo = removedProjectsForReport();
+  const skippedProjects = new Set<string>();
   const add = (finding: DoctorFinding) => {
     if (findings.some((item) => item.id === finding.id)) return;
+    if (finding.project != null && leftPaseo.has(finding.project)) {
+      skippedProjects.add(finding.project);
+      return;
+    }
     findings.push(finding);
   };
   /**
@@ -730,6 +738,7 @@ export async function runDoctor(input: DoctorRunInput = {}): Promise<DoctorRepor
       complete.add("branch");
     }
   }
+  if (skippedProjects.size > 0) add(removedProjectsNote([...skippedProjects].sort()));
   if (timedOut) {
     add({
       id: "check:timeout",
@@ -782,6 +791,31 @@ export async function runDoctor(input: DoctorRunInput = {}): Promise<DoctorRepor
   };
   if (input.persist) writeReport(report);
   return report;
+}
+
+/** Never throws: a failure here only means nothing is treated as removed. */
+function removedProjectsForReport(): ReadonlySet<string> {
+  try {
+    return removedProjects(loadConfigForReport());
+  } catch (err) {
+    console.error("[paseo-kanban] doctor removed projects", err instanceof Error ? err.message : String(err));
+    return new Set();
+  }
+}
+
+function removedProjectsNote(projects: string[]): DoctorFinding {
+  return {
+    id: "paseo-project:removed",
+    severity: "info",
+    check: "board",
+    project: null,
+    card: null,
+    taskId: null,
+    object: t("doctor.paseoProject.removed.object"),
+    symptom: t("doctor.paseoProject.removed.symptom", { count: projects.length, projects: projects.join(t("common.listSep")) }),
+    evidence: t("doctor.paseoProject.removed.evidence", { readAt: paseoProjectsReadAt() ?? "" }),
+    suggestion: t("doctor.paseoProject.removed.suggestion"),
+  };
 }
 
 function directoryAlertUnder(id: string, dir: string): boolean {

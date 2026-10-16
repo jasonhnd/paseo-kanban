@@ -12,7 +12,8 @@ import { buildHomeView } from "./home-feed";
 import { readSupervisorPanel } from "./supervisor-shift";
 import { readLeaderDetails } from "./leader-panel";
 import { readPausedProjects } from "./paused";
-import { countsWithoutPaused, isPausedProject } from "../../shared/fleet/paused";
+import { readRemovedProjects } from "./removed";
+import { countsWithoutPaused, isPausedProject, quietProjects, shownPaused } from "../../shared/fleet/paused";
 import { productionCheckDeps, runOpenDecisionChecks, sourcesFromStored } from "./decision-check";
 import { productionNudgeDeps, runLeaderNudges } from "./leader-nudge";
 import { kanbanView, readWaitingTasks } from "./kanban";
@@ -367,7 +368,9 @@ async function readLocal(timer: StepTimer) {
     step("changes", () => readChanges()),
     step("sweep", () => readSweepView()),
   ]);
-  return { paused, decisionMaint, supervisorTable, stored, kanban, changes, sweep };
+  // A project that left Paseo is quiet like a paused one, but it is not shown as paused: it is gone.
+  const removed = readRemovedProjects();
+  return { paused: quietProjects(paused, removed), shownPaused: shownPaused(paused, removed), decisionMaint, supervisorTable, stored, kanban, changes, sweep };
 }
 
 /**
@@ -398,7 +401,7 @@ export async function buildSnapshot(paseo: PaseoApi, options: SnapshotOptions = 
     step("schedules", () => readSchedules(records, live)),
     localRead,
   ]);
-  const { paused, decisionMaint, supervisorTable, stored, kanban, changes, sweep } = local;
+  const { paused, shownPaused: pausedShown, decisionMaint, supervisorTable, stored, kanban, changes, sweep } = local;
   const queue = await step("queue", () => readQueue(records, now, paused));
   const alerts = [...fleet.alerts, ...restartAlerts(records, restarts, now), ...perm.alerts, ...health.alerts, ...queue.alerts];
   const { decisions, pausedDecisions } = assembleDecisions(fleet.decisions, storedDecisions(stored, supervisorTable), kanbanDecisions(kanban.needsPerson), paused);
@@ -427,6 +430,6 @@ export async function buildSnapshot(paseo: PaseoApi, options: SnapshotOptions = 
     daemonCrashesToday: health.daemonCrashesToday,
     home: panels.home,
     supervisorPanel: panels.supervisorPanel,
-    pausedProjects: paused.map((p) => ({ ...p, decisions: pausedDecisions.filter((d) => isPausedProject(d.project, [p])) })),
+    pausedProjects: pausedShown.map((p) => ({ ...p, decisions: pausedDecisions.filter((d) => isPausedProject(d.project, [p])) })),
   };
 }

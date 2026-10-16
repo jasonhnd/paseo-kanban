@@ -14,7 +14,7 @@ import { childFinished } from "./deps";
 import { cardMark } from "./card-ref";
 import { appendEvent, getTask, setBlockedListener, type TaskRow } from "./store";
 import { holdPayload, awaitingLeaderHold } from "./review-hold";
-import { isProjectPaused } from "./paused";
+import { isProjectDormant } from "./paused";
 import { reasonSummary, statusLabel } from "../shared/labels";
 import { t, type MessageKey } from "../shared/i18n";
 
@@ -250,7 +250,7 @@ function deliverNotice(task: TaskRow, kind: WakeKind, next: string, target: Wake
 }
 
 export function notifyTask(task: TaskRow, kind: WakeKind, next: string, retry = false, lead?: string): void {
-  if (isProjectPaused(task.project)) return;
+  if (isProjectDormant(task.project)) return;
   deliverNotice(task, kind, next, recipientFor(task), retry, lead);
 }
 
@@ -281,7 +281,7 @@ export function deliverStoredReviewHold(taskId: number): void {
   const copy = holdPayload(taskId);
   if (!copy) return;
   const task = getTask(taskId);
-  if (task.status !== "rework" || isProjectPaused(task.project)) return;
+  if (task.status !== "rework" || isProjectDormant(task.project)) return;
   const target = recipientFor(task);
   if (!target || target.fallback) {
     notifyTask(task, "review_hold", copy.next, Boolean(task.unattended_at), copy.lead);
@@ -383,7 +383,7 @@ export async function notifyParentMergeProblem(parentId: number): Promise<void> 
   }
   const rows = db.prepare("SELECT e.id, e.at, e.task_id, e.data_json, t.project AS task_project FROM events e JOIN tasks t ON t.id = e.task_id WHERE e.kind = 'wake_parent_merge' AND (e.task_id = ? OR json_extract(e.data_json, '$.parentId') = ?) ORDER BY e.id").all(parentId, parentId) as unknown as MergeNoticeEvent[];
   for (const [project, tasks] of groups) {
-    if (isProjectPaused(project)) continue;
+    if (isProjectDormant(project)) continue;
     const ids = tasks.map(task => task.id);
     const wakes = rows.filter(row => {
       const data = noticeData(row);
@@ -603,7 +603,7 @@ function holdForDecision(task: TaskRow, block: DecisionBlock, nowMs: number): st
 
 export function notifyAcceptance(taskId: number, retry = false, decisionsPath?: string, nowMs = Date.now()): void {
   const task = getTask(taskId);
-  if (task.status !== "acceptance" || isProjectPaused(task.project)) return;
+  if (task.status !== "acceptance" || isProjectDormant(task.project)) return;
   const block = decisionBlock(task, readOpenDecisions(decisionsPath));
   const held = block ? holdForDecision(task, block, nowMs) : undefined;
   if (held === null) return;
@@ -651,7 +651,7 @@ export function childWakeRecipient(
 export function notifyChildren(taskId: number, retry = false): void {
   if (!childrenAllFinished(taskId)) return;
   const task = getTask(taskId);
-  if (isProjectPaused(task.project)) return;
+  if (isProjectDormant(task.project)) return;
   const config = loadConfig();
   const builder = latestChildCreator(taskId);
   const staleBuilder = staleCreator(task, config, builder);
@@ -717,7 +717,7 @@ export function retryUnattended(decisionsPath?: string): void {
     .all() as unknown as Array<{ id: number }>;
   for (const row of rows) {
     const task = getTask(row.id);
-    if (isProjectPaused(task.project)) continue;
+    if (isProjectDormant(task.project)) continue;
     if (wokePrimary(task)) {
       clearUnattended(row.id);
       continue;
@@ -835,7 +835,7 @@ export function wakeKanbanSupervisor(input: { taskId: number | null; kind: Board
   }
   if (!hasWakeSender()) return false;
   // A paused project's cards are not chased. Cleanup trouble is still reported: that is not a nudge.
-  if (input.taskId != null && input.kind !== "archive_stuck" && isProjectPaused(getTask(input.taskId).project)) return false;
+  if (input.taskId != null && input.kind !== "archive_stuck" && isProjectDormant(getTask(input.taskId).project)) return false;
   const memoryKey = input.taskId == null ? (input.subject ? `${input.kind}:${input.subject}` : input.kind) : "";
   const inflightKey = input.taskId == null ? memoryKey : `${input.taskId}:${input.kind}:${input.subject ?? ""}`;
   if (input.taskId == null) {

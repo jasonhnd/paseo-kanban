@@ -8,7 +8,7 @@ import { cardMarkOf } from "./card-ref";
 import { loadConfig, projectSupervisor, type KanbanConfig } from "./config";
 import { getDb } from "./db";
 import { readOpenDecisions, waitingOnDecision } from "./decisions";
-import { isProjectPaused } from "./paused";
+import { isProjectDormant } from "./paused";
 import { clearLeaderUnresponsive, LEADER_UNRESPONSIVE_TAG } from "./leader-activity";
 import { agentCwdMissing, noteWakeSkipped } from "./missing-cwd";
 import { parseTags } from "./profile-rules";
@@ -57,7 +57,7 @@ async function scanAcceptanceOnce(options: { now?: Date; config?: KanbanConfig; 
   const groups = new Map<string, TaskRow[]>();
   for (const task of all) {
     // A paused project's acceptance is not chased; its marks stay as they are until it resumes.
-    if (isProjectPaused(task.project)) continue;
+    if (isProjectDormant(task.project)) continue;
     const waiting = waitingOnDecision(task, decisions);
     // An unreadable decision file says nothing about whether the user is being waited on: leave marks as they are.
     if (decisions.uncertain && task.status === "acceptance") continue;

@@ -26,6 +26,7 @@ import { appendRejectBrief, conflictReviewNote, latestChangeNote, latestReworkKi
 import { awaitingLeaderHold } from "./review-hold";
 import { agentCwdMissing } from "./missing-cwd";
 import { DEFAULT_ARCHIVE_TIMEOUT_MS, loadConfig, projectAlwaysTemp, projectParallel } from "./config";
+import { assertProjectInPaseo } from "./paseo-projects";
 import { quotaWaitLabel } from "../shared/blocked";
 import { noteQueueHold } from "./queue-hold";
 import { onlyRolesBlock, quotaBrief, readPoolSnapshot, type PoolSnapshot, type QuotaBrief } from "./pools";
@@ -842,6 +843,7 @@ export async function startTask(
   await launcher.beforeStart?.();
   return withStartLock(id, async () => {
   let task = getTask(id);
+  assertProjectInPaseo(task.project);
   if (task.status === "waiting") {
     const parents = taskParents(id);
     recordMergeCardDependencies(task, parents, actor);
