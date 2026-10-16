@@ -18,6 +18,7 @@ import { settleTempWorkspace, tempCleanupDue } from "../server/temp-workspace";
 import { issueToken } from "../server/tokens";
 import { resetAgentAliveCheck, setAgentAliveCheck } from "../server/wake";
 import { createdWorktree, ownedWorktree } from "../server/worktree-gc";
+import { getLanguage, setLanguage, translate } from "../shared/i18n";
 
 const dir = mkdtempSync(join(tmpdir(), "resume-cleanup-"));
 const trees = join(dir, "trees");
@@ -79,6 +80,92 @@ function advanceTip(f: Fixture): string {
   git(f.root, "update-ref", `refs/heads/${f.branch}`, tip);
   return tip;
 }
+
+type DiscardResult = { text: string; commits: Fixture["commits"] };
+const authorize = (f: Fixture) => runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("project-leader")) as Promise<DiscardResult>;
+const comparisonFor = (f: Fixture) => JSON.parse(rows(f.id, "cleanup_discard_authorized")[0].data_json).comparisonBase;
+
+it("lists only truly unique commits when the local base trails origin and audits that list", async () => {
+  const f = fixture();
+  const remote = "refs/remotes/origin/main";
+  git(f.root, "update-ref", remote, f.commits[1].sha);
+  git(f.root, "remote", "add", "origin", join(dir, "absent-remote.git")); // No fetch/network is needed.
+  const base = git(f.root, "rev-parse", "main");
+  const result = await authorize(f);
+  assert.deepEqual(result.commits, [f.commits[0]]);
+  assert.ok(!result.text.includes(f.commits[1].sha));
+  assert.deepEqual(comparisonFor(f), { ref: remote, oid: f.commits[1].sha, behind: 1 });
+  assert.equal(git(f.root, "rev-parse", "main"), base, "local base is never advanced");
+  assert.equal(await settle(f, []), "settled");
+  for (const kind of ["cleanup_discard_authorized", "cleanup_discarded"]) {
+    assert.deepEqual(JSON.parse(rows(f.id, kind)[0].data_json).commits, [f.commits[0]]);
+  }
+  assert.equal(git(f.root, "rev-parse", remote), f.commits[1].sha, "remote ref is retained");
+});
+
+for (const otherRef of ["refs/heads/backup", "refs/remotes/backup/saved", "refs/tags/saved"]) {
+  it(`omits commits retained by ${otherRef} even without an upstream`, async () => {
+    const f = fixture();
+    git(f.root, "update-ref", otherRef, f.commits[1].sha);
+    assert.deepEqual((await authorize(f)).commits, [f.commits[0]]);
+    assert.deepEqual(comparisonFor(f), { ref: "refs/heads/main", oid: git(f.root, "rev-parse", "main"), behind: 0 });
+  });
+}
+
+it("does not count the card's own checked-out worktree as a surviving ref", async () => {
+  const f = fixture();
+  assert.equal(git(f.directory, "rev-parse", "HEAD"), f.commits[0].sha);
+  assert.deepEqual((await authorize(f)).commits, f.commits);
+  assert.deepEqual(comparisonFor(f), { ref: "refs/heads/main", oid: git(f.root, "rev-parse", "main"), behind: 0 });
+});
+
+it("keeps commits reachable through an annotated tag out of an empty discard list", async () => {
+  const f = fixture();
+  git(f.root, "tag", "-a", "retained", "-m", "Retained fixture", f.commits[0].sha);
+  const result = await authorize(f);
+  assert.deepEqual(result.commits, []);
+  assert.ok(!result.text.includes(f.commits[0].sha));
+  assert.equal(await settle(f, []), "settled");
+  assert.equal(git(f.root, "rev-parse", "retained^{commit}"), f.commits[0].sha);
+  assert.deepEqual(JSON.parse(rows(f.id, "cleanup_discarded")[0].data_json).commits, []);
+});
+
+it("prefers origin/base over a different configured upstream", async () => {
+  const f = fixture();
+  git(f.root, "update-ref", "refs/remotes/origin/main", f.commits[1].sha);
+  git(f.root, "update-ref", "refs/remotes/backup/main", "main");
+  git(f.root, "remote", "add", "backup", join(dir, "absent-backup.git"));
+  git(f.root, "branch", "--set-upstream-to=backup/main", "main");
+  await authorize(f);
+  assert.equal(comparisonFor(f).ref, "refs/remotes/origin/main");
+});
+
+it("uses a configured upstream when origin/base is absent", async () => {
+  const f = fixture();
+  git(f.root, "update-ref", "refs/remotes/backup/main", f.commits[1].sha);
+  git(f.root, "remote", "add", "backup", join(dir, "absent-backup.git"));
+  git(f.root, "branch", "--set-upstream-to=backup/main", "main");
+  assert.deepEqual((await authorize(f)).commits, [f.commits[0]]);
+  assert.deepEqual(comparisonFor(f), { ref: "refs/remotes/backup/main", oid: f.commits[1].sha, behind: 1 });
+});
+
+it("shows the stale local base warning in both languages only when behind", async () => {
+  const language = getLanguage();
+  try {
+    for (const selected of ["en", "zh-CN"] as const) {
+      setLanguage(selected);
+      const f = fixture();
+      git(f.root, "update-ref", "refs/remotes/origin/main", f.commits[1].sha);
+      const result = await authorize(f);
+      const warning = translate(selected, "cleanupDiscard.baseBehind", { base: "main", upstream: "refs/remotes/origin/main", count: 1 });
+      assert.ok(result.text.split("\n").includes(warning));
+      if (selected === "en") assert.match(result.text, /Local base main is behind refs\/remotes\/origin\/main by 1 commit/);
+      assert.ok(!result.text.includes("{base}"));
+      git(f.root, "update-ref", "refs/heads/main", f.commits[1].sha);
+      assert.ok(!(await authorize(f)).text.includes(warning));
+    }
+  } finally { setLanguage(language); }
+});
 
 it("lets the Kanban leader resume another project's stopped cleanup", async () => {
   const f = fixture();
