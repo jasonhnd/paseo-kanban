@@ -21,7 +21,7 @@ test("the registered subject survives a heading prefix, markdown and full-width 
   ), [decision]), null);
 });
 
-test("minor wording changes keep matching substantive options", () => {
+test("the complete title survives option wording changes", () => {
   assert.equal(unregisteredQuestion("demo", reply(
     `${decision.title}\nA: Deploy the new staging build\nB: Keep the current release for now\nRecommend A`,
   ), [decision]), null);
@@ -69,7 +69,7 @@ test("Chinese title and short options match without a recent timestamp or id", (
   assert.equal(unregisteredQuestion("demo", reply(`${title}\n${detail}`), [{ ...decision, title, detail }]), null);
 });
 
-test("recommendation reasoning plus one substantive option can identify a retelling", () => {
+test("the complete title confirms a question independently of its recommendation reasoning", () => {
   assert.equal(unregisteredQuestion("demo", reply(
     `${decision.title}\nA: Deploy the new staging build\nB: Something else\nRecommend A: validate the rollout gradually`,
   ), [decision]), null);

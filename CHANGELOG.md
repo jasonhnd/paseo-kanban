@@ -5,7 +5,7 @@ Twelve release candidates are recorded here. `0.1.0-rc.12` is the current unpubl
 
 ## Unreleased
 
-- Leader reminders require the registered title as a normalized subject anchor before comparing each question's options and recommendation reasoning with the project's current open decisions. Retelling an older registered decision with that subject but without its id does not trigger a registration nudge; reusing the same rollout options for a different subject still does. Closed decisions and unrelated recent decisions do not suppress new questions. User-facing reminders, panel labels, health notices and command/tool help now say Kanban and identify the board as the automatic reminder source; legacy identifiers and reminder inputs remain compatible. Fixes [issue #6](https://github.com/jasonhnd/paseo-kanban/issues/6).
+- Leader reminders recognise a project's current open decision through its full normalized title, or through at least two distinctive option bodies with the same recommendation letter. Options need at least six Han characters or three English content words after generic answer words are removed; a built-in stop list excludes generic answers and rollout templates. This recognises an older options-only retelling without a title or id while still reminding for a new subject that reuses generic rollout options. Closed decisions and unrelated recent decisions do not suppress new questions. User-facing reminders, panel labels, health notices and command/tool help now say Kanban and identify the board as the automatic reminder source; legacy identifiers and reminder inputs remain compatible. Fixes [issue #6](https://github.com/jasonhnd/paseo-kanban/issues/6).
 
 ## 0.1.0-rc.12 — pending review and publication
 
