@@ -130,6 +130,14 @@ it("keeps commits reachable through an annotated tag out of an empty discard lis
   assert.deepEqual(JSON.parse(rows(f.id, "cleanup_discarded")[0].data_json).commits, []);
 });
 
+it("excludes only the owned local ref, preserving same-named remote branches and tags", async () => {
+  for (const namespace of ["refs/remotes/backup", "refs/tags"]) {
+    const f = fixture();
+    git(f.root, "update-ref", `${namespace}/${f.branch}`, f.commits[1].sha);
+    assert.deepEqual((await authorize(f)).commits, [f.commits[0]]);
+  }
+});
+
 it("prefers origin/base over a different configured upstream", async () => {
   const f = fixture();
   git(f.root, "update-ref", "refs/remotes/origin/main", f.commits[1].sha);
@@ -147,6 +155,45 @@ it("uses a configured upstream when origin/base is absent", async () => {
   git(f.root, "branch", "--set-upstream-to=backup/main", "main");
   assert.deepEqual((await authorize(f)).commits, [f.commits[0]]);
   assert.deepEqual(comparisonFor(f), { ref: "refs/remotes/backup/main", oid: f.commits[1].sha, behind: 1 });
+});
+
+it("falls back to the local base when its configured upstream no longer exists", async () => {
+  const f = fixture();
+  git(f.root, "remote", "add", "backup", join(dir, "absent-backup.git"));
+  git(f.root, "config", "branch.main.remote", "backup");
+  git(f.root, "config", "branch.main.merge", "refs/heads/main");
+  assert.deepEqual((await authorize(f)).commits, f.commits);
+  assert.deepEqual(comparisonFor(f), { ref: "refs/heads/main", oid: git(f.root, "rev-parse", "main"), behind: 0 });
+});
+
+it("holds retirement when the audited remote base changes while the copy exists", async () => {
+  const f = fixture();
+  git(f.root, "update-ref", "refs/remotes/origin/main", f.commits[1].sha);
+  await authorize(f);
+  git(f.root, "update-ref", "refs/remotes/origin/main", f.commits[0].sha);
+  assert.equal(await settle(f, []), "pending");
+  assert.ok(existsSync(f.directory));
+  assert.equal(rows(f.id, "cleanup_discarded").length, 0);
+});
+
+it("allows the remote base to advance after the owned copy has been removed", async () => {
+  const f = fixture();
+  git(f.root, "update-ref", "refs/remotes/origin/main", f.commits[1].sha);
+  await authorize(f);
+  git(f.root, "worktree", "remove", f.directory);
+  git(f.root, "update-ref", "refs/remotes/origin/main", f.commits[0].sha);
+  assert.equal(await settle(f, []), "settled");
+  assert.equal(git(f.root, "branch", "--list", f.branch), "");
+  assert.deepEqual(JSON.parse(rows(f.id, "cleanup_discarded")[0].data_json).commits, [f.commits[0]]);
+});
+
+it("still consumes persisted discard grants that predate comparison-base metadata", async () => {
+  const f = fixture();
+  await authorize(f);
+  getDb().prepare("UPDATE events SET data_json = json_remove(data_json, '$.comparisonBase') WHERE task_id = ? AND kind = 'cleanup_discard_authorized'").run(f.id);
+  assert.ok(grantFor(f));
+  assert.equal(await settle(f, []), "settled");
+  assert.deepEqual(JSON.parse(rows(f.id, "cleanup_discarded")[0].data_json).commits, f.commits);
 });
 
 it("shows the stale local base warning in both languages only when behind", async () => {

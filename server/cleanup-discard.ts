@@ -2,7 +2,7 @@ import { t } from "../shared/i18n";
 import { cleanupGeneration, currentCleanupSql, tryHoldCleanupCard } from "./cleanup-state";
 import { getDb } from "./db";
 import { KanbanError } from "./errors";
-import { headRef, isProtectedBranch, refOk, runGit, type GitRunner } from "./git";
+import { headRef, isProtectedBranch, originRef, refOk, runGit, type GitRunner } from "./git";
 import { directoryState } from "./missing-cwd";
 import { pendingLand } from "./land-pending";
 import { samePath } from "./placement";
@@ -18,7 +18,31 @@ export interface DiscardAuthorization extends OwnedWorktree {
   actor: string;
   head: string;
   baseOid: string;
+  /** Optional for grants recorded before upstream-aware discard auditing. baseOid still guards the local base. */
+  comparisonBase?: { ref: string; oid: string; behind: number };
   commits: Array<{ sha: string; subject: string }>;
+}
+
+/** Read only locally available refs: origin/base first, then the configured upstream, then the local base. */
+async function comparisonBase(owned: OwnedWorktree, baseOid: string): Promise<NonNullable<DiscardAuthorization["comparisonBase"]>> {
+  const local = headRef(owned.base);
+  let ref = originRef(owned.base);
+  let exists = await runGit(owned.root, ["show-ref", "--verify", "--quiet", ref]);
+  if (exists.code !== 0 && exists.code !== 1) throw new KanbanError("invalid", t("cleanupDiscard.unreadable"));
+  if (exists.code === 1) {
+    const upstream = await runGit(owned.root, ["for-each-ref", "--format=%(upstream)", local]);
+    if (upstream.code !== 0) throw new KanbanError("invalid", t("cleanupDiscard.unreadable"));
+    ref = upstream.stdout.trim();
+    if (!ref || ref === headRef(owned.branch)) return { ref: local, oid: baseOid, behind: 0 };
+    exists = await runGit(owned.root, ["show-ref", "--verify", "--quiet", ref]);
+    if (exists.code === 1) return { ref: local, oid: baseOid, behind: 0 };
+    if (exists.code !== 0) throw new KanbanError("invalid", t("cleanupDiscard.unreadable"));
+  }
+  const tip = await runGit(owned.root, ["rev-parse", "--verify", `${ref}^{commit}`]);
+  if (tip.code !== 0) throw new KanbanError("invalid", t("cleanupDiscard.unreadable"));
+  const behind = await runGit(owned.root, ["rev-list", "--count", `${baseOid}..${tip.stdout.trim()}`, "--"]);
+  if (behind.code !== 0 || !/^\d+$/.test(behind.stdout.trim())) throw new KanbanError("invalid", t("cleanupDiscard.unreadable"));
+  return { ref, oid: tip.stdout.trim(), behind: Number(behind.stdout.trim()) };
 }
 
 function eligible(task: TaskRow, owned: OwnedWorktree): boolean {
@@ -78,6 +102,10 @@ export async function discardStillValid(task: TaskRow, owned: OwnedWorktree, gra
   }
   const base = await run(owned.root, ["rev-parse", "--verify", headRef(owned.base)]);
   if (head.code !== 0 || base.code !== 0 || head.stdout.trim() !== grant.head || base.stdout.trim() !== grant.baseOid) return false;
+  if (grant.comparisonBase) {
+    const comparison = await run(owned.root, ["rev-parse", "--verify", `${grant.comparisonBase.ref}^{commit}`]);
+    if (comparison.code !== 0 || comparison.stdout.trim() !== grant.comparisonBase.oid) return false;
+  }
   const state = directoryState(owned.directory);
   if (state === "missing") {
     // existsSync also hides read failures. Only ENOENT proves a prior removal.
@@ -105,7 +133,11 @@ export async function authorizeDiscard(taskId: number, actor: string): Promise<D
     const head = await runGit(owned.root, ["rev-parse", "--verify", headRef(owned.branch)]);
     const base = await runGit(owned.root, ["rev-parse", "--verify", headRef(owned.base)]);
     if (head.code !== 0 || base.code !== 0) throw new KanbanError("invalid", t("cleanupDiscard.unreadable"));
-    const log = await runGit(owned.root, ["log", "--format=%H%x00%s", `${base.stdout.trim()}..${head.stdout.trim()}`, "--"]);
+    const comparison = await comparisonBase(owned, base.stdout.trim());
+    // Enumerate surviving ref namespaces only. --all would also include the retiring worktree's HEAD.
+    // --exclude applies to --branches only; a remote branch or tag with the same name must still protect its commits.
+    const log = await runGit(owned.root, ["log", "--format=%H%x00%s", head.stdout.trim(), "--not",
+      `--exclude=${owned.branch}`, "--branches", "--remotes", "--tags", "--"]);
     if (log.code !== 0) throw new KanbanError("invalid", t("cleanupDiscard.unreadable"));
     const commits = log.stdout.trimEnd().split("\n").filter(Boolean).map(line => {
       const [sha, subject] = line.split("\0");
@@ -113,7 +145,7 @@ export async function authorizeDiscard(taskId: number, actor: string): Promise<D
       return { sha, subject };
     });
     const grant: DiscardAuthorization = { ...owned, cleanupGeneration: cleanupGeneration(taskId), workspaceId: task.paseo_workspace_id,
-      actor, head: head.stdout.trim(), baseOid: base.stdout.trim(), commits };
+      actor, head: head.stdout.trim(), baseOid: base.stdout.trim(), comparisonBase: comparison, commits };
     if (!(await discardStillValid(task, owned, grant, runGit))) throw new KanbanError("invalid", t("cleanupDiscard.changed"));
     appendEvent(taskId, "cleanup_discard_authorized", null, null, actor, { ...grant });
     return grant;

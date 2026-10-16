@@ -363,7 +363,10 @@ async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEn
     const requestId = resumedSteps === 0 ? requestRebuiltCleanup(taskId) : null;
     const requeued = requestId !== null;
     const resumed = resumedSteps + (requeued ? 1 : 0);
-    const text = grant ? t("cleanupDiscard.requested", { commits: grant.commits.map(commit => `${commit.sha} ${commit.subject}`).join("\n") || t("cleanupDiscard.noCommits") })
+    const warning = grant?.comparisonBase?.behind ? t("cleanupDiscard.baseBehind", {
+      base: grant.base, upstream: grant.comparisonBase.ref, count: grant.comparisonBase.behind,
+    }) + "\n" : "";
+    const text = grant ? warning + t("cleanupDiscard.requested", { commits: grant.commits.map(commit => `${commit.sha} ${commit.subject}`).join("\n") || t("cleanupDiscard.noCommits") })
       : requeued ? t("cli.resumeCleanup.requested") : resumed === 0 ? t("cli.resumeCleanup.none") : t("cli.resumeCleanup.done", { count: resumed });
     return { requeued, requested: requeued || !!grant, requestId, execution: requeued || grant ? "periodic" : null,
       text, resumed, ...(grant ? { commits: grant.commits } : {}) };
