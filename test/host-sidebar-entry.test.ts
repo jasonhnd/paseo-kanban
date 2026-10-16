@@ -1,5 +1,5 @@
 /// <reference types="node" />
-// Registers the real client on the public Paseo 0.11.2 host. Desktop and compact
+// Registers the real client on the public Paseo 0.11.2 host (app or explicit npm runtime). Desktop and compact
 // layouts mount its SidebarRow, preserving the old sidebar/surface deep links.
 // This mounted host harness complements the separate actual Edge validation.
 import assert from "node:assert/strict";
@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { createRequire, register } from "node:module";
 import { after, before, describe, it } from "node:test";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PANEL_TAB_IDS, panelTabLabel } from "../shared/fleet/panel-tabs";
 import { getLanguage, t } from "../shared/i18n";
@@ -180,6 +180,16 @@ type HostRuntime = {
 };
 
 function installedBundle(): string {
+  // Release verification already supplies this exact official runtime to the compiler.
+  // Use its real web bundle too, so upgrading the personal app does not replace the frozen fixture.
+  const runtime = process.env.PASEO_SERVER_DIR?.trim();
+  if (runtime) {
+    const root = resolve(runtime);
+    const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { name?: string; version?: string };
+    assert.equal(manifest.name, "@getpaseo/server");
+    assert.equal(manifest.version, HOST_VERSION, "the official host fixture stays pinned");
+    return publicBundle(join(root, "dist", "server", "web-ui", "_expo", "static", "js", "web"), root);
+  }
   // The publication gate's PATH has no paseo. Locate the public app directly.
   assert.equal(PUBLIC_APP, "/Applications/Paseo.app");
   const bin = join(PUBLIC_APP, "Contents", "Resources", "bin", "paseo");
@@ -190,10 +200,14 @@ function installedBundle(): string {
   }).trim();
   assert.equal(version, HOST_VERSION);
   const web = join(PUBLIC_APP, "Contents", "Resources", "app-dist", "_expo", "static", "js", "web");
+  return publicBundle(web, PUBLIC_APP);
+}
+
+function publicBundle(web: string, root: string): string {
   const files = readdirSync(web).filter((name) => /^index-.+\.js$/.test(name));
   assert.equal(files.length, 1, "one public web bundle");
   const bundle = join(web, files[0]!);
-  assert.ok(bundle.startsWith(`${PUBLIC_APP}/`), "public desktop app");
+  assert.ok(bundle.startsWith(`${root}/`), "public host bundle");
   return bundle;
 }
 
