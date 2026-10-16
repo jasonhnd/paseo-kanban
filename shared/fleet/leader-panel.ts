@@ -106,34 +106,142 @@ function phraseUnits(text: string): string[] {
   return text.normalize("NFKC").toLowerCase().replace(/\p{Script=Han}/gu, " $& ").match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
-/** At least six Han characters or three words (12 letters); short generic choices cannot establish identity. */
-function phraseMatches(phrase: string, text: string): boolean {
-  const units = phraseUnits(phrase);
+/** Generic answers are not decision identity, even when padded to look long. */
+const GENERIC_OPTION_PHRASES = new Set(
+  [
+    "yes",
+    "no",
+    "now",
+    "later",
+    "skip",
+    "go ahead",
+    "do it now",
+    "leave it as is",
+    "follow the plan",
+    "proceed with the current plan",
+    "wait until a later date",
+    "deploy the staging build",
+    "keep the current release",
+    "\u73b0\u5728\u505a",
+    "\u6682\u7f13",
+    "\u5148\u4e0d\u505a",
+    "\u7167\u505a",
+    "\u4e0d\u505a",
+    "\u540c\u610f",
+    "\u4e0d\u540c\u610f",
+    "\u662f",
+    "\u5426",
+    "\u597d",
+    "\u4e0d",
+    "\u73b0\u5728",
+    "\u7a0d\u540e",
+    "\u4ee5\u540e",
+    "\u5148",
+    "\u518d",
+    "\u505a",
+    "\u6267\u884c",
+    "\u7b49\u5f85",
+    "\u7ee7\u7eed",
+    "\u8df3\u8fc7",
+    "\u7acb\u5373",
+    "\u7acb\u523b",
+    "\u6309\u8ba1\u5212",
+    "\u4fdd\u6301\u73b0\u72b6",
+    "\u90e8\u7f72\u6d4b\u8bd5\u6784\u5efa",
+    "\u4fdd\u6301\u5f53\u524d\u7248\u672c",
+    "\u7136\u540e",
+    "\u6216\u8005",
+    "\u4ee5\u53ca",
+    "\u7684",
+    "\u4e86",
+    "\u5728",
+    "\u5c06",
+    "\u628a",
+    "\u5230",
+    "\u548c",
+    "\u5e76",
+    "\u65b0",
+    "\u65e7",
+    "\u5f53\u524d",
+    "\u73b0\u6709"
+  ].map(normalized),
+);
+const GENERIC_OPTION_WORDS = new Set(
+  "a an the and or but if then else as at by for from in into of on onto to with without after before until while that this these those it its we our you your they their is are was were be been being will would shall should can could may might must do does did done not no yes now later skip agree disagree continue wait proceed defer postpone go ahead follow keep current existing new old plan approved deploy staging build release please just already only also same again today tomorrow date".split(" "),
+);
+const GENERIC_HAN_WORDS = [
+  "\u73b0\u5728\u505a",
+  "\u6682\u7f13",
+  "\u5148\u4e0d\u505a",
+  "\u7167\u505a",
+  "\u4e0d\u505a",
+  "\u540c\u610f",
+  "\u4e0d\u540c\u610f",
+  "\u662f",
+  "\u5426",
+  "\u597d",
+  "\u4e0d",
+  "\u73b0\u5728",
+  "\u7a0d\u540e",
+  "\u4ee5\u540e",
+  "\u5148",
+  "\u518d",
+  "\u505a",
+  "\u6267\u884c",
+  "\u7b49\u5f85",
+  "\u7ee7\u7eed",
+  "\u8df3\u8fc7",
+  "\u7acb\u5373",
+  "\u7acb\u523b",
+  "\u6309\u8ba1\u5212",
+  "\u4fdd\u6301\u73b0\u72b6",
+  "\u90e8\u7f72\u6d4b\u8bd5\u6784\u5efa",
+  "\u4fdd\u6301\u5f53\u524d\u7248\u672c",
+  "\u7136\u540e",
+  "\u6216\u8005",
+  "\u4ee5\u53ca",
+  "\u7684",
+  "\u4e86",
+  "\u5728",
+  "\u5c06",
+  "\u628a",
+  "\u5230",
+  "\u548c",
+  "\u5e76",
+  "\u65b0",
+  "\u65e7",
+  "\u5f53\u524d",
+  "\u73b0\u6709"
+].sort((a, b) => b.length - a.length);
+
+/** Count information after removing generic words; retain the original body for matching semantics. */
+function distinctiveOption(text: string): boolean {
+  if (GENERIC_OPTION_PHRASES.has(normalized(text))) return false;
+  let content = text.normalize("NFKC").toLowerCase();
+  for (const word of GENERIC_HAN_WORDS) content = content.replaceAll(word, " ");
+  const units = phraseUnits(content);
   const han = units.filter((unit) => /\p{Script=Han}/u.test(unit)).length;
-  if (han < 6 && (units.length < 3 || normalized(phrase).length < 12)) return false;
-  const pairs = (parts: string[]) => new Set(parts.slice(1).map((unit, i) => `${parts[i]} ${unit}`));
-  const needle = pairs(units), haystack = pairs(phraseUnits(text));
-  // 60% adjacent-pair coverage tolerates one inserted word in a four-word option.
-  // Also require 80% of its distinct units, so generic fragments cannot suffice.
-  const words = new Set(units), available = new Set(phraseUnits(text));
-  return [...needle].filter((pair) => haystack.has(pair)).length / needle.size >= 0.6
-    && [...words].filter((word) => available.has(word)).length / words.size >= 0.8;
+  const english = new Set(units.filter((unit) => /^[a-z]{2,}$/.test(unit) && !GENERIC_OPTION_WORDS.has(unit)));
+  return han >= 6 || english.size >= 3;
 }
 
+const optionBody = (text: string) => phraseUnits(text).join(" ");
+
 function matchesDecision(question: string, decision: RegisteredDecision): boolean {
-  if (decision.id && new RegExp(`(?<![\\w-])${escapeRegex(decision.id)}(?![\\w-])`, "i").test(question)) return true;
   const asked = parseDecisionCard("", question), stored = parseDecisionCard(decision.title, decision.detail);
-  // Options and advice are often reused across subjects. Require the entire title as
-  // a token-bounded anchor in the question's heading/context before any content route.
-  // A percentage alone can overlook one changed subject in an otherwise identical title.
+  // The leader's first route is independently sufficient, even with generic options.
   const title = phraseUnits(decision.title).join(" ");
   const context = ` ${phraseUnits(asked.context).join(" ")} `;
-  if (!phraseMatches(decision.title, asked.context) || !context.includes(` ${title} `)) return false;
-  const options = stored.options.filter((option) => asked.options.some((other) => phraseMatches(option.text, other.text)));
-  const sameChoice = stored.options.some((option) => normalized(option.text)
-    && asked.options.some((other) => normalized(option.text) === normalized(other.text)));
-  return sameChoice || options.length >= 2
-    || (options.length >= 1 && phraseMatches(stored.reason, asked.reason));
+  if (title && context.includes(` ${title} `)) return true;
+
+  // Otherwise require two distinct informative bodies and the same explicit recommendation.
+  // Compare whole normalized bodies, preserving negation and subject words; ids and reasons
+  // alone are not additional routes. Deduplication prevents one body from counting as A and B.
+  if (!stored.recommended || stored.recommended !== asked.recommended) return false;
+  const bodies = new Set(stored.options.filter((option) => distinctiveOption(option.text)).map((option) => optionBody(option.text)));
+  const matches = new Set(asked.options.filter((option) => distinctiveOption(option.text))
+    .map((option) => optionBody(option.text)).filter((body) => bodies.has(body)));
+  return matches.size >= 2;
 }
 
 /** Match each question against this project's current open decisions, with no creation-time cutoff. */
