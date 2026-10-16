@@ -3323,6 +3323,54 @@ describe("temporary workspace cleanup", () => {
     }
   });
 
+  it("keeps the directory when a reconcile sweep runs between the purge failure and its retryAt", async () => {
+    const card = await landedTemp("review-sweep-gap", "sweep-gap");
+    const sibling = createTask({
+      project: "review-sweep-gap",
+      title: "Sweep lands in the gap",
+      role: "reviewer",
+      workspacePath: card.directory,
+      reviewOf: card.id,
+    });
+    const reviewAgent = `review-gap-${sibling.id}`;
+    getDb().prepare("UPDATE tasks SET status = 'done', paseo_workspace_id = ?, agent_id = ? WHERE id = ?").run(`ws-${card.id}`, reviewAgent, sibling.id);
+    appendEvent(sibling.id, "accept", "reviewing", "done", "test", {});
+    getDb().prepare("INSERT INTO runs (task_id, agent_id, role, started_at) VALUES (?, ?, 'reviewer', ?)").run(sibling.id, reviewAgent, new Date().toISOString());
+    writeAgent(reviewAgent, card.directory, String(sibling.id));
+    const previous = loadConfig();
+    // Every drain runs a sweep, so one is guaranteed to land after the failure row and before its retryAt.
+    saveConfig({ ...previous, reconcileIntervalMs: 1_000 });
+    const box = settlingOps(card.directory, card.root, connectionInspect(() => false));
+    const release = installCleanup(box.ops, { timeoutMs: 5_000 });
+    const start = new Date();
+    try {
+      markDone(card.id);
+      await drainCleanups(start);
+      const failure = () => cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false && row.agentId === undefined);
+      assert.equal(failure().length, 1);
+      assert.equal(typeof failure()[0]?.retryAt, "string");
+      for (const offset of [10_000, 20_000, 30_000, 45_000]) {
+        await drainCleanups(new Date(start.getTime() + offset));
+        assert.equal(existsSync(card.directory), true, `directory kept at +${offset}ms`);
+        assert.equal(existsSync(agentFile(reviewAgent)), true);
+        assert.equal(
+          cleanupRows(card.id).some((row) => row.action === "purge_agents" && row.ok === true && row.agentId === undefined && row.reconciled === true),
+          false,
+          "the sweep must not call the directory-level purge done while another card's agent still points here",
+        );
+      }
+      await drainCleanups(new Date(start.getTime() + 61_000));
+      assert.equal(box.archives(), 0);
+      assert.equal(existsSync(card.directory), true);
+      assert.equal(existsSync(agentFile(reviewAgent)), true);
+      assert.equal(eventRows(card.id).some((row) => row.kind === "temp_workspace_cleaned"), false);
+    } finally {
+      saveConfig(previous);
+      rmSync(agentFile(reviewAgent), { force: true });
+      release();
+    }
+  });
+
   it("keeps a temporary directory when an agent bucket cannot be read, then cleans up once it can", async () => {
     const card = await landedTemp("locked-bucket", "locked");
     writeAgent(card.agentId, card.directory, String(card.id));
