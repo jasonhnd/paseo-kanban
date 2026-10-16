@@ -48,6 +48,15 @@ test("six meaningful Han characters per option suffice, but five do not", () => 
   assert.ok(unregisteredQuestion("demo", { text: five, at }, [{ ...chinese, detail: five }]));
 });
 
+test("contractions, pronouns and quantifiers do not manufacture a third English content word", () => {
+  for (const prefix of ["Don't", "We're", "She will", "All", "Some", "They've"]) {
+    const text = `A: ${prefix} encrypt snapshots\nB: ${prefix} archive receipts\nRecommend A`;
+    assert.ok(unregisteredQuestion("demo", { text, at }, [{ ...english, detail: text }]), prefix);
+  }
+  const text = "A: Don't encrypt billing snapshots\nB: Don't archive audit receipts\nRecommend A";
+  assert.equal(unregisteredQuestion("demo", { text, at }, [{ ...english, detail: text }]), null);
+});
+
 test("the first review's billing/authentication example keeps reminding despite identical generic rollout text", () => {
   const detail = "A: Deploy the staging build\nB: Keep the current release\nRecommend A: validate the rollout gradually";
   const decision = { ...english, title: "Should we roll out the billing redesign?", detail };
