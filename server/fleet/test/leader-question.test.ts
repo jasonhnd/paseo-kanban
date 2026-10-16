@@ -80,10 +80,10 @@ test("a separate subject heading and following recommendation still identify an 
   assert.equal(unregisteredQuestion("demo", reply(text), [decision]), null);
 });
 
-test("a matching title with completely different options remains a new question", () => {
-  assert.ok(unregisteredQuestion("demo", reply(
+test("the full registered title independently identifies the question under the leader ruling", () => {
+  assert.equal(unregisteredQuestion("demo", reply(
     `${decision.title}\nA: Store encrypted backups locally\nB: Upload backups to remote storage\nRecommend B`,
-  ), [decision]));
+  ), [decision]), null);
 });
 
 test("different rollout subjects cannot match through identical options and advice", () => {
@@ -121,9 +121,9 @@ test("a generic or missing heading cannot establish which subject the copied opt
   }
 });
 
-test("only a current open decision id in that question can identify it", () => {
+test("an id alone is not a third matching route under the leader ruling", () => {
   const text = `Unusual question ${decision.id}\nA: Yes\nB: No\nRecommend A`;
-  assert.equal(unregisteredQuestion("demo", reply(text), [decision]), null);
+  assert.ok(unregisteredQuestion("demo", reply(text), [decision]));
   assert.ok(unregisteredQuestion("demo", reply(text), [{ ...decision, status: "done" }]));
 });
 
