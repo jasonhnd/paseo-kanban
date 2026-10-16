@@ -15,15 +15,15 @@ test("an open decision retold without an id after 30 minutes is registered", () 
   assert.equal(unregisteredQuestion("DEMO", reply(), [decision]), null);
 });
 
-test("option overlap recognises a paraphrased heading and markdown/full-width punctuation", () => {
+test("the registered subject survives a heading prefix, markdown and full-width punctuation", () => {
   assert.equal(unregisteredQuestion("demo", reply(
-    "Which release approach suits us?\n**A**\uff1a Deploy the staging build\n**B**\uff1a Keep the current release\nRecommend A",
+    `Pending: **${decision.title}**\n**A**\uff1a Deploy the staging build\n**B**\uff1a Keep the current release\nRecommend A`,
   ), [decision]), null);
 });
 
 test("minor wording changes keep matching substantive options", () => {
   assert.equal(unregisteredQuestion("demo", reply(
-    "What shall we do?\nA: Deploy the new staging build\nB: Keep the current release for now\nRecommend A",
+    `${decision.title}\nA: Deploy the new staging build\nB: Keep the current release for now\nRecommend A`,
   ), [decision]), null);
 });
 
@@ -71,8 +71,13 @@ test("Chinese title and short options match without a recent timestamp or id", (
 
 test("recommendation reasoning plus one substantive option can identify a retelling", () => {
   assert.equal(unregisteredQuestion("demo", reply(
-    "Which approach?\nA: Deploy the staging build\nB: Something else\nRecommend A: validate the rollout gradually",
+    `${decision.title}\nA: Deploy the new staging build\nB: Something else\nRecommend A: validate the rollout gradually`,
   ), [decision]), null);
+});
+
+test("a separate subject heading and following recommendation still identify an old open decision", () => {
+  const text = `${decision.title}\n\nA: Deploy the staging build\nB: Keep the current release\n\nRecommend A`;
+  assert.equal(unregisteredQuestion("demo", reply(text), [decision]), null);
 });
 
 test("a matching title with completely different options remains a new question", () => {

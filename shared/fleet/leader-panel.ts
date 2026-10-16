@@ -123,11 +123,16 @@ function phraseMatches(phrase: string, text: string): boolean {
 function matchesDecision(question: string, decision: RegisteredDecision): boolean {
   if (decision.id && new RegExp(`(?<![\\w-])${escapeRegex(decision.id)}(?![\\w-])`, "i").test(question)) return true;
   const asked = parseDecisionCard("", question), stored = parseDecisionCard(decision.title, decision.detail);
+  // Options and advice are often reused across subjects. Require the entire title as
+  // a token-bounded anchor in the question's heading/context before any content route.
+  // A percentage alone can overlook one changed subject in an otherwise identical title.
+  const title = phraseUnits(decision.title).join(" ");
+  const context = ` ${phraseUnits(asked.context).join(" ")} `;
+  if (!phraseMatches(decision.title, asked.context) || !context.includes(` ${title} `)) return false;
   const options = stored.options.filter((option) => asked.options.some((other) => phraseMatches(option.text, other.text)));
   const sameChoice = stored.options.some((option) => normalized(option.text)
     && asked.options.some((other) => normalized(option.text) === normalized(other.text)));
-  return (phraseMatches(decision.title, asked.context) && sameChoice)
-    || options.length >= 2
+  return sameChoice || options.length >= 2
     || (options.length >= 1 && phraseMatches(stored.reason, asked.reason));
 }
 
