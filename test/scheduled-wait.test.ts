@@ -190,6 +190,20 @@ describe("scheduled waits", { concurrency: 1 }, () => {
     assert.equal(getTask(id).status, "running");
   });
 
+  it("retains the same wake text when the board language changes during recovery", async () => {
+    const id = running();
+    setLanguage("en");
+    wait(id);
+    const texts: string[] = [];
+    await tick(due, async (_agentId, text) => { texts.push(text); throw new Error("response lost"); });
+    closeDb();
+    setLanguage("zh-CN");
+    await tick(due, async (_agentId, text) => { texts.push(text); });
+    assert.equal(texts.length, 2);
+    assert.equal(texts[0], texts[1], "a receipt ID must always describe the identical request");
+    assert.equal(getTask(id).status, "running");
+  });
+
   it("upgrades an existing task database without changing the card", () => {
     const id = running();
     for (const column of ["scheduled_until", "scheduled_wake_id", "scheduled_claim_id", "scheduled_claim_until"]) {
