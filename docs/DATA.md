@@ -9,6 +9,7 @@ Server and all command entries resolve one canonical data root independently of 
 | `KANBAN_DATA_DIR` | Explicit canonical root. Use a stable absolute path and the same value for the daemon and CLI. |
 | `PASEO_HOME/plugin-data/paseo-kanban` | Default fresh root; Paseo home defaults to `~/.paseo`. |
 | Root `kanban.db`, `kanban.config.json`, `kanban-decisions.json` | Durable board state, project configuration and board decisions. |
+| Root `paseo-projects.json` | The last Paseo project list the board read successfully (see below). Rebuilt by the next successful read; deleting it only makes the board treat every project as present until then. |
 | `fleet/` | Fleet configuration, policy, decisions, panel preferences, collectors and readings. |
 | `fleet/policy-snapshot.json` | Immutable policy revision checked against current control inputs by live and standalone readers. |
 | `exports/` and `exports/fleet/` | Board exports and Fleet compatibility projections below the same root. |
@@ -19,6 +20,15 @@ Server and all command entries resolve one canonical data root independently of 
 `server/storage/root.ts` resolves the root. Nonempty `AFC_DATA_DIR`, `ROLES_STATE_DIR` or `AFC_LEGACY_DATA_DIR` is a configuration error, even with a new root set. No old installation directory, declared export directory or sibling plugin is discovered as an active storage root. Keep a custom root outside any managed checkout; managed update/removal can discard that checkout. A relative override may depend on the process working directory, so it is unsuitable for a source switch.
 
 A Git revision changes code location, not this external root. Keep runtime id `paseo-kanban`, `PASEO_HOME` and `KANBAN_DATA_DIR` unchanged when changing sources. Refresh installed CLI paths; do not bind `KANBAN_HOME` to an old managed directory. This is a storage contract, not proof that a production conversion has been performed. Old data is not automatically transferred.
+
+## Which projects exist: Paseo decides
+
+Paseo's project list (`paseo project ls`) is the only list of projects. The board keeps its own project settings, leader table and `fleet/paused-projects.json`, but a board project is shown, woken and dispatched only while its directory is a Paseo project.
+
+- **Matching is by directory, never by name.** Directories are compared after dropping a `dir:` prefix and trailing slashes and resolving symbolic links, so a project that is called something else in Paseo still matches. A project's directory is `projects.<name>.workspacePath` in `kanban.config.json`; without it, the directories of its newest cards (and the recorded root of their temporary workspaces). A project with no known directory is never treated as removed.
+- **A project that left Paseo** disappears from the leader panel, the paused area, the home overview, the by-project tab and the board. It gets no leader reminder, wake or nudge, and `create`, `register`, `start` and starting a leader for it are refused with a message saying so. Its cards and history stay: `kanban show` reads a card and `kanban list --include-removed` lists them. Doctor reports no red or yellow for it, only one info line naming the projects it skipped. Adding the directory back to Paseo brings the project back unchanged.
+- **If Paseo cannot be read** (daemon down, timeout, unexpected answer, or an empty list) the board keeps using the last list it read, stored in `paseo-projects.json`. Before the first successful read nothing is filtered, as before. The running plugin reads the list through its Paseo client when it binds to Paseo and every 30 seconds; the command line reads `paseo project ls --json` when its stored copy is more than two minutes old, and `kanban start` reads it through its own client.
+- **`paused-projects.json` holds only projects that are in Paseo and paused for a while.** A project that left Paseo is handled as above even if it is still listed there, and is not shown as paused.
 
 ## Files, processes and network
 

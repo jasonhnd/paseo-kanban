@@ -9,6 +9,7 @@ server 与所有命令使用一个独立于源码 checkout 的统一数据根：
 | `KANBAN_DATA_DIR` | 显式统一根；用稳定绝对路径，daemon 和 CLI 保持相同值。 |
 | `PASEO_HOME/plugin-data/paseo-kanban` | 默认 fresh root；Paseo home 默认 `~/.paseo`。 |
 | 根下 `kanban.db`、`kanban.config.json`、`kanban-decisions.json` | 看板持久状态、项目配置、本地决定。 |
+| 根下 `paseo-projects.json` | 看板上一次成功读到的 Paseo 项目列表（见下）。下一次成功读取会重写；删掉它只会让看板在那之前把所有项目当作仍在。 |
 | `fleet/` | Fleet 配置、策略、决定、面板偏好、采集状态和读数。 |
 | `fleet/policy-snapshot.json` | 活服务和独立 CLI 均按当前控制输入核对的不可变策略。 |
 | `exports/`、`exports/fleet/` | 同根下看板导出和 Fleet 兼容投影。 |
@@ -19,6 +20,15 @@ server 与所有命令使用一个独立于源码 checkout 的统一数据根：
 `server/storage/root.ts` 解析根。`AFC_DATA_DIR`、`ROLES_STATE_DIR`、`AFC_LEGACY_DATA_DIR` 非空即配置错误，即使新根也有值。不会把旧安装、导出声明目录或 sibling 插件位置当活存储根。自定义根放在托管 checkout 外；更新／卸载可能删除 checkout。相对路径会依赖进程工作目录，不适合来源切换。
 
 Git revision 改代码位置，不改外置根。换来源保留 `paseo-kanban` id、`PASEO_HOME`、`KANBAN_DATA_DIR`；刷新 CLI 安装路径，不让 `KANBAN_HOME` 绑旧托管目录。这是存储契约，不是已完成生产转换的证明。旧资料不会自动转入。
+
+## 哪些项目存在：以 Paseo 为准
+
+Paseo 的项目列表（`paseo project ls`）是唯一的项目名单。看板自己仍记着项目设置、leader 名单和 `fleet/paused-projects.json`，但只有目录仍是 Paseo 项目的看板项目，才会被显示、唤醒和派活。
+
+- **按目录对照，不按名字。** 对照前去掉 `dir:` 前缀和末尾斜杠，并解开符号链接，所以 Paseo 里换了名字的项目仍能对上。项目的目录是 `kanban.config.json` 里的 `projects.<名>.workspacePath`；没写时取它最近几张卡的目录（和临时工作区记下的根目录）。没有任何已知目录的项目，一律不当作已移除。
+- **已不在 Paseo 的项目**：从 leader 面板、暂停区、首页、按项目页和看板里消失；不发 leader 提醒、不唤醒、不催；`create`、`register`、`start` 和为它启动 leader 都会被拒绝并说明原因。卡片和历史保留：`kanban show` 可看单张卡，`kanban list --include-removed` 可列出。体检对它不报红或黄，只有一条信息，写明跳过了哪些项目。把目录重新加回 Paseo，项目原样回来。
+- **读不到 Paseo 时**（daemon 不通、超时、答案异常或列表为空），沿用上一次成功读到、存在 `paseo-projects.json` 里的列表；从未成功读到过时不过滤任何项目，和以前一样。运行中的插件在连上 Paseo 时、之后每 30 秒通过 Paseo 客户端读取；命令行在存档超过两分钟时调用 `paseo project ls --json`，`kanban start` 用自己的客户端读取。
+- **`paused-projects.json` 只放「在 Paseo 里、临时暂停」的项目。** 已不在 Paseo 的项目即使还在其中，也按上面处理，不显示为暂停。
 
 ## 文件、进程和网络
 

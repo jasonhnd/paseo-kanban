@@ -1,5 +1,6 @@
 /// <reference types="node" />
 // Sending coupon notices to leaders. A stamp is written only after every recipient got the message.
+import { readRemovedProjects } from "./removed";
 import { readJson, writeJson, type Json } from "./util";
 import { KANBAN_CONFIG, RESET_COUPON_STATE, type ResetCouponState } from "./reset-coupons-types";
 import { lock, readState } from "./reset-coupons-state";
@@ -50,7 +51,9 @@ export function setNotify(notify: Notify): void {
 async function leaders(): Promise<{ afc: string | null; all: string[] }> {
   const raw = await readJson<Json>(KANBAN_CONFIG, {});
   const supervisors = readSupervisorTable(raw);
-  const all = Object.values(supervisors ?? {}).filter(id => id.length >= 8);
+  // A leader of a project that left Paseo is not told anything.
+  const removed = readRemovedProjects();
+  const all = Object.entries(supervisors ?? {}).filter(([project]) => !removed.has(project)).map(([, id]) => id).filter(id => id.length >= 8);
   const afc = supervisorIdFor(readOpsProject(), supervisors);
   return { afc: afc && afc.length >= 8 ? afc : null, all: [...new Set(all)] };
 }

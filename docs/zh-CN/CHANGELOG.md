@@ -4,6 +4,10 @@
 
 ## 未发布
 
+### 变更（Changed）
+
+- 看板的项目与 leader 名单改为以 Paseo 的项目列表为准。看板项目按目录与 Paseo 项目对照（忽略 `dir:` 前缀、末尾斜杠和符号链接；从不比较名字）。目录已不是 Paseo 项目的看板项目，不再出现在 leader 面板、暂停区、首页、按项目页和看板里；不发提醒、不唤醒、不派活；`create`、`register`、`start` 和为它启动 leader 会被拒绝并说明原因；体检不为它报红或黄，只留一条信息。卡片与历史保留：`show` 可看单张卡，`list --include-removed`（工具里是 `includeRemoved`）可列出。读不到 Paseo 或列表为空时，沿用存在 `paseo-projects.json` 里上次读到的列表；从未成功读到过时不过滤任何项目。`paused-projects.json` 现在只表示「在 Paseo 里、临时暂停」的项目。
+
 ## 0.1.0-rc.15 — 待审查与发布
 
 本地候选 tag 为 `v0.1.0-rc.15`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.14 tag 绝不挪动。
