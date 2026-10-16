@@ -161,6 +161,10 @@ async function mergedEnough(task: TaskRow, owned: OwnedWorktree, run: GitRunner,
   const remotes = await run(owned.root, ["remote"]);
   if (remotes.code !== 0) return { kind: "error", error: failure(remotes, t("worktreeGc.gitFailed", { command: "git remote" })) };
   const hasOrigin = remoteNames(remotes.stdout).includes("origin");
+  // Local containment is independent proof: no card commit is lost even when
+  // origin is behind, unreachable, or a recorded PR is still open.
+  const local = branchHere ? await ancestorOf(owned, headRef(owned.base), run) : null;
+  if (local && "yes" in local && local.yes) return { kind: "go" };
   // origin/<base> is its own proof, including when the card names a PR that is still
   // open or whose gh query fails. A failed fetch is not that proof.
   let fetchError: string | undefined;
@@ -180,8 +184,8 @@ async function mergedEnough(task: TaskRow, owned: OwnedWorktree, run: GitRunner,
     if (state.merged) return { kind: "go" };
     return { kind: "not_merged", error: state.error ?? undefined };
   }
-  // A GitHub card with no recorded pull request is not merged. A failed fetch is a
-  // read error, not proof that no pull request exists. Temp cleanup treats
+  // Without ancestry proof, a GitHub card with no recorded PR is not merged.
+  // A failed fetch is a read error, not proof that no PR exists. Temp cleanup treats
   // missingPr on an archived card as keep-the-branch, and does not ask gh.
   if (contract.kind === "github") {
     if (fetchError) return { kind: "not_merged", error: fetchError };
@@ -189,19 +193,14 @@ async function mergedEnough(task: TaskRow, owned: OwnedWorktree, run: GitRunner,
   }
   if (!hasOrigin) {
     if (!branchHere) return { kind: "error", error: t("worktreeGc.branch.localGone") };
-    const ancestor = await ancestorOf(owned, headRef(owned.base), run);
-    if ("error" in ancestor) return { kind: "error", error: ancestor.error };
-    return ancestor.yes ? { kind: "go" } : { kind: "not_merged" };
+    return local && "error" in local ? { kind: "error", error: local.error } : { kind: "not_merged" };
   }
-  // An ancestor of the local base only (never pushed) is not collected.
-  // A failed fetch is unreadable: do not treat a matching local tree as collected.
+  // A failed fetch is unreadable: a matching local tree alone is not containment.
   // Squash leaves the branch tip outside the remote base: an empty diff against
   // origin/<base> after a successful fetch, or gh saying MERGED, is enough.
   if (!branchHere) return { kind: "not_merged" };
   if (!fetchError) {
-    const ancestor = await ancestorOf(owned, headRef(owned.base), run);
-    if ("error" in ancestor) return { kind: "error", error: ancestor.error };
-    if (ancestor.yes) return { kind: "not_merged" };
+    if (local && "error" in local) return { kind: "error", error: local.error };
     const trees = await sameTree(owned, originRef(owned.base), run);
     if (trees === "same") return { kind: "go" };
     if (typeof trees === "object") return { kind: "error", error: trees.error };
@@ -240,22 +239,19 @@ async function originContainedBasis(
 
 /**
  * Why `git branch -D` is refused, or the basis when it is allowed.
- * Allowed when the tip is already in origin/<base> (nothing local is left to lose),
+ * Allowed when the tip is already in the local base or origin/<base> (no commit is lost),
  * even if a recorded PR head is a different commit. Otherwise the card's PR must be
  * merged and the local tip must equal that head, or the branch tree must match
- * origin/<base> after a successful fetch. A matching local base is not enough.
+ * origin/<base> after a successful fetch. A matching local tree alone is not enough.
  * A failed fetch is not a basis. ownedWorktree already checked ownership, and
  * deleteSquashedBranch checks the branch name once more.
  */
 async function forceDelete(task: TaskRow, owned: OwnedWorktree, run: GitRunner): Promise<{ basis: string } | { reason: string }> {
+  const localBase = await ancestorOf(owned, headRef(owned.base), run);
+  if ("yes" in localBase && localBase.yes) return { basis: t("worktreeGc.basis.inBase", { base: owned.base }) };
   const remote = await originContainedBasis(owned, run);
   if ("basis" in remote) return remote;
-  // No remote: containment in the card's base is enough. Never ask HEAD.
-  if ("noOrigin" in remote) {
-    const local = await ancestorOf(owned, headRef(owned.base), run);
-    if ("error" in local) return { reason: local.error };
-    if (local.yes) return { basis: t("worktreeGc.basis.inBase", { base: owned.base }) };
-  }
+  if ("noOrigin" in remote && "error" in localBase) return { reason: localBase.error };
   const pr = readContract(task.contract_json).pr;
   if (pr) {
     const merge = await prMergeState(pr);
@@ -452,8 +448,8 @@ async function deleteBranch(
   force: GitRunner | undefined,
   requirePushed: boolean,
 ): Promise<{ kind: "removed"; basis?: string } | { kind: "error"; error: string }> {
-  // Decide from origin/<base> or the PR head before deleting. git branch -d follows
-  // the main directory's HEAD and would drop commits that are in neither.
+  // Decide from the configured local/origin base or PR head before deleting.
+  // git branch -d follows HEAD, which may be an unrelated branch.
   const pushed = requirePushed ? await pushedWorktreeBasis(task, owned, run) : null;
   const decision = pushed
     ? ("basis" in pushed ? pushed : { reason: "error" in pushed ? pushed.error : t("worktreeGc.branch.differsFromOrigin") })

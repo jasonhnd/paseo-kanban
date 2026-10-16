@@ -1440,6 +1440,7 @@ describe("temporary workspace cleanup", () => {
     await git(root, ["add", "local-only.txt"]);
     await git(root, ["commit", "-m", "local only"]);
     await git(root, ["checkout", "side"]);
+    await git(root, ["branch", "-f", "main", "side"]); // Only origin/base contains the card tip.
     await assert.rejects(git(root, ["merge-base", "--is-ancestor", card.branch, "HEAD"]));
     await git(root, ["merge-base", "--is-ancestor", card.branch, "origin/main"]);
     const box = settlingOps(card.directory, root, inspectAgentFile);
@@ -1470,6 +1471,7 @@ describe("temporary workspace cleanup", () => {
       await git(root, ["add", "local-only.txt"]);
       await git(root, ["commit", "-m", "local only"]);
       await git(root, ["checkout", "side"]);
+      await git(root, ["branch", "-f", "main", "side"]); // Only origin/base contains the card tip.
       await assert.rejects(git(root, ["merge-base", "--is-ancestor", card.branch, "HEAD"]));
       await git(root, ["merge-base", "--is-ancestor", card.branch, "origin/main"]);
       const pr = "https://github.com/acme/widgets/pull/684";
@@ -1615,7 +1617,7 @@ describe("temporary workspace cleanup", () => {
     assert.equal(cleanupRows(card.id).some((row) => row.action === "keep_branch" && row.ok === true), true);
   });
 
-  it("keeps a branch HEAD contains when fetch of origin/<base> fails", async () => {
+  it("deletes a branch the local base contains even when origin fetch fails and the PR head differs", async () => {
     resetMergeCache();
     const { root } = await originAndSide("fetch-head");
     const card = await cardOnMain(root, "fetch-head", (zhCN("labels.identity.current") + zhCNPart("config.badCode", 8, 9)));
@@ -1640,9 +1642,9 @@ describe("temporary workspace cleanup", () => {
       resetMergeCache();
       release();
     }
-    assert.equal((await git(root, ["branch", "--list", card.branch])).includes(card.branch), true);
-    assert.equal(cleanupRows(card.id).some((row) => row.action === "delete_branch" && row.ok === true), false);
-    assert.equal(cleanupRows(card.id).some((row) => row.action === "keep_branch" && row.ok === true), true);
+    assert.equal((await git(root, ["branch", "--list", card.branch])).trim(), "");
+    assert.equal(cleanupRows(card.id).some((row) => row.action === "delete_branch" && row.ok === true), true);
+    assert.equal(cleanupRows(card.id).some((row) => row.action === "keep_branch" && row.ok === true), false);
   });
 
   it("deletes a branch already in origin/<base> while the pull request is still open", async () => {
@@ -1652,6 +1654,7 @@ describe("temporary workspace cleanup", () => {
       const { root } = await originAndSide(name);
       const card = await cardOnMain(root, name, zhCNPart("worktreeGc.leftover.notMerged", 0, 2));
       await git(root, ["checkout", "side"]);
+      await git(root, ["branch", "-f", "main", "side"]); // Only origin/base contains the card tip.
       await assert.rejects(git(root, ["merge-base", "--is-ancestor", card.branch, "HEAD"]));
       await git(root, ["merge-base", "--is-ancestor", card.branch, "origin/main"]);
       const pr = "https://github.com/acme/widgets/pull/688";
@@ -1685,6 +1688,7 @@ describe("temporary workspace cleanup", () => {
       const { root } = await originAndSide(name);
       const card = await cardOnMain(root, name, zhCNPart("worktreeRecord.skip.commitsUnknown", 0, 3));
       await git(root, ["checkout", "side"]);
+      await git(root, ["branch", "-f", "main", "side"]); // Only origin/base contains the card tip.
       const pr = "https://github.com/acme/widgets/pull/689";
       const contract =
         kind === "github"
@@ -1738,6 +1742,7 @@ describe("temporary workspace cleanup", () => {
     const card = await cardOnMain(root, "origin-fetch", zhCNPart("settings.projects.waitParentPr", 4, 6));
     await git(root, ["remote", "set-url", "origin", join(dir, "origin-fetch-missing.git")]);
     await git(root, ["checkout", "side"]);
+    await git(root, ["branch", "-f", "main", "side"]); // Only origin/base contains the card tip.
     const box = settlingOps(card.directory, root, inspectAgentFile);
     const release = installCleanup(box.ops, { timeoutMs: 5_000 });
     const start = new Date();

@@ -237,7 +237,7 @@ describe("remove a board worktree only after it is merged", () => {
     assert.equal((await git(root, ["branch", "--list", outsideBranch])).includes(outsideBranch), true);
   });
 
-  it("does not delete when the repo has a remote and the card is not a merged PR", async () => {
+  it("deletes a local-base ancestor without a merged PR even when origin is behind", async () => {
     const root = await makeRepo("remote");
     const origin = join(dir, "remote.git");
     await git(dir, ["init", "--bare", "-b", "pre", origin]);
@@ -252,8 +252,9 @@ describe("remove a board worktree only after it is merged", () => {
     remember(id, root, branch, directory);
     finish(id, "archived");
     await cleanup();
-    assert.equal(existsSync(directory), true);
-    assert.match(formatAudit(await performAudit(view)), new RegExp(`${cardMark(id)}`));
+    assert.equal(existsSync(directory), false);
+    assert.equal((await git(root, ["branch", "--list", branch])).trim(), "");
+    assert.doesNotMatch(formatAudit(await performAudit(view)), new RegExp(`${cardMark(id)}`));
   });
 
   it("removes a merged PR's worktree and stops at -d when the local branch is not merged", async () => {
@@ -327,7 +328,6 @@ describe("remove a board worktree only after it is merged", () => {
       ["status", "--porcelain"],
       ["worktree", "remove", directory],
       ["branch", "--list", branch],
-      ["remote"],
       ["merge-base", "--is-ancestor", `refs/heads/${branch}`, "refs/heads/pre"],
       ["branch", "-D", branch],
     ]);
