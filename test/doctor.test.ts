@@ -979,16 +979,18 @@ describe("doctor", () => {
     const original = console.error;
     console.error = (...args: unknown[]) => { warnings.push(args.join(" ")); };
     try {
-      const first = collectRepoRoots([]);
-      const second = collectRepoRoots([]);
+      // A same-named valid Paseo workspace must not hide the warning: it is passed from the very first scan.
+      const paseoWorkspace = { id: "w-rel", name: "relative-path-project", directory: join(dir, "issue9-absolute"), projectRoot: join(dir, "issue9-absolute"), kind: "dir", archived: false } as const;
+      const first = collectRepoRoots([paseoWorkspace]);
+      const second = collectRepoRoots([paseoWorkspace]);
       for (const found of [first, second]) {
         assert.equal(found.missing.some((item) => item.project === "no-directory-project" || item.project === "relative-path-project"), false);
         assert.equal(found.skipped.some((item) => item.project === "no-directory-project" || item.project === "relative-path-project"), false);
         assert.equal(found.repos.includes(known), false);
         assert.ok(found.repos.some((path) => path.endsWith("issue9-absolute")));
       }
-      // A same-named valid Paseo workspace must not hide the warning either.
-      collectRepoRoots([{ id: "w-rel", name: "relative-path-project", directory: join(dir, "issue9-absolute"), projectRoot: join(dir, "issue9-absolute"), kind: "dir", archived: false }]);
+      const reported = () => warnings.filter((line) => line.includes("relative-path-project") && line.includes("relative/checkout"));
+      assert.equal(reported().length, 1, "two scans with a same-named Paseo workspace report a relative workspacePath exactly once");
       // Relative card and event directories are never read against the process cwd.
       const cwd = process.cwd();
       const probe = join(dir, "issue9-cwd");
@@ -1002,8 +1004,7 @@ describe("doctor", () => {
       } finally {
         process.chdir(cwd);
       }
-      const relative = warnings.filter((line) => line.includes("relative-path-project") && line.includes("relative/checkout"));
-      assert.equal(relative.length, 1, "a relative workspacePath is reported exactly once");
+      assert.equal(reported().length, 1, "a relative workspacePath is reported exactly once");
       assert.equal(warnings.some((line) => line.includes("no-directory-project")), false);
     } finally {
       console.error = original;
