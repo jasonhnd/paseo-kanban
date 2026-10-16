@@ -77,7 +77,7 @@ These limits stay in force for `0.1.0-rc.17`:
 
 ## Release body substitution
 
-Prepare the bilingual release body for review. Replace these tokens only as whole tokens:
+Prepare the GitHub Release body in English only for review. Chinese release documentation stays under [`docs/zh-CN/`](zh-CN/RELEASE.md). Replace these tokens only as whole tokens:
 
 | Token | Replacement |
 |---|---|
