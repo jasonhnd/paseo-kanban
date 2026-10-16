@@ -226,6 +226,15 @@ describe("a project that left Paseo is quiet everywhere", () => {
     assert.equal(listBoard("alpha", { includeRemoved: true }).tasks.length, 1);
   });
 
+  it("hides the cards from the list tool and shows them with includeRemoved", async () => {
+    open("alpha", "history");
+    open("beta", "live");
+    const hidden = (await handleTool("kanban_list", {}, null, LEADER)) as { tasks: Array<{ project: string }> };
+    assert.deepEqual(hidden.tasks.map((card) => card.project), ["beta"]);
+    const shown = (await handleTool("kanban_list", { includeRemoved: true }, null, LEADER)) as { tasks: Array<{ project: string }> };
+    assert.deepEqual(shown.tasks.map((card) => card.project).sort(), ["alpha", "beta"]);
+  });
+
   it("drops the project from the by-project rows, but includeRemoved brings it back", () => {
     open("alpha");
     open("beta");
