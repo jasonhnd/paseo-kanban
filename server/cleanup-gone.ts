@@ -3,6 +3,7 @@ import { lstat, readdir } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import { agentsOpenedBy, type CleanupRecord } from "./archive-book";
 import { getDb } from "./db";
+import { agentsTouching, readCwdAgentList } from "./missing-cwd";
 import { headRef, isProtectedBranch, refOk, runGit } from "./git";
 import { laneBinding } from "./lane";
 import { samePath } from "./placement";
@@ -17,6 +18,8 @@ export interface GoneReader {
   agent(id: string): Promise<AgentSnapshot | null>;
   /** Also covers a rebind, reopened card and the round's time budget. */
   current(): boolean;
+  /** The round's clock, so a failure row's retryAt is judged against the same time the cleanup job uses. */
+  now?: Date;
 }
 
 const RESOURCE_ACTIONS = new Set(["archive_agent", "wait_turn", "restore_stuck", "archive_workspace", "purge_agents", "drop_directory", "delete_branch", "delete_lane_branch", "remove_worktree", "skip_worktree", "wip_commit"]);
@@ -121,7 +124,11 @@ export async function reconcileGone(task: TaskRow, events: CleanupRecord[], read
         if (failed.action === "drop_directory") gone = await directoryAbsent(binding.directory);
         else if (failed.action === "delete_branch" || failed.action === "delete_lane_branch") gone = await branchAbsent(binding.root, branch);
         else if (failed.action === "purge_agents") {
-          // Directory-level purge succeeds only when every card-owned agent is absent.
+          // The directory-level purge also guards the agents that are not ours, and those are what usually made it fail.
+          // It is done only when no agent of any card still points here; until then the failure row and its retryAt stay.
+          if (failed.retryAt && Date.parse(failed.retryAt) > (read.now ?? new Date()).getTime()) continue;
+          const listed = readCwdAgentList();
+          if (!listed || agentsTouching(binding.directory, listed).length > 0) continue;
           gone = ours.size > 0;
           for (const id of ours) { if (!read.current() || !await agentGone(id)) { gone = false; break; } }
         } else if (["remove_worktree", "skip_worktree", "wip_commit"].includes(failed.action!)) {

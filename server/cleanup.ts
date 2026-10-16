@@ -1253,6 +1253,7 @@ async function reconcileLocked(id: number, chosen: CleanupOps, now: Date, sweep:
           if (!chosen.inspectAgent) return Promise.reject(new Error("Agent inspection unavailable"));
           return chosen.inspectAgent(agentId);
         },
+        now,
         current: () => reading && mine === generation && Boolean(ops) && stillFinished(id) && performance.now() - roundStarted < RECONCILE_ROUND_BUDGET_MS,
       }, data => record(id, data, events)), budget);
     } catch {

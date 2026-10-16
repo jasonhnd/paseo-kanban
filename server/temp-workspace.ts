@@ -194,7 +194,10 @@ type RecordCleanup = (data: Omit<CleanupRecord, "at">) => void;
 
 /** A per-agent purge result sets agentId. Only a directory-level success finishes that step. */
 function recorded(events: CleanupRecord[], action: string): boolean {
-  return events.some((event) => event.action === action && event.ok === true && event.agentId === undefined);
+  // A reconcile "gone" row for the directory-level purge never counts: only a purge round that has just looked at
+  // every agent pointing at the directory (another card's included) may finish this step, so a foreign agent is never skipped.
+  return events.some((event) => event.action === action && event.ok === true && event.agentId === undefined &&
+    !(action === "purge_agents" && event.reconciled === true));
 }
 
 function agentPurgeDone(events: CleanupRecord[], agentId: string): boolean {
