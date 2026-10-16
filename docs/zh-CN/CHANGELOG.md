@@ -4,6 +4,8 @@
 
 ## 未发布
 
+- 更正发布清单：GitHub Release 正文只用英文，中文发布说明保留在 `docs/zh-CN/`。
+
 ## 0.1.0-rc.17 — 待审查与发布
 
 本地候选 tag 为 `v0.1.0-rc.17`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.16 tag 绝不挪动。
