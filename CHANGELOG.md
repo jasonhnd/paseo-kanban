@@ -5,6 +5,10 @@ Thirteen release candidates are recorded here. `0.1.0-rc.13` is the current unpu
 
 ## Unreleased
 
+### Fixed
+
+- Temporary card cleanup accepts the branch tip as merged when either the configured local base or freshly fetched `origin/<base>` contains it. Local-only merges no longer require a push or `--discard-unmerged`, including when origin is behind or unavailable. Local containment also permits branch deletion; a matching local tree alone is insufficient. Cleanup removes the orphan worktree/workspace findings from doctor. Existing PR/squash proofs and explicit discard safeguards remain. Fixes [issue #8](https://github.com/jasonhnd/paseo-kanban/issues/8).
+
 ## 0.1.0-rc.13 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.13`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.12 tags are never moved.

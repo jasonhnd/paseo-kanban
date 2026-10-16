@@ -4,6 +4,10 @@
 
 ## 未发布
 
+### 修复（Fixed）
+
+- 临时卡清理时，卡分支 tip 只要是配置的本地基准分支或成功 fetch 后的 `origin/<base>` 的祖先，任一成立即视为已合并。本地合并无需 push 或 `--discard-unmerged`，即使 origin 落后或不可达也可清理；本地包含关系同样允许删除卡分支，仅本地树内容相同仍不足以证明。清理完成后 doctor 的残留 worktree／workspace 两条红自然消失。既有 PR／squash 证明和显式丢弃保护保留。修复 [issue #8](https://github.com/jasonhnd/paseo-kanban/issues/8)。
+
 ## 0.1.0-rc.13 — 待审查与发布
 
 本地候选 tag 为 `v0.1.0-rc.13`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.12 tag 绝不挪动。

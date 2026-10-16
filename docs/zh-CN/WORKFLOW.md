@@ -52,6 +52,8 @@ L1：清楚的小改；L2：集中常规改动；L3：跨文件或调查；L4：
 
 `resume-cleanup <卡号>` 清除清理的停止重试标记。全局 Kanban leader（`supervisorAgentId`）可处理所有项目；普通的别项目 leader 仍被拒绝。这项例外不授予其他卡操作权限。普通恢复不会丢弃未合回工作：`not_merged` 仍保留副本和分支。
 
+正常清理时，卡分支 tip 只要是配置的本地基准分支或成功 fetch 后的 `origin/<base>` 的祖先，任一成立即视为已合并。即使 origin 落后或不可达，本地包含关系也足够，无需 push、新设置或丢弃授权。判断明确使用配置的基准，不依赖主 checkout 当前所在分支。仅本地树内容相同但没有祖先关系仍不足以证明；两边都不包含且既有 PR／squash 证明也不成立时，仍以 `not_merged` 保留。归属、干净副本及活跃 agent 检查继续生效。清理删除 worktree 并归档 workspace 后，doctor 对应的两条残留告警自然消失。
+
 项目登记的 leader 已决定丢弃提交时，可由该 leader 或全局 Kanban leader 执行：
 
 ```sh
