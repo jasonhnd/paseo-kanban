@@ -13,6 +13,7 @@ import { superviseProject } from "./leader-registry";
 import { livePresence } from "./live-presence";
 import type { AgentPresence } from "./presence";
 import { statusLabel } from "../shared/labels";
+import { scheduledWaitLabel } from "../shared/blocked";
 import { taskParents } from "./parents";
 import { normalizeTags } from "./profile-rules";
 import { parseEffort } from "./effort";
@@ -89,7 +90,7 @@ export function toolDefs(language: Language = getLanguage()): McpTool[] {
   },
   { name: "kanban_comment", description: text("kanban_comment.description"), inputSchema: { type: "object", properties: { id: CARD_REF, text: { type: "string" } }, required: ["text"] } },
   { name: "kanban_complete", description: text("kanban_complete.description"), inputSchema: { type: "object", properties: { id: CARD_REF, summary: { type: "string" }, handoff: { description: text("kanban_complete.param.handoff") }, onBehalf: { type: "boolean" } }, required: ["summary"] } },
-  { name: "kanban_block", description: text("kanban_block.description"), inputSchema: { type: "object", properties: { id: CARD_REF, reason: { type: "string" }, kind: { type: "string" } }, required: ["reason", "kind"] } },
+  { name: "kanban_block", description: text("kanban_block.description"), inputSchema: { type: "object", properties: { id: CARD_REF, reason: { type: "string" }, kind: { type: "string" }, until: { type: "string", description: text("kanban_block.param.until") } }, required: ["reason", "kind"] } },
   { name: "kanban_approve", description: text("kanban_approve.description"), inputSchema: { type: "object", properties: { id: CARD_REF, summary: { type: "string" } }, required: ["summary"] } },
   { name: "kanban_request_changes", description: text("kanban_request_changes.description"), inputSchema: { type: "object", properties: { id: CARD_REF, reason: { type: "string" }, findings: { type: "string" } }, required: ["reason"] } },
   { name: "kanban_create", description: text("kanban_create.description"), inputSchema: { type: "object", properties: { project: { type: "string" }, title: { type: "string" }, brief: { type: "string" }, role: { type: "string" }, workspace: { type: "string" }, profile: { type: "string" }, parents: { type: "array", items: CARD_REF, description: text("kanban_create.param.parents") }, reviews: { ...CARD_REF, description: text("kanban_create.param.reviews") }, contract: { type: "string" }, maxRetries: { type: "number" }, tags: { type: "array", items: { type: "string" }, description: text("kanban_create.param.tags") }, effort: { type: "string", description: text("kanban_create.param.effort") }, tier: { type: "string", description: text("kanban_create.param.tier") }, decision: { type: "string", description: text("kanban_create.param.decision") } }, required: ["project", "title", "role"] } },
@@ -360,7 +361,7 @@ async function handleAuthenticatedTool(name: string, args: Record<string, unknow
     case "kanban_complete":
       return completeTask(taskId(identity, args), identity.role, String(args.summary ?? ""), args.handoff);
     case "kanban_block":
-      return blockTask(taskId(identity, args), String(args.kind ?? ""), String(args.reason ?? ""), identity.role);
+      return blockTask(taskId(identity, args), String(args.kind ?? ""), String(args.reason ?? ""), identity.role, { until: args.until });
     case "kanban_approve":
       return approveTask(taskId(identity, args), String(args.summary ?? ""), identity.role);
     case "kanban_request_changes":
@@ -496,17 +497,20 @@ export function formatResult(data: unknown): string {
     const warningText = warnings.map(warning => `\n${t("tools.result.warning", { warning })}`).join("");
     const waiting = (data as { wait_decision?: string | null }).wait_decision;
     const status = t("tools.result.status", { status: statusLabel(task.status) });
-    const wait = waiting ? t("common.paren", { text: waitUserHold(waiting) }) : "";
+    const scheduled = data as { blocked_kind?: string | null; scheduled_until?: string | null };
+    const wait = task.status === "blocked" && scheduled.blocked_kind === "scheduled" && scheduled.scheduled_until
+      ? t("common.paren", { text: scheduledWaitLabel(scheduled.scheduled_until) }) : waiting ? t("common.paren", { text: waitUserHold(waiting) }) : "";
     const project = task.project ? `\n${t("tools.result.project", { project: task.project })}` : "";
     return `${label} ${task.title}\n${status}${wait}${project}${landed}${warningText}`;
   }
   if (data && typeof data === "object" && Array.isArray((data as { tasks?: unknown }).tasks)) {
-    const tasks = (data as { tasks: Array<{ id: number; code?: string; title: string; status: string; project?: string; waitDecision?: string | null }> }).tasks;
+    const tasks = (data as { tasks: Array<{ id: number; code?: string; title: string; status: string; project?: string; waitDecision?: string | null; blockedKind?: string | null; scheduledUntil?: string | null }> }).tasks;
     if (tasks.length === 0) return t("tools.result.noCards");
     return tasks
       .map((task) => {
         const label = task.code || cardMark(task.id);
-        const state = task.waitDecision ? `${statusLabel(task.status)}${t("common.comma")}${waitUserHold(task.waitDecision)}` : statusLabel(task.status);
+        const state = task.status === "blocked" && task.blockedKind === "scheduled" && task.scheduledUntil
+          ? scheduledWaitLabel(task.scheduledUntil) : task.waitDecision ? `${statusLabel(task.status)}${t("common.comma")}${waitUserHold(task.waitDecision)}` : statusLabel(task.status);
         return `${label} ${task.title}${t("common.paren", { text: state })}${task.project ? ` · ${task.project}` : ""}`;
       })
       .join("\n");

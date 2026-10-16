@@ -7,7 +7,7 @@
   "kanban_comment.description": "在卡片上留言。",
   "kanban_complete.description": "执行、通读、决策、杂活收尾。执行卡会进入待审查。交付已备好、等 PR 合并／等别的卡时照常交活，在可选 handoff.waitingOn 写明等什么，卡片显示「等外部：…」。没有 CI 的仓库，合并前在本机跑测试和构建，结果写进交接。",
   "kanban_complete.param.handoff": "交接须含 files、verification、risks；可选 waitingOn（文字），例如 PR <url> 合并、前置卡完成。等外部不改变交活后的流转。",
-  "kanban_block.description": "真正需要人（权限、用户决定等）才卡住，用 needs_human。kind 只能是 dependency、needs_human、capability、quota、rate_limit、transient。执行者用 dependency 报等 PR／等别的卡会被拒绝：这不算卡住，请交活并在交接写明等什么（handoff.waitingOn）。没有 CI 的仓库，合并前在本机跑测试和构建，结果写进交接。等 CI 时照常交活，在 handoff.waitingOn 写明等待。",
+  "kanban_block.description": "真正需要人（权限、用户决定等）才卡住，用 needs_human。kind 只能是 dependency、needs_human、capability、quota、rate_limit、transient、scheduled。执行者用 dependency 报等 PR／等别的卡会被拒绝：这不算卡住，请交活并在交接写明等什么（handoff.waitingOn）。没有 CI 的仓库，合并前在本机跑测试和构建，结果写进交接。等 CI 时照常交活，在 handoff.waitingOn 写明等待。 按钟点等待用 kind scheduled 和 until（带时区偏移的未来 ISO 时间，最多 7 天），不要用 transient；到点自动恢复一次，<leader>可提前 unblock。",
   "kanban_approve.description": "审查通过，卡片进入待验收。",
   "kanban_request_changes.description": "审查打回。同一张卡第 2 次审查打回停在返工，叫醒 <leader> 裁定，不自动发回执行者。先核对简报和范围，裁定 rework／pass／改简报；只剩 P2 就 pass 并另开卡记遗留。第 3 轮熔断仅作裁定发回后的兜底，kind 为 needs_human。合回冲突退回不计轮次。",
   "kanban_create.description": "<leader>拆卡；排查、测试、改文件都交给角色。合并 PR 前亲自看 diff 和审查结论，在卡上写「可以合」，再建杂活卡（role=batch）。",
@@ -33,5 +33,6 @@
   "kanban_supervise.description": "把本会话登记为某个已配置项目的 <leader>。只使用调用者自己的身份。原 <leader> 仍在时必须先交接。工人和定时任务不能登记。未登记不能建卡。",
   "kanban_supervise.param.project": "已配置的项目名或项目代号。",
   "kanban_grant_read.description": "已登记的本项目<leader>或 Kanban <leader>授予指定卡本项目全部卡只读；交活、完成或归档后失效，写权限不变。",
-  "kanban_revoke_read.description": "已登记的本项目<leader>或 Kanban <leader>撤销指定卡的项目只读权限。"
+  "kanban_revoke_read.description": "已登记的本项目<leader>或 Kanban <leader>撤销指定卡的项目只读权限。",
+  "kanban_block.param.until": "仅 scheduled 必填：带时区偏移（Z 或 +/-HH:MM）的未来 ISO 时间，最多 7 天；更长等待让<leader>用 wait-user。"
 }

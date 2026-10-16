@@ -1,4 +1,6 @@
 /// <reference types="node" />
+import { randomUUID } from "node:crypto";
+import { scheduledUntil } from "./scheduled-time";
 import { agentReleaseRequested } from "./archive-book";
 import { getDb } from "./db";
 import { cachedMergeState, contractPullRequest, type ContractState } from "./pr";
@@ -33,14 +35,16 @@ export function blockTask(id: number, kind: string, reason: string, actor: strin
     addEvent(id, "block_rejected", null, null, actor, { kind, reason: text, message: externalWaitMessage() });
     throw new KanbanError("invalid", externalWaitMessage());
   }
+  const until = scheduledUntil(kind, extra?.until);
   assertTransition(task.status, "blocked");
   const ts = now();
   const info = getDb()
     .prepare(
-      `UPDATE tasks SET status = 'blocked', blocked_kind = ?, blocked_reason = ?, blocked_from = ?, blocked_at = ?, hold_reason = ?, updated_at = ?
+      `UPDATE tasks SET status = 'blocked', blocked_kind = ?, blocked_reason = ?, blocked_from = ?, blocked_at = ?, hold_reason = ?, updated_at = ?,
+       scheduled_until = ?, scheduled_wake_id = ?, scheduled_claim_id = NULL, scheduled_claim_until = NULL
        WHERE id = ? AND status = ?`,
     )
-    .run(kind, text, task.status, ts, text, ts, id, task.status);
+    .run(kind, text, task.status, ts, text, ts, until, until ? randomUUID() : null, id, task.status);
   if (info.changes !== 1) throw new KanbanError("conflict", t("taskLifecycle.error.statusChanged", { card: cardMark(id) }), { id });
   addEvent(id, "blocked", task.status, "blocked", actor, { kind, reason: text, ...(extra ?? {}) });
   addComment(id, actor, t("taskLifecycle.block.comment", { kind: blockedKindLabel(kind), reason: text }));
@@ -173,13 +177,13 @@ export function unblockTask(id: number, actor: string, extra?: Record<string, un
   const info = departed
     ? getDb()
         .prepare(
-          `UPDATE tasks SET status = ?, agent_id = NULL, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, nudge_count = 0, updated_at = ?
+          `UPDATE tasks SET status = ?, agent_id = NULL, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
            WHERE id = ? AND status = 'blocked'`,
         )
         .run(target, ts, id)
     : getDb()
         .prepare(
-          `UPDATE tasks SET status = ?, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, nudge_count = 0, updated_at = ?
+          `UPDATE tasks SET status = ?, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
            WHERE id = ? AND status = 'blocked'`,
         )
         .run(target, ts, id);
@@ -202,29 +206,44 @@ export function releaseSameTransient(
   held: { blockedAt: string; agentId: string | null },
   extra?: Record<string, unknown>,
 ): TaskRow | null {
+  return releaseSameBlock(id, actor, "transient", held, extra);
+}
+
+export function releaseSameScheduled(
+  id: number, actor: string, held: { blockedAt: string; agentId: string | null; wakeId: string }, extra?: Record<string, unknown>,
+): TaskRow | null {
+  return releaseSameBlock(id, actor, "scheduled", held, extra);
+}
+
+function releaseSameBlock(
+  id: number, actor: string, kind: "transient" | "scheduled",
+  held: { blockedAt: string; agentId: string | null; wakeId?: string }, extra?: Record<string, unknown>,
+): TaskRow | null {
   const task = taskById(id);
-  if (task.status !== "blocked" || task.blocked_kind !== "transient") return null;
+  if (task.status !== "blocked" || task.blocked_kind !== kind) return null;
   if (task.blocked_at !== held.blockedAt || (task.agent_id ?? null) !== held.agentId) return null;
+  if (kind === "scheduled" && task.scheduled_wake_id !== held.wakeId) return null;
   const restore = (task.blocked_from as Status | null) ?? "ready";
   let target: Status = restore === "blocked" || restore === "archived" ? "ready" : restore;
   const departed = target === "running" || target === "reviewing" ? departedAgent(task) : null;
   if (departed) target = "ready";
   assertTransition("blocked", target);
   const ts = now();
-  const where = `WHERE id = ? AND status = 'blocked' AND blocked_kind = 'transient' AND blocked_at = ? AND agent_id IS ?`;
+  const where = `WHERE id = ? AND status = 'blocked' AND blocked_kind = ? AND blocked_at = ? AND agent_id IS ?
+    AND scheduled_wake_id IS ?`;
   const info = departed
     ? getDb()
         .prepare(
-          `UPDATE tasks SET status = ?, agent_id = NULL, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, nudge_count = 0, updated_at = ?
+          `UPDATE tasks SET status = ?, agent_id = NULL, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
            ${where}`,
         )
-        .run(target, ts, id, held.blockedAt, held.agentId)
+        .run(target, ts, id, kind, held.blockedAt, held.agentId, task.scheduled_wake_id)
     : getDb()
         .prepare(
-          `UPDATE tasks SET status = ?, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, nudge_count = 0, updated_at = ?
+          `UPDATE tasks SET status = ?, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
            ${where}`,
         )
-        .run(target, ts, id, held.blockedAt, held.agentId);
+        .run(target, ts, id, kind, held.blockedAt, held.agentId, task.scheduled_wake_id);
   if (info.changes !== 1) return null;
   if (departed) closeOpenRuns(id, "unblocked", ts);
   const data = departed

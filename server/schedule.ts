@@ -40,6 +40,8 @@ import { isProjectPaused } from "./paused";
 import { scanStalled, type AgentActivity } from "./stall";
 import { waitUserHold } from "./wait-user";
 import { appendEvent, blockTask, getTask, setHold, unblockTask, type TaskRow } from "./store";
+import { resumeScheduledWaits } from "./scheduled-wait";
+import type { PaseoAgentSendOptions } from "@getpaseo/client";
 import { retryTransientBlocks } from "./transient-retry";
 import { tempWorkspaceMessage } from "./temp-workspace";
 import { awaitingLeaderHold, leaderHoldReason } from "./review-hold";
@@ -55,7 +57,7 @@ export interface TickOptions {
   profiles?: Profile[];
   launcher: AgentLauncher;
   agentState?: (agentId: string | null) => AgentLiveness;
-  send?: (agentId: string, text: string) => Promise<void>;
+  send?: (agentId: string, text: string, options?: PaseoAgentSendOptions) => Promise<void>;
   pools?: PoolSnapshot;
   config?: KanbanConfig;
   /** How often to look for idle agents. Zero checks on every tick. */
@@ -734,6 +736,7 @@ export async function runTick(options: TickOptions): Promise<TickResult> {
       }
     }
   });
+  await phase("tick.scheduledWait", () => resumeScheduledWaits(now, options.send));
   await phase("tick.transientRetry", async () => {
     try {
       await retryTransientBlocks(now, config, options.send);

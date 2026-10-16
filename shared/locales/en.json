@@ -2060,5 +2060,14 @@
   "worktreeRecord.skip.readOnlyNotRemoved": "Could not remove the read-only copy",
   "worktreeRecord.skip.uncommitted": "There are uncommitted changes",
   "writeSource.invalidHandoffJson": "The handoff string is not valid JSON; the original content was retained.",
-  "writeSource.retention": "write_audits: {verb} {rows} source audit rows older than {days} days (including orphan and unfinished cards; cards, comments and handoffs are retained). "
+  "writeSource.retention": "write_audits: {verb} {rows} source audit rows older than {days} days (including orphan and unfinished cards; cards, comments and handoffs are retained). ",
+  "blocked.kind.scheduled": "Scheduled wait",
+  "scheduled.label": "Scheduled wait until {until}",
+  "scheduled.error.onlyScheduled": "--until is only valid with kind scheduled.",
+  "scheduled.error.format": "until must be a valid ISO timestamp with an explicit timezone offset (Z or +/-HH:MM).",
+  "scheduled.error.future": "until must be a future ISO timestamp.",
+  "scheduled.error.limit": "Scheduled waits cannot exceed 7 days. Ask the <leader> to use wait-user for longer waits.",
+  "scheduled.wake": "The scheduled wait until {until} has ended. Resume this card now; use scheduled with a new until if another timed wait is needed.",
+  "scheduled.timeout.send": "send scheduled resume prompt",
+  "boardView.blocked.scheduled": "The board resumes this card once the deadline arrives. Use scheduled with until for wall-clock waits; do not use transient. The <leader> can unblock early."
 }

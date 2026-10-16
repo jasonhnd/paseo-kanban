@@ -1,6 +1,8 @@
 import { agentCwdMissing, noteWakeSkipped } from "./missing-cwd";
 
-type WakeSender = (agentId: string, text: string) => unknown;
+import type { PaseoAgentSendOptions } from "@getpaseo/client";
+
+type WakeSender = (agentId: string, text: string, options?: PaseoAgentSendOptions) => unknown;
 
 let sender: WakeSender = () => {};
 let senderReady = false;
@@ -31,14 +33,14 @@ function rejected(err: unknown): false {
  * promise that never rejects. Callers that must write their record right after a synchronous
  * send use this; everyone else uses deliverWake.
  */
-export function sendWake(agentId: string, text: string): boolean | Promise<boolean> {
+export function sendWake(agentId: string, text: string, options?: PaseoAgentSendOptions): boolean | Promise<boolean> {
   const missing = agentCwdMissing(agentId);
   if (missing) {
     noteWakeSkipped(null, agentId, missing, "deliver");
     return false;
   }
   try {
-    const result = sender(agentId, text);
+    const result = sender(agentId, text, options);
     if (result && typeof (result as { then?: unknown }).then === "function") {
       return Promise.resolve(result).then(() => true, rejected);
     }
@@ -49,6 +51,6 @@ export function sendWake(agentId: string, text: string): boolean | Promise<boole
 }
 
 /** Resolves true only after the sender accepts the text. A rejection is not a delivery. */
-export function deliverWake(agentId: string, text: string): Promise<boolean> {
-  return Promise.resolve(sendWake(agentId, text));
+export function deliverWake(agentId: string, text: string, options?: PaseoAgentSendOptions): Promise<boolean> {
+  return Promise.resolve(sendWake(agentId, text, options));
 }

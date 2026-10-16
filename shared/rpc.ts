@@ -16,6 +16,7 @@ export const cardSchema = z.object({
   agentId: z.string().nullable(),
   reviewRound: z.number(),
   blockedAt: z.string().nullable(),
+  scheduledUntil: z.string().nullable().optional(),
   blockedKind: z.string().nullable(),
   blockedReason: z.string().nullable(),
   startedAt: z.string().nullable(),

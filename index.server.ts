@@ -176,7 +176,7 @@ export default function contribute(server: PluginServerContext) {
     releaseCleanup();
     releaseCleanup = installCleanup(cleanupOps(paseo), { keepSweepClock: cleanupBound });
     cleanupBound = true;
-    setWakeSender((agentId, text) => paseo.agents.ref(agentId).send(text));
+    setWakeSender((agentId, text, options) => paseo.agents.ref(agentId).send(text, options));
   }
 
   const hooks = createLifecycleHooks({

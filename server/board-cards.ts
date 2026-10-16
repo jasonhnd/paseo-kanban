@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { scheduledWaitLabel } from "../shared/blocked";
 import { LEADER_UNRESPONSIVE_TAG } from "./leader-activity";
 import { loadAcceptanceReviewWaits, acceptanceReviewWaitText, type AcceptanceReviewWait } from "./acceptance-review-wait";
 import { awaitingLeaderHold } from "./review-hold";
@@ -62,6 +63,7 @@ export interface BoardCard {
   agentId: string | null;
   reviewRound: number;
   blockedAt: string | null;
+  scheduledUntil: string | null;
   blockedKind: string | null;
   blockedReason: string | null;
   startedAt: string | null;
@@ -276,6 +278,7 @@ function cardHead(facts: CardFacts) {
     executorAgentId: task.executor_agent_id,
     reviewRound: task.review_round,
     blockedAt: task.blocked_at,
+    scheduledUntil: task.scheduled_until,
     blockedKind: task.blocked_kind,
     blockedReason: task.blocked_reason,
   };
@@ -303,7 +306,8 @@ function cardStatus(facts: CardFacts) {
 function cardFace(facts: CardFacts) {
   const { task, returned, parents, pending, profile, model, started, run, acceptance, reviewOf, defaultTier, downstreamCount, context } = facts;
   return {
-    badge: context.reviewWaits.has(task.id) ? t('acceptanceReviewWait.badge') : cardBadge({
+    badge: task.status === "blocked" && task.blocked_kind === "scheduled" && task.scheduled_until
+      ? scheduledWaitLabel(task.scheduled_until) : context.reviewWaits.has(task.id) ? t('acceptanceReviewWait.badge') : cardBadge({
       status: task.status,
       reviewRound: task.review_round,
       parentMarks: parents.map((item) => item.code),

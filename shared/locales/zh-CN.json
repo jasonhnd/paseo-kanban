@@ -2060,5 +2060,14 @@
   "worktreeRecord.skip.readOnlyNotRemoved": "删不掉只读副本",
   "worktreeRecord.skip.uncommitted": "有未提交的改动",
   "writeSource.invalidHandoffJson": "交接中的 handoff 字串不是合法 JSON；原内容已保留。",
-  "writeSource.retention": "write_audits：{verb}超过 {days} 天的来源审计 {rows} 行（含无所属卡和未完成卡，不删卡片、评论或交接）。"
+  "writeSource.retention": "write_audits：{verb}超过 {days} 天的来源审计 {rows} 行（含无所属卡和未完成卡，不删卡片、评论或交接）。",
+  "blocked.kind.scheduled": "定时等待",
+  "scheduled.label": "定时等待到 {until}",
+  "scheduled.error.onlyScheduled": "--until 只能用于 kind scheduled。",
+  "scheduled.error.format": "until 必须是有效 ISO 时间，并明确带时区偏移（Z 或 +/-HH:MM）。",
+  "scheduled.error.future": "until 必须是未来的 ISO 时间。",
+  "scheduled.error.limit": "定时等待不能超过 7 天；更长的等待请让<leader>用 wait-user。",
+  "scheduled.wake": "定时等待到 {until} 已结束。现在继续本卡；如需再次按钟点等待，请用 scheduled 并提供新的 until。",
+  "scheduled.timeout.send": "发送定时恢复提示",
+  "boardView.blocked.scheduled": "到点后看板自动恢复本卡。按钟点等待用 scheduled 和 until，不用 transient。<leader>可提前 unblock。"
 }

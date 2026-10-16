@@ -1,4 +1,4 @@
-import { blockedKindLabel, isExternalWaitText, isQuotaWaitReason } from "./blocked";
+import { blockedKindLabel, isExternalWaitText, isQuotaWaitReason, scheduledWaitLabel } from "./blocked";
 import { cardDecisions, type DecisionView } from "./decisions";
 import { t, type MessageKey } from "./i18n";
 import { isConflictBadge, isLandPendingBadge, LEADER_LABEL, messageInAnyLanguage, statusLabel } from "./labels";
@@ -15,6 +15,7 @@ export interface ViewTask {
   column: string;
   reviewRound: number;
   blockedKind: string | null;
+  scheduledUntil?: string | null;
   blockedReason: string | null;
   nextStep: string | null;
   returnNote: string | null;
@@ -141,6 +142,7 @@ export interface AttentionItem<T extends ViewTask = ViewTask> {
 export function attentionOf<T extends ViewTask>(task: T, decisions: readonly DecisionView[]): AttentionItem<T> | null {
   const matched = task.status === "archived" ? [] : cardDecisions(task.code, decisions);
   const base = { task, decisions: matched.length, quiet: false };
+  if (task.status === "blocked" && task.blockedKind === "scheduled" && task.scheduledUntil && Date.parse(task.scheduledUntil) > Date.now()) return null;
   if (task.status === "blocked") {
     return { ...base, rank: 0, reason: `${t("labels.status.blocked")}${task.blockedKind ? ` · ${blockedKindLabel(task.blockedKind)}` : ""}` };
   }
@@ -280,13 +282,14 @@ function blockedGuide(task: ViewTask, ctx: GuideContext): HandlingGuide {
   else if (task.blockedKind === "dependency") steps.push(t("boardView.blocked.dependency"));
   else if (task.blockedKind === "quota" || task.blockedKind === "rate_limit") steps.push(t("boardView.blocked.quota"));
   else if (task.blockedKind === "transient") steps.push(t("boardView.blocked.transient"));
+  else if (task.blockedKind === "scheduled") steps.push(t("boardView.blocked.scheduled"));
   else steps.push(t("boardView.blocked.whoDefault", { leader: LEADER_LABEL }));
   if (ctx.parents.length > 0) {
     const list = ctx.parents.map((item) => `${item.code}${t("common.paren", { text: statusLabel(item.status) })}`).join(t("common.listSep"));
     steps.push(t("boardView.blocked.parents", { list }));
   }
   return {
-    headline: t("boardView.blocked.headline"),
+    headline: task.blockedKind === "scheduled" && task.scheduledUntil ? scheduledWaitLabel(task.scheduledUntil) : t("boardView.blocked.headline"),
     steps,
     commands: [
       `bin/kanban unblock ${task.code}`,

@@ -1,7 +1,7 @@
-import { t, type MessageKey } from "./i18n";
+import { getLanguage, t, type MessageKey } from "./i18n";
 import { startsWithMessage } from "./labels";
 
-export const BLOCKED_KINDS = ["dependency", "needs_human", "capability", "quota", "rate_limit", "transient"] as const;
+export const BLOCKED_KINDS = ["dependency", "needs_human", "capability", "quota", "rate_limit", "transient", "scheduled"] as const;
 export type BlockedKind = (typeof BLOCKED_KINDS)[number];
 
 const BLOCKED_KIND_LABEL_KEYS: Readonly<Record<BlockedKind, MessageKey>> = {
@@ -11,6 +11,7 @@ const BLOCKED_KIND_LABEL_KEYS: Readonly<Record<BlockedKind, MessageKey>> = {
   quota: "blocked.kind.quota",
   rate_limit: "blocked.kind.rateLimit",
   transient: "blocked.kind.transient",
+  scheduled: "blocked.kind.scheduled",
 };
 
 export function isBlockedKind(kind: string): kind is BlockedKind {
@@ -58,4 +59,13 @@ export function cardQueueAlert(status: string, nextStep: string | null): string 
   const head = nextStep.split("\n")[0] ?? nextStep;
   if (isQuotaWaitReason(head) || isExternalWaitText(head)) return nextStep;
   return t("blocked.nextStep", { step: nextStep });
+}
+
+/** Render in the viewer's local timezone, retaining the timezone name to avoid ambiguity. */
+export function scheduledWaitLabel(until: string): string {
+  const date = new Date(until);
+  const local = Number.isFinite(date.getTime())
+    ? date.toLocaleString(getLanguage(), { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short" })
+    : until;
+  return t("scheduled.label", { until: local });
 }

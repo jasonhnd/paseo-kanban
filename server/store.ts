@@ -23,6 +23,7 @@ export {
   finishedAt,
   notifyFinished,
   releaseSameTransient,
+  releaseSameScheduled,
   requestAgentReleases,
   resumableAgentId,
   setBlockedListener,

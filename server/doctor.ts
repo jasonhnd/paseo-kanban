@@ -186,6 +186,7 @@ interface DocTask {
   blocked_kind: string | null;
   blocked_reason: string | null;
   blocked_at: string | null;
+  scheduled_until: string | null;
   hold_reason: string | null;
   updated_at: string;
   created_at: string;
@@ -373,7 +374,7 @@ function parseData(text: string): Record<string, unknown> {
 function loadTasks(db: DatabaseSync): DocTask[] {
   return db.prepare(
     `SELECT id, project, title, status, role, code_seq, workspace_path, workspace_kind,
-            paseo_workspace_id, agent_id, executor_agent_id, blocked_kind, blocked_reason, blocked_at,
+            paseo_workspace_id, agent_id, executor_agent_id, blocked_kind, blocked_reason, blocked_at, scheduled_until,
             hold_reason, updated_at, created_at
      FROM tasks ORDER BY id`,
   ).all() as unknown as DocTask[];
@@ -1423,11 +1424,12 @@ function checkCards(
     }
     if (task.status === "blocked") {
       const kind = task.blocked_kind && isBlockedKind(task.blocked_kind) ? task.blocked_kind : "transient";
-      const limitH = settings.blockedHours[kind];
-      const blocked = ageMs(task.blocked_at ?? task.updated_at, now);
+      const limitH = settings.blockedHours[kind === "scheduled" ? "transient" : kind];
+      // A planned wait is healthy until its deadline. The normal overdue grace starts there.
+      const blocked = ageMs((kind === "scheduled" ? task.scheduled_until : null) ?? task.blocked_at ?? task.updated_at, now);
       if (blocked != null && blocked >= limitH * 3_600_000) {
         const quotaWait = kind === "quota" || isQuotaWaitReason(task.blocked_reason) || isQuotaWaitReason(task.hold_reason);
-        const severe = !quotaWait && (kind === "needs_human" || kind === "capability" || kind === "transient");
+        const severe = !quotaWait && (kind === "needs_human" || kind === "capability" || kind === "transient" || kind === "scheduled");
         addTimeout({
           id: `card:blocked:${task.id}`,
           severity: severe ? "red" : "yellow",

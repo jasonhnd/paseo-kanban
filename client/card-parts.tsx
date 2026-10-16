@@ -1,5 +1,5 @@
 import { View } from "react-native";
-import { blockedKindLabel, cardQueueAlert } from "../shared/blocked";
+import { blockedKindLabel, cardQueueAlert, scheduledWaitLabel } from "../shared/blocked";
 import { summaryCount } from "../shared/event-summary";
 import { t, type MessageKey } from "../shared/i18n";
 import { isConflictBadge, isLandPendingBadge, LEADER_LABEL } from "../shared/labels";
@@ -76,11 +76,13 @@ export function eventLabel(kind: string): string | undefined {
   return key ? t(key, { leader: LEADER_LABEL }) : undefined;
 }
 
-type AlertTask = Pick<BoardCardView, "status" | "badge" | "blockedReason" | "nextStep" | "blockedKind" | "blockedAt" | "returnNote" | "tempNote" | "unattended" | "awaitingMerge" | "cleanupNote" | "mcpNote" | "stallNote">;
+type AlertTask = Pick<BoardCardView, "status" | "badge" | "scheduledUntil" | "blockedReason" | "nextStep" | "blockedKind" | "blockedAt" | "returnNote" | "tempNote" | "unattended" | "awaitingMerge" | "cleanupNote" | "mcpNote" | "stallNote">;
 
 export function taskAlerts(task: AlertTask): Array<{ tone: "warning" | "danger"; text: string }> {
   const alerts: Array<{ tone: "warning" | "danger"; text: string }> = [];
-  if (task.status === "blocked") {
+  if (task.status === "blocked" && task.blockedKind === "scheduled" && task.scheduledUntil) {
+    alerts.push({ tone: "warning", text: scheduledWaitLabel(task.scheduledUntil) });
+  } else if (task.status === "blocked") {
     const reason = task.blockedReason || task.nextStep;
     const kind = task.blockedKind ? ` · ${blockedKindLabel(task.blockedKind)}` : "";
     const head = reason ? t("cardParts.alert.blocked", { reason }) : t("labels.status.blocked");

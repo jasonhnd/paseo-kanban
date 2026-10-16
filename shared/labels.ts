@@ -171,11 +171,14 @@ export function notStarted(status: string, blockedFrom: string | null): boolean 
 export function cardFaceTone(input: {
   status: string;
   badge: string;
+  blockedKind?: string | null;
+  scheduledUntil?: string | null;
   returnNote: string | null;
   unattended: boolean;
   awaitingMerge: boolean;
   acceptanceMissing: boolean;
 }): "danger" | "warning" | "success" {
+  if (input.status === "blocked" && input.blockedKind === "scheduled" && input.scheduledUntil && Date.parse(input.scheduledUntil) > Date.now()) return "warning";
   if (input.status === "blocked" || isConflictBadge(input.badge)) return "danger";
   if (isLandPendingBadge(input.badge)) return "warning";
   if (
