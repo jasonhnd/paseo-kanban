@@ -9,6 +9,10 @@ Fifteen release candidates are recorded here. `0.1.0-rc.15` is the current unpub
 
 - The board's project and leader list now follows Paseo's project list. A board project is matched to a Paseo project by directory (a `dir:` prefix, trailing slashes and symbolic links are ignored; names are never compared). A project whose directory is no longer a Paseo project is left out of the leader panel, the paused area, the home overview, the by-project tab and the board; it gets no reminder, wake or dispatch; `create`, `register`, `start` and starting a leader for it are refused with a message that says so; and doctor reports no red or yellow for it, only one info line. Its cards and history are kept: `show` reads a card, and `list --include-removed` (or `includeRemoved` in the tool) lists them. When Paseo cannot be read, the last list that was read is kept in `paseo-projects.json`; an empty list is believed only after two successful empty answers at least 60 seconds apart; before the first successful read nothing is filtered. `paused-projects.json` now means projects that are in Paseo and paused for a while.
 
+### Notes
+
+- Public docs and release notes are English-only; Chinese docs remain under docs/zh-CN. A fresh installation follows the system language; an explicit language choice is unchanged (covered by a new test).
+
 ## 0.1.0-rc.15 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.15`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.14 tags are never moved.
