@@ -9,8 +9,9 @@ import { setWakeSender } from "../server/bus";
 import { kanbanHelp, runKanban } from "../server/cli";
 import { drainCleanups, flushCleanups, installCleanup } from "../server/cleanup";
 import { discardAuthorization } from "../server/cleanup-discard";
-import { loadConfig, saveConfig } from "../server/config";
+import { doctorSettings, loadConfig, saveConfig } from "../server/config";
 import { closeDb, getDb } from "../server/db";
+import { parseWorktreePorcelain, runDoctor } from "../server/doctor";
 import { runGit, type GitRunner } from "../server/git";
 import { setMissingCwdHooks, resetMissingCwdForTests } from "../server/missing-cwd";
 import { appendEvent, createTask, getTask } from "../server/store";
@@ -84,6 +85,84 @@ function advanceTip(f: Fixture): string {
 type DiscardResult = { text: string; commits: Fixture["commits"] };
 const authorize = (f: Fixture) => runKanban(["resume-cleanup", String(f.id), "--discard-unmerged"], env("project-leader")) as Promise<DiscardResult>;
 const comparisonFor = (f: Fixture) => JSON.parse(rows(f.id, "cleanup_discard_authorized")[0].data_json).comparisonBase;
+
+function addOrigin(f: Fixture): string {
+  const origin = join(dir, `origin-${f.id}.git`);
+  git(dir, "clone", "--bare", "--single-branch", "--branch", "main", f.root, origin);
+  git(f.root, "remote", "add", "origin", origin);
+  git(f.root, "fetch", "origin", "main");
+  return origin;
+}
+
+async function cleanupDoctor(f: Fixture, archives: string[]) {
+  return runDoctor({
+    persist: false, now: new Date(Date.now() + 4 * 60 * 60 * 1000),
+    settings: doctorSettings(loadConfig()),
+    sources: {
+      workspaces: [{ id: f.workspaceId, name: "Demo card", directory: f.directory, projectRoot: f.root,
+        kind: "worktree", archived: archives.includes(f.workspaceId) }],
+      agents: { agents: [] },
+      dirs: { root: trees, list: () => existsSync(f.directory) ? [f.directory] : [],
+        placeholderAgents: () => null, worktrees: [], scanned: true },
+      git: { repos: [f.root],
+        worktrees: async () => parseWorktreePorcelain(git(f.root, "worktree", "list", "--porcelain")),
+        branches: async () => git(f.root, "for-each-ref", "--format=%(refname:short)", "refs/heads").split("\n"),
+        dirty: async path => Boolean(git(path, "status", "--porcelain")),
+        pushed: async () => false, pr: async () => "none" },
+    },
+  });
+}
+
+for (const origin of ["absent", "stale", "offline"]) {
+  it(`cleans a local-base ancestor with ${origin} origin and clears doctor orphan findings`, async () => {
+    const f = fixture();
+    if (origin !== "absent") addOrigin(f);
+    git(f.root, "branch", "side", "main");
+    git(f.root, "merge", "--ff-only", f.branch);
+    git(f.root, "checkout", "side"); // HEAD is not the configured base or a containment proof.
+    git(f.root, "merge-base", "--is-ancestor", f.branch, "refs/heads/main");
+    assert.equal(git(f.root, "log", `main..${f.branch}`, "--oneline"), "");
+    assert.throws(() => git(f.root, "merge-base", "--is-ancestor", f.branch, "origin/main"));
+    if (origin === "offline") git(f.root, "remote", "set-url", "origin", join(dir, "missing-origin.git"));
+    const archives: string[] = [];
+    const orphanIds = [`git:worktree:${f.directory}`, `ws:orphan:${f.workspaceId}`];
+    const before = await cleanupDoctor(f, archives);
+    for (const id of orphanIds) assert.ok(before.findings.some(row => row.id === id && row.severity === "red"), id);
+    assert.equal(await settle(f, archives), "settled");
+    assert.deepEqual(archives, [f.workspaceId]);
+    assert.equal(existsSync(f.directory), false);
+    assert.equal(git(f.root, "branch", "--list", f.branch), "");
+    assert.equal(git(f.root, "branch", "--show-current"), "side");
+    assert.equal(readCleanupEvents(f.id).some(row => row.reason === "not_merged"), false);
+    assert.equal(rows(f.id, "cleanup_discard_authorized").length, 0);
+    const after = await cleanupDoctor(f, archives);
+    assert.equal(after.timedOut, false);
+    for (const id of orphanIds) assert.equal(after.findings.some(row => row.id === id), false, id);
+  });
+}
+
+it("cleans an ancestor of origin/base even when the local base does not contain it", async () => {
+  const f = fixture();
+  const origin = addOrigin(f);
+  git(dir, "--git-dir", origin, "fetch", f.root, `${f.branch}:refs/heads/main`);
+  assert.throws(() => git(f.root, "merge-base", "--is-ancestor", f.branch, "main"));
+  assert.equal(await settle(f, []), "settled");
+  assert.equal(existsSync(f.directory), false);
+  assert.equal(git(f.root, "branch", "--list", f.branch), "");
+  assert.equal(git(f.root, "rev-parse", "origin/main"), f.commits[0].sha);
+});
+
+it("keeps not_merged when neither local nor origin base contains the card tip", async () => {
+  const f = fixture();
+  addOrigin(f);
+  for (const base of ["main", "origin/main"]) assert.throws(() => git(f.root, "merge-base", "--is-ancestor", f.branch, base));
+  const archives: string[] = [];
+  assert.equal(await settle(f, archives), "pending");
+  assert.deepEqual(archives, []);
+  assert.equal(existsSync(f.directory), true);
+  assert.ok(git(f.root, "branch", "--list", f.branch));
+  assert.ok(readCleanupEvents(f.id).some(row => row.action === "skip_worktree" && row.reason === "not_merged"));
+});
 
 it("lists only truly unique commits when the local base trails origin and audits that list", async () => {
   const f = fixture();
