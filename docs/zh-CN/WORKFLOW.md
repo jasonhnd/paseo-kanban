@@ -60,6 +60,8 @@ node "$BOARD_INSTALL/bin/paseo-kanban.mjs" resume-cleanup DEMO_0001 --discard-un
 
 参数放在卡号后。必须使用登记 leader 的 agent 身份；仅为创建者、执行者、审查者、卡绑定令牌及匿名终端均不能授权丢弃。卡必须已完成或归档，且有自有的临时可写卡分支和干净副本；主目录、lane、只读副本及别人的 checkout 均不适用。
 
-返回结果先列出本地基准以外提交的完整 SHA／标题，并用 `cleanup_discard_authorized` 记录 leader、精确 tip 和提交。该回执表示授权，清理尚未完成。正常清理将在合适的 tick 执行，共享 workspace、活跃 agent 检查照常生效；归档 workspace、删除 worktree，并只删除已批准的本地分支 tip。分支删除成功后，`cleanup_discarded` 记录 leader 和丢弃提交。不删除远端分支。
+返回结果只列卡分支 tip 可达、且未被任何其他本地分支、远端跟踪分支（`refs/remotes/*`）或 tag 包含的提交的完整 SHA／标题。即将移除的卡分支及其 worktree 引用不算保留引用。比较基准优先选本地已有的 `origin/<base>`，其次存在的已配置上游，最后退回本地基准。本地基准落后上游时，另行显示一行提示。审计只读取本地引用，不 fetch、不联系远端、不推进本地基准；远端跟踪引用自身也可能过时。
 
-副本仍存在时，出现新提交、基准变化或未提交改动会暂停移除副本。检查该副本后，若仍打算丢弃，再显式加参数授权。副本删除后，基准前进不影响删除已批准的 tip。若分支 tip 不同或已在其他 worktree 中检出，则保留分支、撤销授权，记录 `keep_branch` 和 `temp_workspace_cleaned`（`keptBranch: true`），并唤醒登记的项目 leader（必要时回退到 Kanban leader）。删分支的临时错误继续使用正常退避和 12 次上限；达到上限同样保留、撤销并通知。不要求对已删除的副本重新授权。撤销最新授权后不能重新启用更旧授权。重建后的 workspace 代次不能复用旧授权。不加参数时，原有合并检查和保留分支规则继续生效。
+`cleanup_discard_authorized` 记录 leader、精确 tip、比较基准和修正后的提交清单。该回执表示授权，清理尚未完成。正常清理将在合适的 tick 执行，共享 workspace、活跃 agent 检查照常生效；归档 workspace、删除 worktree，并只删除已批准的本地分支 tip。分支删除成功后，`cleanup_discarded` 记录 leader 和同一份审计清单。空清单表示其他引用保留了所有提交，自有分支／副本仍可移除。不删除远端分支或 tag。
+
+副本仍存在时，出现新提交、本地／比较基准变化或未提交改动会暂停移除副本。检查该副本后，若仍打算丢弃，再显式加参数授权。副本删除后，基准前进不影响删除已批准的 tip。若分支 tip 不同或已在其他 worktree 中检出，则保留分支、撤销授权，记录 `keep_branch` 和 `temp_workspace_cleaned`（`keptBranch: true`），并唤醒登记的项目 leader（必要时回退到 Kanban leader）。删分支的临时错误继续使用正常退避和 12 次上限；达到上限同样保留、撤销并通知。不要求对已删除的副本重新授权。撤销最新授权后不能重新启用更旧授权。重建后的 workspace 代次不能复用旧授权。不加参数时，原有合并检查和保留分支规则继续生效。
