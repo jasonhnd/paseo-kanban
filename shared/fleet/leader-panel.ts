@@ -228,7 +228,7 @@ function distinctiveOption(text: string): boolean {
 const optionBody = (text: string) => phraseUnits(text).join(" ");
 
 function matchesDecision(question: string, decision: RegisteredDecision): boolean {
-  const asked = parseDecisionCard("", question), stored = parseDecisionCard(decision.title, decision.detail);
+  const asked = parseDecisionCard("", question, Infinity), stored = parseDecisionCard(decision.title, decision.detail, Infinity);
   // The leader's first route is independently sufficient, even with generic options.
   const title = phraseUnits(decision.title).join(" ");
   const context = ` ${phraseUnits(asked.context).join(" ")} `;

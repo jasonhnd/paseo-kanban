@@ -146,7 +146,7 @@ function optionBody(text: string, rec: Recommendation | null): string {
   return text.slice(0, rec.start) + " ".repeat(stop - rec.start) + text.slice(stop);
 }
 
-function collectOptions(body: string): { options: CardOption[]; tagged: string | null; firstCut: number } {
+function collectOptions(body: string, optionMax: number): { options: CardOption[]; tagged: string | null; firstCut: number } {
   const marks = findMarks(body);
   const options: CardOption[] = [];
   let tagged: string | null = null;
@@ -154,21 +154,21 @@ function collectOptions(body: string): { options: CardOption[]; tagged: string |
     const end = i + 1 < marks.length ? marks[i + 1].cut : body.length;
     const raw = body.slice(mark.textStart, end);
     if (REC_TAG_RE().test(raw)) tagged = tagged ?? mark.letter;
-    const rawText = trimEdges(raw, OPTION_MAX);
-    const text = trimEdges(raw.replace(new RegExp(REC_TAG_RE().source, "gi"), ""), OPTION_MAX);
+    const rawText = trimEdges(raw, optionMax);
+    const text = trimEdges(raw.replace(new RegExp(REC_TAG_RE().source, "gi"), ""), optionMax);
     options.push({ letter: mark.letter, text, rawText });
   });
   return { options, tagged, firstCut: marks.length > 0 ? marks[0].cut : -1 };
 }
 
-/** Options may sit in the title or the detail; context is the detail up to the first option. */
-export function parseDecisionCard(title: string, detail: string): ParsedDecisionCard {
+/** Options may sit in title/detail. Semantic comparisons may opt out of the default display cap. */
+export function parseDecisionCard(title: string, detail: string, optionMax = OPTION_MAX): ParsedDecisionCard {
   const head = normalizeChoiceText(title);
   const body = normalizeChoiceText(detail);
   const joined = `${head}\n${body}`;
   const rec = findRecommendation(joined);
   const cleaned = optionBody(joined, rec);
-  const parsed = collectOptions(cleaned);
+  const parsed = collectOptions(cleaned, optionMax);
   const options = parsed.options;
   const recommended = rec && options.some((option) => option.letter === rec.letter)
     ? rec.letter
