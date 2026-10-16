@@ -1,12 +1,22 @@
 # 变更记录
 
-单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.13` 是当前未公开、待独立审查的候选。已公开预发布 rc.12 于 2026-10-16 发布，GitHub Release 存在，冻结在 `4162cbca1acb2aa70ad1d5fb77c0c78f25c68ab2`（annotated object `a5d68644e9d02206e2cf07ee7d32005f59801ee9`）。已公开预发布 rc.11 于 2026-10-15 发布，GitHub Release 存在，冻结在 `09963b85e0d7c9c5d881aa39e3c65ebbb719b7a0`（annotated object `042413d64aeee4f41c34120b4b3af4003c685741`）。已公开预发布 rc.10 于 2026-10-15 发布，GitHub Release 存在，冻结在 `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129`（annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`）。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
+单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.14` 是当前未公开、待独立审查的候选。已公开预发布 rc.13 于 2026-10-16 发布，GitHub Release 存在，冻结在 `b9d7a19d7c9373105650fcbd59e330e849169dfa`（annotated object `498e84c4dd46de3724d036754627db0d268b63e7`）。已公开预发布 rc.12 于 2026-10-16 发布，GitHub Release 存在，冻结在 `4162cbca1acb2aa70ad1d5fb77c0c78f25c68ab2`（annotated object `a5d68644e9d02206e2cf07ee7d32005f59801ee9`）。已公开预发布 rc.11 于 2026-10-15 发布，GitHub Release 存在，冻结在 `09963b85e0d7c9c5d881aa39e3c65ebbb719b7a0`（annotated object `042413d64aeee4f41c34120b4b3af4003c685741`）。已公开预发布 rc.10 于 2026-10-15 发布，GitHub Release 存在，冻结在 `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129`（annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`）。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
 
 ## 未发布
+
+## 0.1.0-rc.14 — 待审查与发布
+
+本地候选 tag 为 `v0.1.0-rc.14`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.13 tag 绝不挪动。
 
 ### 修复（Fixed）
 
 - 临时卡清理时，卡分支 tip 只要是配置的本地基准分支或成功 fetch 后的 `origin/<base>` 的祖先，任一成立即视为已合并。本地合并无需 push 或 `--discard-unmerged`，即使 origin 落后或不可达也可清理；本地包含关系同样允许删除卡分支，仅本地树内容相同仍不足以证明。清理完成后 doctor 的残留 worktree／workspace 两条红自然消失。既有 PR／squash 证明和显式丢弃保护保留。修复 [issue #8](https://github.com/jasonhnd/paseo-kanban/issues/8)。
+
+### 注意（Notes）
+
+- package 与根 lock 版本统一为 `0.1.0-rc.14`。Node 仍要求 `>=24.21.0`，Paseo daemon/app 仍要求 `>=0.11.0 <0.12.0`。相对 rc.13，依赖选择、schema 和契约版本不变，不引入自动数据或凭证导入。保留 20 个开发／构建依赖告警。
+- 正常清理要求卡 tip 是配置的本地基准或成功 fetch 后远端基准的祖先；仅树内容相同仍不足以证明。既有 PR／squash 证明及显式丢弃的权限、按审计 tip 删除、共享副本、活跃 agent、撤权／保留保护不变。
+- 精确 rc.14 验证只计 rc.14 回执；此前 rc.13 与单项修复成绩不认证本候选。GitHub 冷安装、真实浏览器及已安装宿主生命周期、含待恢复定时卡的升级／回退、原生 app、手机、已认证 provider 闭环、其他平台与生产恢复仍未验证。本次准备不执行生产切换。
 
 ## 0.1.0-rc.13 — 待审查与发布
 
