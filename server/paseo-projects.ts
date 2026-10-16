@@ -1,11 +1,12 @@
 /// <reference types="node" />
 import { execFileSync } from "node:child_process";
+import type { DatabaseSync } from "node:sqlite";
 import { chmodSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import type { PaseoApi } from "@getpaseo/client";
 import { t } from "../shared/i18n";
 import { loadConfig, type KanbanConfig } from "./config";
-import { getDb } from "./db";
+import { getReadOnlyDb } from "./db";
 import { KanbanError } from "./errors";
 import { readFileSync, statSync } from "./perf-fs";
 import { dataDir } from "./paths";
@@ -120,7 +121,7 @@ function writeStored(value: Stored): void {
   }
 }
 
-/** Remember a list read from Paseo, in memory and for other processes. */
+/** Remember a list read from Paseo (possibly empty), in memory and for other processes. */
 export function recordPaseoProjects(projects: PaseoProject[], now: Date = new Date()): void {
   memory = { readAt: now.toISOString(), projects };
   cardDirectories = null;
@@ -187,13 +188,12 @@ async function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
 
 /**
  * Read the project list through the Paseo client and keep it. Returns false, and keeps the previous
- * list, when Paseo cannot be read, answers with an unexpected shape, or lists no project at all:
- * a daemon that has just started can briefly list none, and that must not hide every project.
+ * list, only when Paseo cannot be read or answers with an unexpected shape. A successful empty list
+ * is the answer: every project with a known directory has then left Paseo.
  */
 export async function refreshPaseoProjects(paseo: ProjectLister, options: { timeoutMs?: number; now?: Date } = {}): Promise<boolean> {
   try {
     const projects = parsePaseoProjectList(await withTimeout(Promise.resolve((paseo.projects.list as () => Promise<unknown>)()), options.timeoutMs ?? READ_TIMEOUT_MS));
-    if (projects.length === 0) throw new Error("Paseo listed no projects");
     recordPaseoProjects(projects, options.now);
     lastLogged = null;
     return true;
@@ -210,7 +210,6 @@ export function refreshPaseoProjectsFromCli(
 ): boolean {
   try {
     const projects = parseCliProjectList(run());
-    if (projects.length === 0) throw new Error("Paseo listed no projects");
     recordPaseoProjects(projects, options.now);
     lastLogged = null;
     return true;
@@ -239,32 +238,48 @@ function cardPathDirectory(raw: unknown): string | null {
   return normalizeProjectPath(text);
 }
 
+/** Run one read against the board database; a missing, locked or older database simply yields no rows. */
+function readRows<T>(db: DatabaseSync, sql: string, ...params: number[]): T[] {
+  try {
+    return db.prepare(sql).all(...params) as unknown as T[];
+  } catch (err) {
+    logOnce(`cannot read card directories: ${err instanceof Error ? err.message : String(err)}`);
+    return [];
+  }
+}
+
+/** Repository roots recorded on cards, newest first per project. Opens the database read-only, so a cold or old board is never created or migrated. */
 function loadCardDirectories(): Map<string, string[]> {
-  const db = getDb();
-  const tasks = db.prepare("SELECT COUNT(*) AS n, COALESCE(MAX(id), 0) AS last FROM tasks").get() as { n: number; last: number };
-  const events = db.prepare("SELECT COALESCE(MAX(id), 0) AS last FROM events").get() as { last: number };
-  const key = `${tasks.n}:${tasks.last}:${events.last}`;
+  let db: DatabaseSync;
+  try {
+    db = getReadOnlyDb();
+  } catch {
+    return new Map();
+  }
+  const tasks = readRows<{ n: number; last: number }>(db, "SELECT COUNT(*) AS n, COALESCE(MAX(id), 0) AS last FROM tasks")[0];
+  const events = readRows<{ last: number }>(db, "SELECT COALESCE(MAX(id), 0) AS last FROM events")[0];
+  const key = `${tasks?.n ?? -1}:${tasks?.last ?? -1}:${events?.last ?? -1}`;
   if (cardDirectories?.key === key) return cardDirectories.byProject;
   const byProject = new Map<string, Set<string>>();
   const add = (project: string, raw: unknown) => {
     const directory = cardPathDirectory(raw);
     if (directory) byProject.set(project, (byProject.get(project) ?? new Set<string>()).add(directory));
   };
-  // A card in a temporary worktree overwrites its path with the worktree; its recorded root is the project's directory.
-  const paths = db.prepare(
+  // A directory or lane card keeps the repository root as its path. A card in a temporary worktree
+  // replaces its path with the checkout, so its root comes from the events that recorded it.
+  const paths = readRows<{ project: string; path: string }>(db,
     `SELECT project, workspace_path AS path FROM (
        SELECT project, workspace_path, ROW_NUMBER() OVER (PARTITION BY project ORDER BY id DESC) AS rank
-       FROM tasks WHERE workspace_kind = 'dir' AND workspace_path IS NOT NULL
-     ) WHERE rank <= ?`,
-  ).all(CARD_DIRECTORIES_PER_PROJECT) as Array<{ project: string; path: string }>;
+       FROM tasks WHERE workspace_kind IN ('dir', 'lane') AND workspace_path IS NOT NULL
+     ) WHERE rank <= ?`, CARD_DIRECTORIES_PER_PROJECT);
   for (const row of paths) add(row.project, row.path);
-  const roots = db.prepare(
+  const roots = readRows<{ project: string; root: string }>(db,
     `SELECT project, root FROM (
        SELECT t.project AS project, json_extract(e.data_json, '$.root') AS root,
               ROW_NUMBER() OVER (PARTITION BY t.project ORDER BY e.id DESC) AS rank
-       FROM events e JOIN tasks t ON t.id = e.task_id WHERE e.kind = 'temp_workspace'
-     ) WHERE root IS NOT NULL AND rank <= ?`,
-  ).all(CARD_DIRECTORIES_PER_PROJECT) as Array<{ project: string; root: string }>;
+       FROM events e JOIN tasks t ON t.id = e.task_id
+       WHERE e.kind IN ('temp_workspace', 'worktree_created', 'lane_bound')
+     ) WHERE root IS NOT NULL AND rank <= ?`, CARD_DIRECTORIES_PER_PROJECT);
   for (const row of roots) add(row.project, row.root);
   const out = new Map([...byProject].map(([project, set]) => [project, [...set]]));
   cardDirectories = { key, byProject: out };
@@ -279,12 +294,7 @@ export function projectDirectories(project: string, config: KanbanConfig = loadC
   const row = config.projects?.[project] as { workspacePath?: unknown; workspace?: unknown } | undefined;
   const configured = normalizeProjectPath(row?.workspacePath ?? row?.workspace);
   if (configured) return [configured];
-  try {
-    return loadCardDirectories().get(project) ?? [];
-  } catch (err) {
-    logOnce(`cannot read card directories: ${err instanceof Error ? err.message : String(err)}`);
-    return [];
-  }
+  return loadCardDirectories().get(project) ?? [];
 }
 
 /**
@@ -305,11 +315,7 @@ export function removedProjects(config: KanbanConfig = loadConfig()): ReadonlySe
   const out = new Set<string>();
   if (!paseoProjectPaths()) return out;
   const names = new Set<string>([...Object.keys(config.projects ?? {}), ...Object.keys(config.supervisors ?? {})]);
-  try {
-    for (const row of getDb().prepare("SELECT DISTINCT project FROM tasks").all() as Array<{ project: string }>) names.add(row.project);
-  } catch (err) {
-    logOnce(`cannot list card projects: ${err instanceof Error ? err.message : String(err)}`);
-  }
+  for (const project of loadCardDirectories().keys()) names.add(project);
   for (const name of names) if (isProjectRemoved(name, config)) out.add(name);
   return out;
 }

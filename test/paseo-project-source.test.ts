@@ -7,6 +7,9 @@ import { after, beforeEach, describe, it } from "node:test";
 import { DEFAULT_CONCURRENCY, saveConfig, type KanbanConfig } from "../server/config";
 import { closeDb, getDb } from "../server/db";
 import { clearDoctorSafetyCache, runDoctor, type DoctorReport } from "../server/doctor";
+import { runUpgradeCheck, type UpgradeDeps } from "../server/fleet/upgrade-check";
+import { requestSupervisorShift } from "../server/fleet/supervisor-shift";
+import type { PaseoApi } from "../server/fleet/paseo-api";
 import { startTask } from "../server/dispatch";
 import { listBoard } from "../server/board-cards";
 import { isProjectDormant, isProjectPaused } from "../server/paused";
@@ -112,6 +115,28 @@ describe("matching a board project to a Paseo project by directory", () => {
     assert.equal(isProjectRemoved("alpha"), true);
   });
 
+  it("knows a lane project's repository root, and a worktree card's root from its events", async () => {
+    const WOOD = join(dir, "repos", "wood");
+    const ELM = join(dir, "repos", "elm");
+    mkdirSync(WOOD, { recursive: true });
+    mkdirSync(ELM, { recursive: true });
+    const base = { defaultWorkspace: "dir" as const, baseBranch: "main", worktreeLanes: 1, lanesEnabled: true };
+    saveConfig(config({ projects: { wood: { ...base }, elm: { ...base } }, supervisors: { wood: "wood-leader", elm: "elm-leader" } }));
+    const lane = createTask({ project: "wood", title: "in a lane", role: "executor", workspacePath: `lane:${WOOD}@main` });
+    assert.equal((getDb().prepare("SELECT workspace_kind AS k FROM tasks WHERE id = ?").get(lane.id) as { k: string }).k, "lane");
+    const temp = createTask({ project: "elm", title: "in a worktree", role: "executor", workspacePath: ELM });
+    getDb().prepare("UPDATE tasks SET workspace_path = ?, workspace_kind = 'worktree' WHERE id = ?").run(join(dir, "checkouts", "elm-1"), temp.id);
+    getDb().prepare("INSERT INTO events (task_id, at, kind, actor, data_json) VALUES (?, ?, 'worktree_created', 'scheduler', ?)").run(temp.id, NOW.toISOString(), JSON.stringify({ root: ELM }));
+    assert.deepEqual(projectDirectories("wood"), [WOOD]);
+    assert.deepEqual(projectDirectories("elm"), [ELM]);
+    recordPaseoProjects([entry("b", BETA)]);
+    assert.deepEqual([...removedProjects()].sort(), ["elm", "wood"]);
+    await assert.rejects(() => handleTool("kanban_create", { project: "wood", title: "x", role: "executor" }, null, LEADER), /Paseo/);
+    await assert.rejects(() => startTask(lane.id, {} as never, "supervisor"), /Paseo/);
+    recordPaseoProjects([entry("w", WOOD), entry("b", BETA)]);
+    assert.equal(isProjectRemoved("wood"), false);
+  });
+
   it("keeps a project with no known directory, since nothing can prove it is gone", () => {
     recordPaseoProjects([entry("only", BETA)]);
     assert.equal(isProjectRemoved("nodir"), false);
@@ -138,13 +163,27 @@ describe("keeping the last good list when Paseo cannot be read", () => {
     assert.equal(isProjectRemoved("beta"), false);
   });
 
-  it("does not take an empty answer as 'every project was removed'", async () => {
+  it("takes a successful empty list as the answer: the last project can be removed", async () => {
     recordPaseoProjects([entry("a", ALPHA)]);
-    assert.equal(await refreshPaseoProjects({ projects: { list: async () => ({ projects: [] }) } }), false);
-    assert.equal(isProjectRemoved("alpha"), false);
+    assert.equal(await refreshPaseoProjects({ projects: { list: async () => ({ projects: [] }) } }, { now: NOW }), true);
+    assert.equal(isProjectRemoved("alpha"), true);
+    assert.deepEqual([...removedProjects()].sort(), ["alpha", "beta"]);
+    await assert.rejects(() => handleTool("kanban_create", { project: "alpha", title: "x", role: "executor" }, null, LEADER), /Paseo/);
+    open("alpha", "history");
+    assert.deepEqual(listBoard(undefined, { archived: false }).tasks, []);
+    // The empty list is stored, and a fresh process keeps it.
+    resetPaseoProjects();
+    assert.equal(isProjectRemoved("alpha"), true);
+    assert.deepEqual(JSON.parse(readFileSync(paseoProjectsPath(), "utf8")).projects, []);
+  });
+
+  it("takes a first successful empty list too, through the client and the command line", async () => {
+    assert.equal(await refreshPaseoProjects({ projects: { list: async () => ({ projects: [] }) } }), true);
+    assert.equal(isProjectRemoved("alpha"), true);
     resetPaseoProjects({ clearFile: true });
-    assert.equal(await refreshPaseoProjects({ projects: { list: async () => ({ projects: [] }) } }), false);
-    assert.equal(removedProjects().size, 0);
+    assert.equal(refreshPaseoProjectsFromCli(() => "[]"), true);
+    assert.equal(isProjectRemoved("alpha"), true);
+    assert.equal(isProjectRemoved("nodir"), false);
   });
 
   it("replaces the list after a good refresh and stores it for other processes", async () => {
@@ -280,6 +319,29 @@ describe("doctor", () => {
     assert.equal(report.counts.red, 1);
   });
 
+  it("also leaves out a directory leftover whose card belongs to a removed project", async () => {
+    recordPaseoProjects([entry("b", BETA)]);
+    const gone = open("alpha", "has a retained agent");
+    const kept = open("beta", "has a retained agent too");
+    const place = join(dir, "worktrees", "placeholder-alpha");
+    const other = join(dir, "worktrees", "placeholder-beta");
+    clearDoctorSafetyCache();
+    const report = await runDoctor({
+      now: NOW, wake: false, persist: false,
+      sources: {
+        dirs: { root: join(dir, "worktrees"), worktrees: [], list: () => [place, other], placeholderAgents: (path: string) => (path === place ? ["a-agent"] : ["b-agent"]) },
+        agents: { agents: [
+          { id: "a-agent", archived: true, labels: { kanban_task: String(gone.id) } },
+          { id: "b-agent", archived: true, labels: { kanban_task: String(kept.id) } },
+        ], paseoIds: [] },
+      },
+    });
+    const placeholders = report.findings.filter((item) => item.id.startsWith("dir:placeholder:"));
+    assert.deepEqual(placeholders.map((item) => item.object), [other]);
+    assert.equal(report.findings.some((item) => item.card != null && item.card.startsWith("ALPHA") && item.severity !== "info"), false);
+    assert.equal(report.findings.filter((item) => item.id.startsWith("paseo-project:removed")).length, 1);
+  });
+
   it("adds no note when nothing left Paseo", async () => {
     recordPaseoProjects([entry("a", ALPHA), entry("b", BETA)]);
     const report = await check();
@@ -302,5 +364,43 @@ describe("the fleet views", () => {
   it("shows only paused projects that are still in Paseo", () => {
     assert.deepEqual(shownPaused(paused, new Set(["alpha"])).map((row) => row.project), ["beta"]);
     assert.deepEqual(shownPaused(paused, new Set()).map((row) => row.project), ["alpha", "beta"]);
+  });
+});
+
+describe("leader reminders and shifts", () => {
+  beforeEach(() => recordPaseoProjects([entry("b", BETA)]));
+
+  it("does not ask the leader of a removed project to shift, and creates nothing", async () => {
+    const calls: string[] = [];
+    const ports = new Proxy({}, { get: (_t, name) => (...args: unknown[]) => { calls.push(String(name)); return Promise.resolve(null); } });
+    for (const action of ["start", "continue"] as const) {
+      const result = await requestSupervisorShift({} as PaseoApi, "alpha", action, ports as never);
+      assert.notEqual(result.phase, "running");
+    }
+    assert.deepEqual(calls, []);
+  });
+
+  it("sends no compatibility failure notice to a removed project's leader, but still notifies one that is in Paseo", async () => {
+    const sent: string[] = [];
+    const deps = (): UpgradeDeps => ({
+      readState: async () => ({ version: "1", recordedAt: "", checkedAt: null, results: [] }),
+      writeState: async () => undefined,
+      currentVersion: async () => "2",
+      plugins: [
+        { id: "a", label: "Plugin A", dir: "/a", cwdMatch: "alpha-cwd", project: "alpha" },
+        { id: "b", label: "Plugin B", dir: "/b", cwdMatch: "beta-cwd", project: "beta" },
+      ],
+      hasCompatScript: async () => true,
+      runCompat: async () => ({ ok: false, timedOut: false, output: "broken" }),
+      listAgents: async () => [
+        { id: "alpha-leader", title: "alpha", cwd: "alpha-cwd", archivedAt: null },
+        { id: "beta-leader", title: "beta", cwd: "beta-cwd", archivedAt: null },
+      ],
+      send: async (id) => { sent.push(id); },
+      now: () => NOW.toISOString(),
+      readSupervisors: async () => ({ alpha: "alpha-leader", beta: "beta-leader" }),
+    });
+    await runUpgradeCheck(deps(), { force: true });
+    assert.deepEqual(sent, ["beta-leader"]);
   });
 });

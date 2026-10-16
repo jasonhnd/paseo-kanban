@@ -626,10 +626,18 @@ export async function runDoctor(input: DoctorRunInput = {}): Promise<DoctorRepor
   // A project that left Paseo is not checked: no red or yellow for it, only one info line naming it.
   const leftPaseo = removedProjectsForReport();
   const skippedProjects = new Set<string>();
+  let tasks: DocTask[] = [];
+  /** The project a finding belongs to: named by the finding, or through its card. */
+  const ownerOf = (finding: DoctorFinding): string | null => {
+    if (finding.project != null) return finding.project;
+    const task = tasks.find((item) => (finding.taskId != null && item.id === finding.taskId) || (finding.card != null && markOf(item) === finding.card));
+    return task?.project ?? null;
+  };
   const add = (finding: DoctorFinding) => {
     if (findings.some((item) => item.id === finding.id)) return;
-    if (finding.project != null && leftPaseo.has(finding.project)) {
-      skippedProjects.add(finding.project);
+    const owner = ownerOf(finding);
+    if (owner != null && leftPaseo.has(owner)) {
+      skippedProjects.add(owner);
       return;
     }
     findings.push(finding);
@@ -653,7 +661,6 @@ export async function runDoctor(input: DoctorRunInput = {}): Promise<DoctorRepor
     });
   };
 
-  let tasks: DocTask[] = [];
   let events: DocEvent[] = [];
   let runs: DocRun[] = [];
   let scan: DoctorScan = { events: new Map(), laneDb: null };

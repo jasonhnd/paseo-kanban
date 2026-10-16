@@ -2123,5 +2123,6 @@
   "quota.companies.source.providerStatus": "Provider report status: {status}",
   "quota.companies.source.readError": "Usage read error: {error}",
   "quota.companies.source.availableEmpty": "Provider available; this quota window was not returned",
-  "screen.unavailable": "Screen capability unavailable on this platform."
+  "screen.unavailable": "Screen capability unavailable on this platform.",
+  "shift.server.removed": "This project is no longer a Paseo project, so its <leader> is not asked to hand over."
 }

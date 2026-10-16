@@ -10,6 +10,7 @@ import { checkoutName, installedPluginDirs, kanbanConfigPath } from "./paths";
 import { isLeaderTitle } from "./records";
 import { type Json, logSwallowed, readJson, STATE_DIR } from "./util";
 import { kanbanSource } from "./kanban-source";
+import { readRemovedProjects } from "./removed";
 
 export const COMPAT_STATE_PATH = join(STATE_DIR, "compat-state.json");
 /** Read-only. Supervisors are registered here by `kanban supervise`. */
@@ -88,6 +89,8 @@ export interface UpgradeDeps {
    * Omit to read the file. Null, or a throw, falls back to findSupervisor.
    */
   readSupervisors?: () => Promise<Record<string, string> | null>;
+  /** Projects that left Paseo get no notice. Omit to read the Paseo project list. */
+  removedProjects?: () => ReadonlySet<string>;
 }
 
 export interface UpgradeOutcome {
@@ -305,11 +308,13 @@ export async function runUpgradeCheck(deps: UpgradeDeps, opts: { force: boolean 
     console.error("[afc] upgrade-check: reading kanban.config.json failed:", String(error).slice(0, 300));
     supervisors = null;
   }
+  const removed = (deps.removedProjects ?? readRemovedProjects)();
   const from = prev?.version ?? null;
   const results: PluginCompatResult[] = [];
   const notifications: UpgradeOutcome["notifications"] = [];
   for (const plugin of deps.plugins) {
-    const supervisorId = resolveSupervisor(agents, plugin, supervisors);
+    // A project that left Paseo has nobody to tell.
+    const supervisorId = removed.has(plugin.project) ? null : resolveSupervisor(agents, plugin, supervisors);
     let has = false;
     try {
       has = await deps.hasCompatScript(plugin.dir);

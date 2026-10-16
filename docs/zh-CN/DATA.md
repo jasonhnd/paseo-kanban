@@ -25,9 +25,9 @@ Git revision 改代码位置，不改外置根。换来源保留 `paseo-kanban` 
 
 Paseo 的项目列表（`paseo project ls`）是唯一的项目名单。看板自己仍记着项目设置、leader 名单和 `fleet/paused-projects.json`，但只有目录仍是 Paseo 项目的看板项目，才会被显示、唤醒和派活。
 
-- **按目录对照，不按名字。** 对照前去掉 `dir:` 前缀和末尾斜杠，并解开符号链接，所以 Paseo 里换了名字的项目仍能对上。项目的目录是 `kanban.config.json` 里的 `projects.<名>.workspacePath`；没写时取它最近几张卡的目录（和临时工作区记下的根目录）。没有任何已知目录的项目，一律不当作已移除。
-- **已不在 Paseo 的项目**：从 leader 面板、暂停区、首页、按项目页和看板里消失；不发 leader 提醒、不唤醒、不催；`create`、`register`、`start` 和为它启动 leader 都会被拒绝并说明原因。卡片和历史保留：`kanban show` 可看单张卡，`kanban list --include-removed` 可列出。体检对它不报红或黄，只有一条信息，写明跳过了哪些项目。把目录重新加回 Paseo，项目原样回来。
-- **读不到 Paseo 时**（daemon 不通、超时、答案异常或列表为空），沿用上一次成功读到、存在 `paseo-projects.json` 里的列表；从未成功读到过时不过滤任何项目，和以前一样。运行中的插件在连上 Paseo 时、之后每 30 秒通过 Paseo 客户端读取；命令行在存档超过两分钟时调用 `paseo project ls --json`，`kanban start` 用自己的客户端读取。
+- **按目录对照，不按名字。** 对照前去掉 `dir:` 前缀和末尾斜杠，并解开符号链接，所以 Paseo 里换了名字的项目仍能对上。项目的目录是 `kanban.config.json` 里的 `projects.<名>.workspacePath`；没写时取它最近几张卡的仓库根目录（目录卡、lane 卡，以及临时 worktree 记下的根目录）。没有任何已知目录的项目，一律不当作已移除。
+- **已不在 Paseo 的项目**：从 leader 面板、暂停区、首页、按项目页和看板里消失；不发 leader 提醒、不唤醒、不催、不请它换班、不发升级失败通知；`create`、`register`、`start` 和为它启动 leader 都会被拒绝并说明原因。卡片和历史保留：`kanban show` 可看单张卡，`kanban list --include-removed` 可列出。体检对它不报红或黄，只有一条信息，写明跳过了哪些项目。把目录重新加回 Paseo，项目原样回来。
+- **读不到 Paseo 时**（daemon 不通、超时或答案异常），沿用上一次成功读到、存在 `paseo-projects.json` 里的列表；成功读到的空列表也是答案，不算失败：所有有已知目录的项目随之视为已不在 Paseo。从未成功读到过时不过滤任何项目，和以前一样。运行中的插件在连上 Paseo 时、之后每 30 秒通过 Paseo 客户端读取；命令行在存档超过两分钟时调用 `paseo project ls --json`，`kanban start` 用自己的客户端读取。
 - **`paused-projects.json` 只放「在 Paseo 里、临时暂停」的项目。** 已不在 Paseo 的项目即使还在其中，也按上面处理，不显示为暂停。
 
 ## 文件、进程和网络

@@ -51,7 +51,7 @@ import { type AgentRecord, readAgentRecords } from "./records";
 import type { BoardSummary } from "../contract";
 import { kanbanSource } from "./kanban-source";
 import { kanbanProjectName } from "./paths";
-import { visibleSupervisorSlots } from "./removed";
+import { readRemovedProjects, visibleSupervisorSlots } from "./removed";
 import { BIN, cached, type Json, readJson, runJson, STATE_DIR, writeJson } from "./util";
 import { PLANS } from "./usage";
 
@@ -566,9 +566,11 @@ export async function hydrateShiftJobs(): Promise<void> {
 function scheduleQueueResume(paseo: PaseoApi): void {
   // Not marked as started: a queue left while Kanban is absent resumes once Kanban is back.
   if (shiftsOff()) return;
+  const removed = readRemovedProjects();
   for (const job of tasks.values()) {
     if (job.phase !== "queued") continue;
     if (resumeStarted.has(job.project) || inflight.has(job.project)) continue;
+    if (removed.has(job.project)) continue;
     resumeStarted.add(job.project);
     void requestSupervisorShift(paseo, job.project, "continue").catch((error) => {
       console.error("[afc] supervisor queue resume:", String(error).slice(0, 160));
@@ -640,6 +642,8 @@ export async function requestSupervisorShift(
   const config = await readJson<Json>(configPath, {});
   const slot = supervisorSlots(config, kanbanProjectName()).find((row) => row.project === project);
   if (!slot) return emptyJob(project, t("shift.server.notRegistered"), project);
+  // A leader of a project that left Paseo is never asked to hand over, and nothing new is created for it.
+  if (readRemovedProjects().has(project)) return emptyJob(project, t("shift.server.removed"), slot.code);
   const existing = tasks.get(project);
   const saved = meta.get(project);
   if (action === "continue") {

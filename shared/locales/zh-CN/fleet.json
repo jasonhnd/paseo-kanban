@@ -2123,5 +2123,6 @@
   "quota.companies.source.providerStatus": "来源报告状态：{status}",
   "quota.companies.source.readError": "额度读取错误：{error}",
   "quota.companies.source.availableEmpty": "来源可用，但未返回这项额度窗口",
-  "screen.unavailable": "此平台屏幕采集功能不可用。"
+  "screen.unavailable": "此平台屏幕采集功能不可用。",
+  "shift.server.removed": "这个项目已不在 Paseo，不会请它的<leader>换班。"
 }

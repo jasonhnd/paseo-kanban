@@ -135,11 +135,12 @@ export function collectRepoRoots(workspaces: DoctorWorkspace[] = []): {
   try {
     const db = getReadOnlyDb();
     const rows = db.prepare(
-      `SELECT workspace_path FROM tasks WHERE workspace_kind = 'dir' AND workspace_path IS NOT NULL`,
-    ).all() as Array<{ workspace_path: string }>;
-    for (const row of rows) rememberRepo(repos, row.workspace_path);
-    const events = db.prepare(`SELECT data_json FROM events WHERE kind = 'worktree_created'`).all() as Array<{ data_json: string }>;
+      `SELECT project, workspace_path FROM tasks WHERE workspace_kind = 'dir' AND workspace_path IS NOT NULL`,
+    ).all() as Array<{ project: string; workspace_path: string }>;
+    for (const row of rows) if (!leftPaseo.has(row.project)) rememberRepo(repos, row.workspace_path);
+    const events = db.prepare(`SELECT t.project AS project, e.data_json AS data_json FROM events e JOIN tasks t ON t.id = e.task_id WHERE e.kind = 'worktree_created'`).all() as Array<{ project: string; data_json: string }>;
     for (const event of events) {
+      if (leftPaseo.has(event.project)) continue;
       try {
         const data = JSON.parse(event.data_json) as { root?: unknown };
         if (typeof data.root === "string") rememberRepo(repos, data.root);
