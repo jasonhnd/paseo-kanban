@@ -987,6 +987,21 @@ describe("doctor", () => {
         assert.equal(found.repos.includes(known), false);
         assert.ok(found.repos.some((path) => path.endsWith("issue9-absolute")));
       }
+      // A same-named valid Paseo workspace must not hide the warning either.
+      collectRepoRoots([{ id: "w-rel", name: "relative-path-project", directory: join(dir, "issue9-absolute"), projectRoot: join(dir, "issue9-absolute"), kind: "dir", archived: false }]);
+      // Relative card and event directories are never read against the process cwd.
+      const cwd = process.cwd();
+      const probe = join(dir, "issue9-cwd");
+      mkdirSync(join(probe, "relative-checkout"), { recursive: true });
+      process.chdir(probe);
+      try {
+        const task = createTask({ project: "no-directory-project", title: "relative", role: "executor", workspacePath: join(dir, "issue9-absolute") });
+        getDb().prepare("UPDATE tasks SET workspace_path = 'relative-checkout', workspace_kind = 'dir' WHERE id = ?").run(task.id);
+        getDb().prepare("INSERT INTO events (task_id, at, kind, actor, data_json) VALUES (?, '2026-10-01T00:00:00Z', 'worktree_created', 'scheduler', ?)").run(task.id, JSON.stringify({ root: "relative-checkout" }));
+        assert.equal(collectRepoRoots([]).repos.includes("relative-checkout"), false);
+      } finally {
+        process.chdir(cwd);
+      }
       const relative = warnings.filter((line) => line.includes("relative-path-project") && line.includes("relative/checkout"));
       assert.equal(relative.length, 1, "a relative workspacePath is reported exactly once");
       assert.equal(warnings.some((line) => line.includes("no-directory-project")), false);

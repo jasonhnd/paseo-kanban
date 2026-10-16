@@ -3,7 +3,7 @@ import { projectDirectories, relativeWorkspacePath, removedProjects } from "./pa
 import { execFile } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "./perf-fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import type { PaseoApi } from "@getpaseo/client";
 import { createPaseoClient } from "@getpaseo/client";
 import { t } from "../shared/i18n";
@@ -72,7 +72,8 @@ function command(cmd: string, args: string[], cwd: string | undefined, timeoutMs
 }
 
 function rememberRepo(found: string[], path: string): void {
-  if (!path.trim() || !existsSync(path)) return;
+  // A relative path would be read against the process cwd, which is not the project.
+  if (!path.trim() || !isAbsolute(path) || !existsSync(path)) return;
   try {
     if (!statSync(path).isDirectory()) return;
   } catch {
@@ -96,7 +97,6 @@ function configuredCheckout(name: string, workspaces: DoctorWorkspace[], config:
     if (basename(workspace.projectRoot) === name) return true;
     return workspace.directory != null && basename(workspace.directory) === name;
   });
-  if (fromPaseo?.projectRoot) return fromPaseo.projectRoot;
   const relative = relativeWorkspacePath(name, config);
   if (relative != null) {
     const key = `${name}\0${relative}`;
@@ -105,6 +105,7 @@ function configuredCheckout(name: string, workspaces: DoctorWorkspace[], config:
       console.error(`[paseo-kanban] doctor: project ${name} has a relative workspacePath "${relative}"; it is ignored because only absolute paths are valid`);
     }
   }
+  if (fromPaseo?.projectRoot && isAbsolute(fromPaseo.projectRoot)) return fromPaseo.projectRoot;
   return projectDirectories(name, config)[0] ?? null;
 }
 
