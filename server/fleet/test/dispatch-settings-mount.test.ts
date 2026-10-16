@@ -84,8 +84,8 @@ test("mounted settings persist dispatch and operations project, refresh, conflic
       input.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await tick();
     };
     assert.match(mounted.container.textContent, /Dispatch depth/);
-    assert.equal(mounted.container.querySelector('input[aria-label="AFC operations project"]').value, "paseo-fleet");
-    await fill("AFC operations project", "Demo operations");
+    assert.equal(mounted.container.querySelector('input[aria-label="Kanban operations project"]').value, "paseo-fleet");
+    await fill("Kanban operations project", "Demo operations");
     assert.equal(mounted.container.querySelector('[aria-label="Set Executor · GPT-6.1-Sol / L1 depth to ultra"]'), null);
     await click("Set Executor · GPT-6.1-Sol / L1 depth to medium");
     await fill("Position for Executor · Sonnet (Claude) / L1", "1");
@@ -93,7 +93,7 @@ test("mounted settings persist dispatch and operations project, refresh, conflic
     const saved = await snapshot();
     assert.deepEqual(saved.document.extension, { demo: true });
     assert.equal(saved.document.opsProject, "Demo operations");
-    assert.equal(mounted.container.querySelector('input[aria-label="AFC operations project"]').value, "Demo operations");
+    assert.equal(mounted.container.querySelector('input[aria-label="Kanban operations project"]').value, "Demo operations");
     assert.deepEqual(saved.document.dispatchOverrides, { executor: { L1: { "executor.gpt-6.1-sol": { effort: "medium" }, "executor.sonnet": { order: 1 } } } });
     const matrix = applyDispatchMatrix(base, { profiles, knownNames: new Set(profiles.map(profile => profile.name)), pools: null, generatedAt: "2030-01-01", dispatchOverrides: saved.document.dispatchOverrides, thinkingCatalog: catalog });
     assert.deepEqual((matrix.roles.executor as any).L1, [{ profile: "Demo Sonnet", effort: "low", order: 1 }, { profile: "Demo GPT", effort: "medium" }]);
