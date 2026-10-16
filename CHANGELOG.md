@@ -5,6 +5,10 @@ Fifteen release candidates are recorded here. `0.1.0-rc.15` is the current unpub
 
 ## Unreleased
 
+### Notes
+
+- Public docs and release notes are English-only; Chinese docs remain under docs/zh-CN. A fresh installation follows the system language; an explicit language choice is unchanged (covered by a new test).
+
 ## 0.1.0-rc.15 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.15`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.14 tags are never moved.

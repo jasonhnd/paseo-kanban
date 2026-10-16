@@ -197,6 +197,17 @@ describe("config language", () => {
     assert.equal(loadConfig().language, "system");
   });
 
+  it("follows the system locale on a fresh installation and keeps a manual choice", () => {
+    const dir = freshDir();
+    const fresh = loadConfig();
+    assert.equal(serverLanguage(fresh, { LANG: "en_US.UTF-8" }), "en");
+    assert.equal(serverLanguage(fresh, { LANG: "zh_CN.UTF-8" }), "zh-CN");
+    writeFileSync(join(dir, "kanban.config.json"), `${JSON.stringify({ language: "en" })}\n`);
+    assert.equal(serverLanguage(loadConfig(), { LANG: "zh_CN.UTF-8" }), "en");
+    writeFileSync(join(dir, "kanban.config.json"), `${JSON.stringify({ language: "zh-CN" })}\n`);
+    assert.equal(serverLanguage(loadConfig(), { LANG: "en_US.UTF-8" }), "zh-CN");
+  });
+
   it("records the system language when a fresh installation's first write is an update", () => {
     const dir = freshDir();
     setProjectAutoStart("demo", true);
