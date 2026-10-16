@@ -81,6 +81,41 @@ test("a matching title with completely different options remains a new question"
   ), [decision]));
 });
 
+test("different rollout subjects cannot match through identical options and advice", () => {
+  const registered = { ...decision, title: "Should we roll out the billing redesign?" };
+  assert.match(unregisteredQuestion("demo", reply(
+    `Should we roll out the authentication redesign?\n${detail}`,
+  ), [registered])?.text ?? "", /authentication/);
+  assert.equal(unregisteredQuestion("demo", reply(`${registered.title}\n${detail}`), [registered]), null);
+});
+
+test("different subjects cannot match through one option and identical recommendation reasoning", () => {
+  const registered = { ...decision, title: "Should we roll out the billing redesign?" };
+  assert.ok(unregisteredQuestion("demo", reply(
+    "Should we roll out the authentication redesign?\nA: Deploy the staging build\nB: Something else\nRecommend A: validate the rollout gradually",
+  ), [registered]));
+});
+
+test("even a single option with an otherwise nearly identical title needs the same subject", () => {
+  const registered = { ...decision, title: "Should we roll out the billing redesign?", detail: "A: Continue\nB: Wait\nRecommend A" };
+  assert.ok(unregisteredQuestion("demo", reply(
+    "Should we roll out the authentication redesign?\nA: Continue\nB: Wait\nRecommend A",
+  ), [registered]));
+});
+
+test("Chinese questions with a different subject cannot reuse registered rollout options", () => {
+  const registered = { ...decision, title: "\u662f\u5426\u53d1\u5e03\u8d26\u5355\u6a21\u5757\u6539\u7248" };
+  assert.ok(unregisteredQuestion("demo", reply(`\u662f\u5426\u53d1\u5e03\u8ba4\u8bc1\u6a21\u5757\u6539\u7248\n${detail}`), [registered]));
+  assert.equal(unregisteredQuestion("demo", reply(`${registered.title}\n${detail}`), [registered]), null);
+});
+
+test("a generic or missing heading cannot establish which subject the copied options concern", () => {
+  const registered = { ...decision, title: "Should we roll out the billing redesign?" };
+  for (const text of [detail, `What should we do?\n${detail}`]) {
+    assert.ok(unregisteredQuestion("demo", reply(text), [registered]));
+  }
+});
+
 test("only a current open decision id in that question can identify it", () => {
   const text = `Unusual question ${decision.id}\nA: Yes\nB: No\nRecommend A`;
   assert.equal(unregisteredQuestion("demo", reply(text), [decision]), null);
