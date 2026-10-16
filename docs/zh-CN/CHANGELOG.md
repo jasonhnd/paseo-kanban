@@ -4,6 +4,10 @@
 
 ## 未发布
 
+### 修复（Fixed）
+
+- `resume-cleanup --discard-unmerged` 只列卡分支 tip 可达、且未被其他本地分支、远端跟踪分支或 tag 包含的提交，排除即将移除的卡分支／worktree 引用。优先使用本地已有的 `origin/<base>`，其次已配置上游，最后本地基准；本地基准落后时提示。本次审计不 fetch、不发网络请求。授权与丢弃完成事件记录修正后的清单；leader 权限、按审计 tip 比较后删除、撤权及保留分支的保护不变。修复 [issue #7](https://github.com/jasonhnd/paseo-kanban/issues/7)。
+
 ## 0.1.0-rc.12 — 待审查与发布
 
 本地候选 tag 为 `v0.1.0-rc.12`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.11 tag 绝不挪动。

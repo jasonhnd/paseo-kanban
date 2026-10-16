@@ -5,6 +5,10 @@ Twelve release candidates are recorded here. `0.1.0-rc.12` is the current unpubl
 
 ## Unreleased
 
+### Fixed
+
+- `resume-cleanup --discard-unmerged` lists only commits reachable from the card tip and absent from every other local branch, remote-tracking branch and tag. It excludes the retiring card branch/worktree, prefers locally available `origin/<base>` (then the configured upstream, then the local base), and warns when the local base is behind. No fetch or network request is made for this audit. Authorization and completion events record the corrected list; leader permissions, audited-tip compare-and-delete and revocation/retention safeguards remain. Fixes [issue #7](https://github.com/jasonhnd/paseo-kanban/issues/7).
+
 ## 0.1.0-rc.12 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.12`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.11 tags are never moved.
