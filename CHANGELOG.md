@@ -5,6 +5,10 @@ Sixteen release candidates are recorded here. `0.1.0-rc.16` is the current unpub
 
 ## Unreleased
 
+### Fixed
+
+- Doctor no longer builds a project's main directory from the plugin install directory (issue #9). A configured project with no `workspacePath`, no directory known to Paseo and no card directory is treated as "directory unknown" and skipped quietly: no `worktree <path>` info line and no `repo:skipped` ENOENT finding. A relative `workspacePath` is an invalid configuration; it is reported once in the log and never resolved against the plugin directory or the process cwd (the repository lookup that reads `workspacePath` ignores it too). Projects with an absolute directory behave as before, and a project that has left Paseo stays filtered.
+
 ## 0.1.0-rc.16 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.16`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.15 tags are never moved.

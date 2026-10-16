@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "./perf-fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { dataDir } from "./paths";
 
 /** Accepted repository identities: OWNER/REPO or a GitHub HTTPS/SSH origin. */
@@ -57,6 +57,8 @@ export function projectRepository(context: ProjectRepoContext): string | null {
   const directory = /^(?:worktree|lane):/.test(path)
     ? path.replace(/^(?:worktree|lane):/, "").replace(/@[^/]+$/, "")
     : path.replace(/^dir:/, "");
+  // A relative path would resolve against the process cwd, which is not the project.
+  if (!isAbsolute(directory)) return githubRepository(configured);
   const origin = originRepository(directory);
   // A local-only checkout without a GitHub origin must never acquire a PR dependency.
   if (!origin) return null;

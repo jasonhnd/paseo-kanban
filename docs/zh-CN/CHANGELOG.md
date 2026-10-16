@@ -4,6 +4,10 @@
 
 ## 未发布
 
+### 修复（Fixed）
+
+- 体检不再把项目主目录拼到插件安装目录下（issue #9）。配置里有、但没有 `workspacePath`、Paseo 也不知道目录、也没有卡片目录的项目，视为「目录未知」，安静跳过：不再出现 `worktree <路径>` 信息行，也不再出现 `repo:skipped` 的 ENOENT 发现。相对路径的 `workspacePath` 属于无效配置，只在日志里提示一次，不会拿插件目录或进程 cwd 去解析（读取 `workspacePath` 的仓库查询也会忽略它）。有绝对目录的项目行为不变，已离开 Paseo 的项目仍被过滤。
+
 ## 0.1.0-rc.16 — 待审查与发布
 
 本地候选 tag 为 `v0.1.0-rc.16`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.15 tag 绝不挪动。

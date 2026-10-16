@@ -27,6 +27,8 @@ import {
   removedProjects,
   resetPaseoProjects,
 } from "../server/paseo-projects";
+import { collectRepoRoots } from "../server/doctor-live";
+import { projectRepository } from "../server/project-repo";
 import { projectRows } from "../server/project-rows";
 import { createTask } from "../server/store";
 import { handleTool } from "../server/tools";
@@ -468,5 +470,25 @@ describe("leader reminders and shifts", () => {
     });
     await runUpgradeCheck(deps(), { force: true });
     assert.deepEqual(sent, ["beta-leader"]);
+  });
+});
+
+describe("a project with no known directory (issue #9)", () => {
+  it("is skipped by the doctor repo scan without a path, and a removed project is still filtered", () => {
+    const base = { defaultWorkspace: "dir" as const, baseBranch: "main", worktreeLanes: 1, lanesEnabled: false };
+    saveConfig(config({ projects: { alpha: { ...base, workspacePath: ALPHA }, beta: { ...base, workspacePath: BETA }, nodir: { ...base }, rel: { ...base, workspacePath: "relative/path" } } }));
+    recordPaseoProjects([entry("a", ALPHA)]);
+    const found = collectRepoRoots([]);
+    assert.deepEqual(found.repos, [ALPHA]);
+    for (const name of ["nodir", "rel", "beta"]) {
+      assert.equal(found.missing.some((item) => item.project === name), false);
+      assert.equal(found.skipped.some((item) => item.project === name), false);
+    }
+    assert.equal(isProjectRemoved("nodir"), false);
+    assert.equal(isProjectRemoved("beta"), true);
+  });
+
+  it("never reads a relative workspacePath as a repository against the process cwd", () => {
+    assert.equal(projectRepository({ project: "rel", workspacePath: "relative/path" }), null);
   });
 });

@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { removedProjects } from "./paseo-projects";
+import { projectDirectories, relativeWorkspacePath, removedProjects } from "./paseo-projects";
 import { execFile } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "./perf-fs";
 import { homedir } from "node:os";
@@ -8,7 +8,7 @@ import type { PaseoApi } from "@getpaseo/client";
 import { createPaseoClient } from "@getpaseo/client";
 import { t } from "../shared/i18n";
 import { parsePluginJson } from "./compat";
-import { doctorSettings, loadConfigForReport, type DoctorSettings } from "./config";
+import { doctorSettings, loadConfigForReport, type DoctorSettings, type KanbanConfig } from "./config";
 import { getReadOnlyDb } from "./db";
 import {
   parseWorktreePorcelain,
@@ -30,7 +30,7 @@ import { loadDispatchMatrix } from "./matrix";
 import { PLACEHOLDER_NAME, placeholderAgentIdsFromText, scanProblemAgents } from "./missing-cwd";
 import { agentsDir } from "./open";
 import { listActivePaseoAgents, listPaseoWorkspaces } from "./paseo";
-import { checkoutsRoot, paseoWorktreesRoot } from "./paths";
+import { paseoWorktreesRoot } from "./paths";
 import { samePath } from "./placement";
 import { readPoolSnapshot } from "./pools";
 import { cockpitHealth } from "./afc-sources";
@@ -82,14 +82,30 @@ function rememberRepo(found: string[], path: string): void {
   found.push(path);
 }
 
-function configuredCheckout(name: string, workspaces: DoctorWorkspace[]): string {
+const warnedRelativePaths = new Set<string>();
+
+/**
+ * The project's main directory, or null when nothing says where it is. A project name is never turned
+ * into a path under the plugin directory or the process cwd, and a relative `workspacePath` is an
+ * invalid configuration that is reported once and not resolved.
+ */
+function configuredCheckout(name: string, workspaces: DoctorWorkspace[], config: KanbanConfig): string | null {
   const fromPaseo = workspaces.find((workspace) => {
     if (workspace.archived || workspace.kind === "worktree" || !workspace.projectRoot) return false;
     if (workspace.name === name) return true;
     if (basename(workspace.projectRoot) === name) return true;
     return workspace.directory != null && basename(workspace.directory) === name;
   });
-  return fromPaseo?.projectRoot ?? join(checkoutsRoot(), name);
+  if (fromPaseo?.projectRoot) return fromPaseo.projectRoot;
+  const relative = relativeWorkspacePath(name, config);
+  if (relative != null) {
+    const key = `${name}\0${relative}`;
+    if (!warnedRelativePaths.has(key)) {
+      warnedRelativePaths.add(key);
+      console.error(`[paseo-kanban] doctor: project ${name} has a relative workspacePath "${relative}"; it is ignored because only absolute paths are valid`);
+    }
+  }
+  return projectDirectories(name, config)[0] ?? null;
 }
 
 /** Configured project checkouts first, then directories already recorded on cards. */
@@ -116,7 +132,8 @@ export function collectRepoRoots(workspaces: DoctorWorkspace[] = []): {
   try { leftPaseo = removedProjects(config); } catch (err) { console.error("[paseo-kanban] doctor removed projects", err instanceof Error ? err.message : String(err)); }
   for (const name of Object.keys(config.projects ?? {})) {
     if (leftPaseo.has(name)) continue;
-    const path = configuredCheckout(name, workspaces);
+    const path = configuredCheckout(name, workspaces, config);
+    if (path == null) continue;
     try {
       if (!statSync(path).isDirectory()) {
         missing.push({ project: name, path });

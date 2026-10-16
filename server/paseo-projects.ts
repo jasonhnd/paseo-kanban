@@ -342,6 +342,17 @@ export function projectDirectories(project: string, config: KanbanConfig = loadC
 }
 
 /**
+ * The configured `workspacePath` text when it is not an absolute path, else null. Such a value is an
+ * invalid configuration: it is never joined to the plugin directory or the process cwd.
+ */
+export function relativeWorkspacePath(project: string, config: KanbanConfig = loadConfig()): string | null {
+  const row = config.projects?.[project] as { workspacePath?: unknown; workspace?: unknown } | undefined;
+  const raw = row?.workspacePath ?? row?.workspace;
+  if (typeof raw !== "string" || !raw.trim() || raw.trim() === "none") return null;
+  return normalizeProjectPath(raw) ? null : raw.trim();
+}
+
+/**
  * True when Paseo is known and none of the project's directories is a Paseo project. A project with no
  * known directory is never removed: nothing can prove it is gone.
  */

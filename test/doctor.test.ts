@@ -933,7 +933,7 @@ describe("doctor", () => {
       ...prevConfig,
       projects: {
         ...(prevConfig.projects ?? {}),
-        "configured-repo": { defaultWorkspace: "dir", baseBranch: "main", worktreeLanes: 1, lanesEnabled: false },
+        "configured-repo": { defaultWorkspace: "dir", baseBranch: "main", worktreeLanes: 1, lanesEnabled: false, workspacePath: root },
         "missing-repo": { defaultWorkspace: "dir", baseBranch: "main", worktreeLanes: 1, lanesEnabled: false },
       },
     });
@@ -957,6 +957,47 @@ describe("doctor", () => {
     }
   });
 
+  it("treats a configured project with no known directory as unknown, never under the plugin install directory (issue #9)", () => {
+    const prevRoot = process.env.KANBAN_AGENTIC_ROOT;
+    const prevConfig = loadConfig();
+    const parent = join(dir, "issue9-parent");
+    const known = join(parent, "no-directory-project");
+    mkdirSync(known, { recursive: true });
+    process.env.KANBAN_AGENTIC_ROOT = parent;
+    const row = { defaultWorkspace: "dir", baseBranch: "main", worktreeLanes: 1, lanesEnabled: false } as const;
+    saveConfig({
+      ...prevConfig,
+      projects: {
+        ...(prevConfig.projects ?? {}),
+        "no-directory-project": row,
+        "relative-path-project": { ...row, workspacePath: "relative/checkout" },
+        "absolute-path-project": { ...row, workspacePath: join(dir, "issue9-absolute") },
+      },
+    });
+    mkdirSync(join(dir, "issue9-absolute"), { recursive: true });
+    const warnings: string[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => { warnings.push(args.join(" ")); };
+    try {
+      const first = collectRepoRoots([]);
+      const second = collectRepoRoots([]);
+      for (const found of [first, second]) {
+        assert.equal(found.missing.some((item) => item.project === "no-directory-project" || item.project === "relative-path-project"), false);
+        assert.equal(found.skipped.some((item) => item.project === "no-directory-project" || item.project === "relative-path-project"), false);
+        assert.equal(found.repos.includes(known), false);
+        assert.ok(found.repos.some((path) => path.endsWith("issue9-absolute")));
+      }
+      const relative = warnings.filter((line) => line.includes("relative-path-project") && line.includes("relative/checkout"));
+      assert.equal(relative.length, 1, "a relative workspacePath is reported exactly once");
+      assert.equal(warnings.some((line) => line.includes("no-directory-project")), false);
+    } finally {
+      console.error = original;
+      saveConfig(prevConfig);
+      if (prevRoot == null) delete process.env.KANBAN_AGENTIC_ROOT;
+      else process.env.KANBAN_AGENTIC_ROOT = prevRoot;
+    }
+  });
+
   it("scans directories past absent empty projects, but fails closed for open cards and EACCES", async () => {
     const prevConfig = loadConfig();
     const envKeys = ["KANBAN_AGENTIC_ROOT", "KANBAN_AGENTS_DIR", "KANBAN_WORKTREES_ROOT"] as const;
@@ -974,7 +1015,7 @@ describe("doctor", () => {
     git(["init", "-b", "main"]);
     git(["-c", "user.name=doctor", "-c", "user.email=doctor@example.com", "commit", "--allow-empty", "-m", "init"]);
     const project = { defaultWorkspace: "dir", baseBranch: "main", worktreeLanes: 1, lanesEnabled: false } as const;
-    saveConfig({ ...prevConfig, projects: { normal: project, "demo_quota": project, demo_sandbox: project } });
+    saveConfig({ ...prevConfig, projects: { normal: { ...project, workspacePath: repo }, "demo_quota": project, demo_sandbox: project } });
     process.env.KANBAN_AGENTIC_ROOT = agentic;
     process.env.KANBAN_AGENTS_DIR = join(dir, "agents-empty-projects");
     process.env.KANBAN_WORKTREES_ROOT = wt;

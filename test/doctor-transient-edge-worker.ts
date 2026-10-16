@@ -120,7 +120,7 @@ beforeEach(() => {
   directories.add(process.env.KANBAN_AGENTS_DIR);
   files.set(join(ROOT, "data", "kanban.config.json"), JSON.stringify({
     supervisorAgentId: "boss", supervisors: { edge: "boss" }, transientRetryMinutes: 1, transientRetryLimit: 1,
-    projects: { configured: { defaultWorkspace: "dir", baseBranch: "main", code: "EDGE" } },
+    projects: { configured: { defaultWorkspace: "dir", baseBranch: "main", code: "EDGE", workspacePath: REPO } },
   }));
   mock.method(fs, "realpathSync", (path: fs.PathLike) => String(path));
   mock.method(fs, "existsSync", (path: fs.PathLike) => !denied.has(String(path)) && (files.has(String(path)) || directories.has(String(path))));
