@@ -321,7 +321,10 @@ async function readPanels(input: PanelInput, timer: StepTimer, nudge: boolean) {
   const home = await step("panels.home", () => buildHomeView(input.home)).catch(() => ({ companies: [], days: [], roleShares: [], roleCards: [] }));
   const liveBits = live.map((agent) => ({ id: agent.id, status: agent.status, createdAt: agent.createdAt, contextTokens: agent.contextTokens, archivedAt: agent.archivedAt }));
   const supervisorPanel = await step("panels.supervisor", () => readSupervisorPanel(paseo, liveBits, records, now)).catch(() => ({ rows: [], tasks: [], handoffs: [] }));
-  const registered = stored.map((d) => ({ project: String(d.project ?? ""), createdAt: String(d.createdAt ?? "") }));
+  const registered = stored.map((d) => ({
+    id: String(d.id ?? ""), project: String(d.project ?? ""), status: String(d.status ?? ""),
+    title: String(d.title ?? ""), detail: String(d.detail ?? ""), createdAt: String(d.createdAt ?? ""),
+  }));
   const sessions = new Map(records.map((r) => [r.id, { cwd: r.cwd, provider: r.provider }]));
   const details = await step("panels.leaderDetails", () => readLeaderDetails(paseo, supervisorPanel.rows, registered, now, sessions));
   if (nudge) {

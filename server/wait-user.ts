@@ -13,10 +13,10 @@ import { t } from "../shared/i18n";
 /** Pending-decision id: the cockpit's d1005-091216-1, or k1005-091216-1 from the board's own list. */
 export const DECISION_ID = /^[dk]\d{4}-\d{6}-\d+$/;
 /**
- * A card that says it is one of the cockpit's automatic reminders: "AFC automatic reminder", or the
+ * Accept current Kanban wording and the legacy AFC spelling for automatic reminders: "AFC automatic reminder", or the
  * Chinese wording "AFC \u81ea\u52a8\u63d0\u9192" that cards and schedules have always used.
  */
-const AFC_REMINDER = /AFC\s*(?:\u81ea\u52a8\u63d0\u9192|automatic\s+reminder)/i;
+const AFC_REMINDER = /(?:AFC|Kanban|\u770b\u677f)\s*(?:\u81ea\u52a8\u63d0\u9192|automatic\s+reminder)/i;
 
 /** The hold reason a waiting card shows (and stores): "Waiting for user: <decision id>". */
 export function waitUserHold(decision: string): string {

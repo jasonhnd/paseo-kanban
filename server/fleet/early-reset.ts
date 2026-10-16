@@ -127,7 +127,7 @@ export async function deliverEarlyResetNotices(now: number): Promise<number> {
   if (due.length === 0) return 0;
   const leader = await afcLeader();
   if (!leader) {
-    console.error("[afc] early reset: kanban.config.json has no AFC <leader>; the early-reset notice waits for the next round");
+    console.error("[afc] early reset: kanban.config.json has no Kanban <leader>; the early-reset notice waits for the next round");
     return 0;
   }
   const plans = plansOf(await readJson<Json>(PLANS, {}));

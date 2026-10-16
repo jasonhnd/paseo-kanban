@@ -700,7 +700,9 @@ describe("kanban_create tool contract", () => {
   it("declares decision in the MCP schema and explains the guard", () => {
     const def = toolDefs().find((tool) => tool.name === "kanban_create")!;
     const decision = (def.inputSchema as { properties: Record<string, { description?: string }> }).properties.decision;
-    assert.match(decision.description ?? "", new RegExp(localePattern(zhCNPart("waitUser.reminderNeedsDecision", 0, 8))));
+    assert.match(decision.description ?? "", /d1005-091216-1/);
+    assert.match(decision.description ?? "", /decisions\.json/);
+    assert.match(decision.description ?? "", /\bdone\b/);
     assert.ok(toolDefs().some((tool) => tool.name === "kanban_wait_user"));
   });
 

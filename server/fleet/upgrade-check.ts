@@ -100,7 +100,7 @@ export interface UpgradeOutcome {
 
 /** Short ids and labels for the two plugins of this suite; any other plugin keeps its own id. */
 const KNOWN_PLUGINS: Record<string, { id: string; label: string }> = {
-  [PLUGIN_IDS.cockpit]: { id: "afc", label: "AFC" },
+  [PLUGIN_IDS.cockpit]: { id: "afc", label: "Paseo Kanban" },
   [PLUGIN_IDS.kanban]: { id: "kanban", label: "Paseo Kanban" },
 };
 

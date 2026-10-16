@@ -157,7 +157,7 @@ describe("installed plugins", () => {
     const { home, cockpit, kanban, other } = homeWithPlugins();
     const plugins = defaultPlugins(installedPluginDirs({}, home));
     assert.deepEqual(plugins, [
-      { id: "afc", label: "AFC", dir: cockpit, cwdMatch: "cockpit-repo", project: "cockpit-repo" },
+      { id: "afc", label: "Paseo Kanban", dir: cockpit, cwdMatch: "cockpit-repo", project: "cockpit-repo" },
       { id: "kanban", label: "Paseo Kanban", dir: kanban, cwdMatch: "kanban-repo", project: "kanban-repo" },
       { id: "other-plugin", label: "other-plugin", dir: other, cwdMatch: "other-repo", project: "other-repo" },
     ]);

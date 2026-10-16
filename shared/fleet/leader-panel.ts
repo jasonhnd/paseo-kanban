@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ageMs } from "./decisions";
+import { parseDecisionCard } from "./decision-card";
 import { t, tAll } from "./i18n";
 import { weekStatsSchema } from "./leader-week";
 import { withoutPaused } from "./paused";
@@ -41,12 +42,11 @@ export interface LeaderReply {
   /** The input this reply answered. Absent = unknown, treated as the user. */
   prompt?: string;
 }
-export interface RegisteredDecision { project: string; createdAt: string }
+export interface RegisteredDecision {
+  id: string; project: string; status: string; title: string; detail: string; createdAt: string;
+}
 
-export const REGISTER_WINDOW_MS = 15 * 60_000;
 const EXCERPT_LINES = 4;
-/** Registered-decision id such as d1005-091216-1. Looked for in the whole reply, quotes and code blocks included. */
-const DECISION_ID = /(?<![A-Za-z0-9])d\d+-\d+-\d+/i;
 const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
 /** Option letters may be followed by ASCII marks or by the full-width marks of the catalog's other languages. */
 function optionLine(letter: string): RegExp {
@@ -75,6 +75,12 @@ function isAdviceLine(line: string): boolean {
 
 /** The paragraph holding lettered options A and B plus a recommendation (in it or in the next paragraph), from its lead-in line, at most 4 lines. */
 export function questionExcerpt(text: string): string | null {
+  return questionCandidates(text)[0]?.excerpt ?? null;
+}
+
+/** Keep the full question for matching, even when the panel excerpt is shortened. */
+function questionCandidates(text: string): Array<{ text: string; excerpt: string }> {
+  const questions: Array<{ text: string; excerpt: string }> = [];
   const optionA = optionLine("A"), optionB = optionLine("B");
   const paragraphs = text.split(/\n\s*\n/).map((p) => p.split("\n").map((l) => l.trimEnd()).filter((l) => l.trim()));
   for (const [i, lines] of paragraphs.entries()) {
@@ -87,27 +93,166 @@ export function questionExcerpt(text: string): string | null {
       if (picked.length < EXCERPT_LINES) picked.push(advice);
       else picked[EXCERPT_LINES - 1] = advice;
     }
-    return picked.join("\n");
+    const heading = a === 0 && i > 0 && !paragraphs[i - 1].some((l) => optionA.test(l) || optionB.test(l))
+      ? paragraphs[i - 1].slice(-1) : [];
+    questions.push({ text: [...heading, ...lines, ...(lines.includes(advice) ? [] : [advice])].join("\n"), excerpt: picked.join("\n") });
   }
-  return null;
+  return questions;
 }
 
-/**
- * Reported only when all hold: lettered options A/B with a recommendation, no registered-decision id anywhere in the text,
- * no decision of this project registered within 15 minutes of the reply, and the input was not from another agent.
- */
+const normalized = (text: string) => text.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]+/gu)?.join("") ?? "";
+/** Word pairs for spaced languages, character pairs for Han text; punctuation/markdown are immaterial. */
+function phraseUnits(text: string): string[] {
+  return text.normalize("NFKC").toLowerCase().replace(/\p{Script=Han}/gu, " $& ").match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+/** Generic answers are not decision identity, even when padded to look long. */
+const GENERIC_OPTION_PHRASES = new Set(
+  [
+    "yes",
+    "no",
+    "now",
+    "later",
+    "skip",
+    "go ahead",
+    "do it now",
+    "leave it as is",
+    "follow the plan",
+    "proceed with the current plan",
+    "wait until a later date",
+    "deploy the staging build",
+    "keep the current release",
+    "\u73b0\u5728\u505a",
+    "\u6682\u7f13",
+    "\u5148\u4e0d\u505a",
+    "\u7167\u505a",
+    "\u4e0d\u505a",
+    "\u540c\u610f",
+    "\u4e0d\u540c\u610f",
+    "\u662f",
+    "\u5426",
+    "\u597d",
+    "\u4e0d",
+    "\u73b0\u5728",
+    "\u7a0d\u540e",
+    "\u4ee5\u540e",
+    "\u5148",
+    "\u518d",
+    "\u505a",
+    "\u6267\u884c",
+    "\u7b49\u5f85",
+    "\u7ee7\u7eed",
+    "\u8df3\u8fc7",
+    "\u7acb\u5373",
+    "\u7acb\u523b",
+    "\u6309\u8ba1\u5212",
+    "\u4fdd\u6301\u73b0\u72b6",
+    "\u90e8\u7f72\u6d4b\u8bd5\u6784\u5efa",
+    "\u4fdd\u6301\u5f53\u524d\u7248\u672c",
+    "\u7136\u540e",
+    "\u6216\u8005",
+    "\u4ee5\u53ca",
+    "\u7684",
+    "\u4e86",
+    "\u5728",
+    "\u5c06",
+    "\u628a",
+    "\u5230",
+    "\u548c",
+    "\u5e76",
+    "\u65b0",
+    "\u65e7",
+    "\u5f53\u524d",
+    "\u73b0\u6709"
+  ].map(normalized),
+);
+const GENERIC_OPTION_WORDS = new Set(
+  "a an the and or but if then else as at by for from in into of on onto to with without after before until while that this these those it its we our you your they their is are was were be been being will would shall should can could may might must do does did done not no yes now later skip agree disagree continue wait proceed defer postpone go ahead follow keep current existing new old plan approved deploy staging build release please just already only also same again today tomorrow date don doesn didn isn aren wasn weren haven hasn hadn won wouldn shouldn couldn mustn needn daren shan re ve ll let all any some each every both other enough there here such he she his her him them me my mine ours yours theirs".split(" "),
+);
+const GENERIC_HAN_WORDS = [
+  "\u73b0\u5728\u505a",
+  "\u6682\u7f13",
+  "\u5148\u4e0d\u505a",
+  "\u7167\u505a",
+  "\u4e0d\u505a",
+  "\u540c\u610f",
+  "\u4e0d\u540c\u610f",
+  "\u662f",
+  "\u5426",
+  "\u597d",
+  "\u4e0d",
+  "\u73b0\u5728",
+  "\u7a0d\u540e",
+  "\u4ee5\u540e",
+  "\u5148",
+  "\u518d",
+  "\u505a",
+  "\u6267\u884c",
+  "\u7b49\u5f85",
+  "\u7ee7\u7eed",
+  "\u8df3\u8fc7",
+  "\u7acb\u5373",
+  "\u7acb\u523b",
+  "\u6309\u8ba1\u5212",
+  "\u4fdd\u6301\u73b0\u72b6",
+  "\u90e8\u7f72\u6d4b\u8bd5\u6784\u5efa",
+  "\u4fdd\u6301\u5f53\u524d\u7248\u672c",
+  "\u7136\u540e",
+  "\u6216\u8005",
+  "\u4ee5\u53ca",
+  "\u7684",
+  "\u4e86",
+  "\u5728",
+  "\u5c06",
+  "\u628a",
+  "\u5230",
+  "\u548c",
+  "\u5e76",
+  "\u65b0",
+  "\u65e7",
+  "\u5f53\u524d",
+  "\u73b0\u6709"
+].sort((a, b) => b.length - a.length);
+
+/** Count information after removing generic words; retain the original body for matching semantics. */
+function distinctiveOption(text: string): boolean {
+  if (GENERIC_OPTION_PHRASES.has(normalized(text))) return false;
+  let content = text.normalize("NFKC").toLowerCase();
+  for (const word of GENERIC_HAN_WORDS) content = content.replaceAll(word, " ");
+  const units = phraseUnits(content);
+  const han = units.filter((unit) => /\p{Script=Han}/u.test(unit)).length;
+  const english = new Set(units.filter((unit) => /^[a-z]{2,}$/.test(unit) && !GENERIC_OPTION_WORDS.has(unit)));
+  return han >= 6 || english.size >= 3;
+}
+
+const optionBody = (text: string) => phraseUnits(text).join(" ");
+
+function matchesDecision(question: string, decision: RegisteredDecision): boolean {
+  const asked = parseDecisionCard("", question, Infinity), stored = parseDecisionCard(decision.title, decision.detail, Infinity);
+  // The leader's first route is independently sufficient, even with generic options.
+  const title = phraseUnits(decision.title).join(" ");
+  const context = ` ${phraseUnits(asked.context).join(" ")} `;
+  if (title && context.includes(` ${title} `)) return true;
+
+  // Otherwise require two distinct informative bodies and the same explicit recommendation.
+  // Compare whole normalized bodies, preserving negation and subject words; ids and reasons
+  // alone are not additional routes. Deduplication prevents one body from counting as A and B.
+  if (!stored.recommended || stored.recommended !== asked.recommended) return false;
+  const bodies = new Set(stored.options.filter((option) => distinctiveOption(option.text)).map((option) => optionBody(option.text)));
+  const matches = new Set(asked.options.filter((option) => distinctiveOption(option.text))
+    .map((option) => optionBody(option.text)).filter((body) => bodies.has(body)));
+  return matches.size >= 2;
+}
+
+/** Match each question against this project's current open decisions, with no creation-time cutoff. */
 export function unregisteredQuestion(
   project: string, latest: LeaderReply | null, decisions: readonly RegisteredDecision[],
 ): LeaderReply | null {
   if (!latest?.text.trim() || !Number.isFinite(Date.parse(latest.at)) || isAgentInput(latest.prompt)) return null;
-  // A reply that re-tells an already registered decision is not an unregistered question, wherever the id sits.
-  if (DECISION_ID.test(latest.text)) return null;
   const text = latest.text.replace(/```[\s\S]*?```/g, "").replace(/^\s*>.*$/gm, "");
-  const replyAt = Date.parse(latest.at);
-  if (decisions.some((d) => d.project.toLowerCase() === project.toLowerCase()
-    && Math.abs(Date.parse(d.createdAt) - replyAt) <= REGISTER_WINDOW_MS)) return null;
-  const excerpt = questionExcerpt(text);
-  return excerpt ? { text: excerpt, at: latest.at } : null;
+  const open = decisions.filter((d) => d.status === "open" && d.project.toLowerCase() === project.toLowerCase());
+  const question = questionCandidates(text).find((q) => !open.some((d) => matchesDecision(q.text, d)));
+  return question ? { text: question.excerpt, at: latest.at } : null;
 }
 
 export function isWorkAction(action: LeaderAction): boolean {
