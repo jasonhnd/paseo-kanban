@@ -41,6 +41,7 @@ const EVENT_LABEL_KEYS: Readonly<Record<string, MessageKey>> = {
   registered: "cardParts.event.registered",
   blocked: "cardParts.event.blocked",
   unblocked: "cardParts.event.unblocked",
+  scheduled_resumed: "cardParts.event.scheduledResumed",
   archived: "cardParts.event.archived",
   auto_archived: "cardParts.event.autoArchived",
   claim: "cardParts.event.claim",

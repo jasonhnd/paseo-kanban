@@ -41,10 +41,10 @@ export function blockTask(id: number, kind: string, reason: string, actor: strin
   const info = getDb()
     .prepare(
       `UPDATE tasks SET status = 'blocked', blocked_kind = ?, blocked_reason = ?, blocked_from = ?, blocked_at = ?, hold_reason = ?, updated_at = ?,
-       scheduled_until = ?, scheduled_wake_id = ?, scheduled_claim_id = NULL, scheduled_claim_until = NULL
+       scheduled_until = ?, scheduled_wake_id = ?, scheduled_wake_text = ?, scheduled_claim_id = NULL, scheduled_claim_until = NULL
        WHERE id = ? AND status = ?`,
     )
-    .run(kind, text, task.status, ts, text, ts, until, until ? randomUUID() : null, id, task.status);
+    .run(kind, text, task.status, ts, text, ts, until, until ? randomUUID() : null, until ? t("scheduled.wake", { until }) : null, id, task.status);
   if (info.changes !== 1) throw new KanbanError("conflict", t("taskLifecycle.error.statusChanged", { card: cardMark(id) }), { id });
   addEvent(id, "blocked", task.status, "blocked", actor, { kind, reason: text, ...(extra ?? {}) });
   addComment(id, actor, t("taskLifecycle.block.comment", { kind: blockedKindLabel(kind), reason: text }));
@@ -177,13 +177,13 @@ export function unblockTask(id: number, actor: string, extra?: Record<string, un
   const info = departed
     ? getDb()
         .prepare(
-          `UPDATE tasks SET status = ?, agent_id = NULL, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
+          `UPDATE tasks SET status = ?, agent_id = NULL, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_wake_text = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
            WHERE id = ? AND status = 'blocked'`,
         )
         .run(target, ts, id)
     : getDb()
         .prepare(
-          `UPDATE tasks SET status = ?, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
+          `UPDATE tasks SET status = ?, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_wake_text = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
            WHERE id = ? AND status = 'blocked'`,
         )
         .run(target, ts, id);
@@ -234,13 +234,13 @@ function releaseSameBlock(
   const info = departed
     ? getDb()
         .prepare(
-          `UPDATE tasks SET status = ?, agent_id = NULL, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
+          `UPDATE tasks SET status = ?, agent_id = NULL, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_wake_text = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
            ${where}`,
         )
         .run(target, ts, id, kind, held.blockedAt, held.agentId, task.scheduled_wake_id)
     : getDb()
         .prepare(
-          `UPDATE tasks SET status = ?, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
+          `UPDATE tasks SET status = ?, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_wake_text = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
            ${where}`,
         )
         .run(target, ts, id, kind, held.blockedAt, held.agentId, task.scheduled_wake_id);

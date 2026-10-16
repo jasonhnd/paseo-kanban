@@ -39,6 +39,7 @@ export interface TaskRow {
   blocked_at: string | null;
   scheduled_until: string | null;
   scheduled_wake_id: string | null;
+  scheduled_wake_text: string | null;
   scheduled_claim_id: string | null;
   scheduled_claim_until: string | null;
   nudge_count: number;

@@ -9,6 +9,10 @@ import { runKanban } from "../server/cli";
 import { loadConfig } from "../server/config";
 import { closeDb, getDb } from "../server/db";
 import { runDoctor } from "../server/doctor";
+import { writeBoardSummary, writeKanbanInfo } from "../server/exports";
+import { kanbanView } from "../server/fleet/kanban";
+import { clearKanbanSourceMemo } from "../server/fleet/kanban-source";
+import { clearCache } from "../server/fleet/util";
 import { resetReconcileForTests, type TickOptions } from "../server/schedule";
 import { blockTask, claimStatus, createTask, getDetail, getTask, listBoard, unblockTask } from "../server/store";
 import { formatResult, handleTool, toolDefs } from "../server/tools";
@@ -118,6 +122,20 @@ describe("scheduled waits", { concurrency: 1 }, () => {
     assert.equal(getDb().prepare("SELECT COUNT(*) AS n FROM events WHERE task_id = ? AND kind IN ('transient_retry', 'transient_exhausted')").get(id)?.n, 0);
   });
 
+  it("keeps scheduled waits out of Fleet's needs-person list", async () => {
+    const id = running();
+    wait(id);
+    const human = running("human-agent");
+    blockTask(human, "needs_human", "Missing permission", "executor");
+    await writeKanbanInfo();
+    await writeBoardSummary();
+    clearKanbanSourceMemo();
+    clearCache("kanban");
+    const view = await kanbanView();
+    assert.equal(view.available, true);
+    assert.deepEqual(view.needsPerson.map(card => card.id), [human]);
+  });
+
   it("survives restart and wakes the original agent once at the deadline", async () => {
     const id = running();
     wait(id);
@@ -206,7 +224,7 @@ describe("scheduled waits", { concurrency: 1 }, () => {
 
   it("upgrades an existing task database without changing the card", () => {
     const id = running();
-    for (const column of ["scheduled_until", "scheduled_wake_id", "scheduled_claim_id", "scheduled_claim_until"]) {
+    for (const column of ["scheduled_until", "scheduled_wake_id", "scheduled_wake_text", "scheduled_claim_id", "scheduled_claim_until"]) {
       getDb().exec(`ALTER TABLE tasks DROP COLUMN ${column}`);
     }
     closeDb();

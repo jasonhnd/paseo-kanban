@@ -18,7 +18,7 @@ export async function resumeScheduledWaits(now: Date, send?: Send): Promise<void
   for (const { id } of rows) {
     await guardCard(id, "tick.scheduledWait", async () => {
       const task = getTask(id);
-      if (task.status !== "blocked" || task.blocked_kind !== "scheduled" || !task.scheduled_wake_id || !task.scheduled_until) return;
+      if (task.status !== "blocked" || task.blocked_kind !== "scheduled" || !task.scheduled_wake_id || !task.scheduled_wake_text || !task.scheduled_until) return;
       if (Date.parse(task.scheduled_until) > now.getTime()) return;
       const agentId = resumableAgentId(task);
       if (agentId) {
@@ -42,7 +42,7 @@ export async function resumeScheduledWaits(now: Date, send?: Send): Promise<void
           // The daemon deduplicates messageId. After an interrupted/ambiguous send a retry uses
           // the same persisted ID, including across board restarts, rather than starting a new turn.
           const options = { messageId: task.scheduled_wake_id };
-          const text = t("scheduled.wake", { until: task.scheduled_until });
+          const text = task.scheduled_wake_text;
           const accepted = await withTimeout(async () => {
             if (send) { await send(agentId, text, options); return true; }
             return deliverWake(agentId, text, options);
