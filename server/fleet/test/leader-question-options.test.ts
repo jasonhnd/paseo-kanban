@@ -86,3 +86,12 @@ test("formatting changes preserve matching bodies while negation and altered sub
   assert.equal(unregisteredQuestion("demo", { text, at }, [english]), null);
   assert.ok(unregisteredQuestion("demo", { text: english.detail.replace("Migrate", "Do not migrate"), at }, [english]));
 });
+
+test("long option bodies retain subject changes beyond the card display limit", () => {
+  const padding = " after every documented reconciliation checkpoint".repeat(12);
+  const text = `A: Migrate audited billing invoices${padding} to the billing ledger\nB: Preserve encrypted invoice snapshots${padding} in billing storage\nRecommend A`;
+  const registered = { ...english, detail: text };
+  assert.equal(unregisteredQuestion("demo", { text, at }, [registered]), null);
+  const changed = text.replace("to the billing ledger", "to the authentication ledger");
+  assert.ok(unregisteredQuestion("demo", { text: changed, at }, [registered]));
+});
