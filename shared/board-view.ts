@@ -104,6 +104,9 @@ export function isLandPending(task: Pick<ViewTask, "badge">): boolean {
 
 /** One short hint for the compact card: the single most important thing about it. */
 export function cardHint(task: ViewTask): { tone: "danger" | "warning" | "muted"; text: string } | null {
+  if (task.status === "blocked" && task.blockedKind === "scheduled" && task.scheduledUntil) {
+    return { tone: "warning", text: scheduledWaitLabel(task.scheduledUntil) };
+  }
   if (task.status === "blocked") {
     const reason = task.blockedReason || headLine(task.nextStep);
     return { tone: "danger", text: t("cardParts.alert.blocked", { reason: reason || t("boardView.reasonMissing") }) };
@@ -297,7 +300,7 @@ function blockedGuide(task: ViewTask, ctx: GuideContext): HandlingGuide {
       `bin/kanban pass ${task.code} --note "${t("boardView.cmd.rulingReason")}"`,
       `bin/kanban archive ${task.code}`,
     ],
-    needsPerson: true,
+    needsPerson: !(task.blockedKind === "scheduled" && task.scheduledUntil && Date.parse(task.scheduledUntil) > Date.now()),
   };
 }
 

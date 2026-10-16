@@ -203,6 +203,8 @@ function workerList(identity: Identity, args: Record<string, unknown>): { projec
     title: card.title,
     role: card.role,
     status: card.status,
+    blockedKind: card.blockedKind,
+    scheduledUntil: card.scheduledUntil,
     tier: card.tier,
   }));
   return { projects: [project], tasks };

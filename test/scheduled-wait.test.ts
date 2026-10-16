@@ -11,10 +11,12 @@ import { closeDb, getDb } from "../server/db";
 import { runDoctor } from "../server/doctor";
 import { resetReconcileForTests, type TickOptions } from "../server/schedule";
 import { blockTask, claimStatus, createTask, getDetail, getTask, listBoard, unblockTask } from "../server/store";
-import { handleTool } from "../server/tools";
+import { formatResult, handleTool, toolDefs } from "../server/tools";
 import { issueToken } from "../server/tokens";
 import { resetAgentAliveCheck, setAgentAliveCheck } from "../server/wake";
 import { setLanguage } from "../shared/i18n";
+import { attentionOf, cardHint } from "../shared/board-view";
+import { cardFaceTone } from "../shared/labels";
 import { runTick } from "./helpers/compat-schedule";
 
 let dir: string;
@@ -149,6 +151,56 @@ describe("scheduled waits", { concurrency: 1 }, () => {
     assert.equal(getTask(id).status, "running");
   });
 
+  it("reuses the persisted message ID when acceptance succeeded but its response was lost", async () => {
+    const id = running();
+    wait(id);
+    const accepted = new Set<string>();
+    const attempts: string[] = [];
+    let first = true;
+    setWakeSender((agentId, _text, options) => {
+      assert.ok(options?.messageId);
+      attempts.push(options.messageId);
+      if (!accepted.has(options.messageId)) { accepted.add(options.messageId); sent.push(agentId); }
+      if (first) { first = false; throw new Error("acknowledgement lost"); }
+    });
+    await tick(due);
+    assert.equal(getTask(id).status, "blocked");
+    closeDb();
+    await tick(due);
+    await tick(due);
+    assert.equal(attempts.length, 2);
+    assert.equal(new Set(attempts).size, 1);
+    assert.deepEqual(sent, ["scheduled-agent"]);
+    assert.equal(getTask(id).status, "running");
+  });
+
+  it("recovers an expired persisted send lease after a restart", async () => {
+    const id = running();
+    wait(id);
+    getDb().prepare("UPDATE tasks SET scheduled_claim_id = 'interrupted', scheduled_claim_until = ? WHERE id = ?")
+      .run(new Date(Date.now() + 60_000).toISOString(), id);
+    closeDb();
+    await tick(due);
+    assert.equal(getTask(id).status, "blocked");
+    assert.deepEqual(sent, []);
+    getDb().prepare("UPDATE tasks SET scheduled_claim_until = ? WHERE id = ?").run(new Date(Date.now() - 1).toISOString(), id);
+    closeDb();
+    await tick(due);
+    assert.deepEqual(sent, ["scheduled-agent"]);
+    assert.equal(getTask(id).status, "running");
+  });
+
+  it("upgrades an existing task database without changing the card", () => {
+    const id = running();
+    for (const column of ["scheduled_until", "scheduled_wake_id", "scheduled_claim_id", "scheduled_claim_until"]) {
+      getDb().exec(`ALTER TABLE tasks DROP COLUMN ${column}`);
+    }
+    closeDb();
+    assert.equal(getTask(id).status, "running");
+    wait(id);
+    assert.equal(getTask(id).scheduled_until, due.toISOString());
+  });
+
   it("does not consume the wait before the wake transport is ready", async () => {
     const id = running();
     wait(id);
@@ -199,7 +251,17 @@ describe("scheduled waits", { concurrency: 1 }, () => {
       const card = listBoard("demo").tasks.find(item => item.id === id)!;
       assert.match(card.badge, pattern);
       assert.match(getDetail(id).task.badge, pattern);
+      assert.match(formatResult(listBoard("demo")), pattern);
+      assert.match(formatResult(getTask(id)), pattern);
+      const token = issueToken("executor", id, "scheduled-agent");
+      assert.match(formatResult(await handleTool("kanban_list", {}, token)), pattern);
+      assert.match(cardHint(card)!.text, pattern);
+      assert.equal(attentionOf(card, []), null);
+      assert.equal(cardFaceTone(card), "warning");
       assert.ok(card.badge.includes(String(due.getFullYear())));
+      assert.equal(card.scheduledUntil, due.toISOString());
+      const schema = toolDefs(language).find(tool => tool.name === "kanban_block")!.inputSchema;
+      assert.ok((schema.properties as Record<string, unknown>).until);
     }
   });
 

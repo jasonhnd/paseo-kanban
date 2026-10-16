@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pressable, Text, View, type LayoutChangeEvent } from "react-native";
 import { cardHint, type ViewTask } from "../shared/board-view";
+import { scheduledWaitLabel } from "../shared/blocked";
 import { t } from "../shared/i18n";
 import { cardFaceTone, isLandPendingBadge, isWaitingParentsBadge } from "../shared/labels";
 import { Badge, pressed, type Styles } from "./ui";
@@ -53,15 +54,17 @@ export function CompactCard({ s, task, onOpen, note, showProject = false }: {
   showProject?: boolean;
 }) {
   const hint = note ?? cardHint(task);
+  const statusBadge = task.status === "blocked" && task.blockedKind === "scheduled" && task.scheduledUntil
+    ? scheduledWaitLabel(task.scheduledUntil) : task.badge;
   const [width, setWidth] = useState<number | null>(null);
   // Roomy until measured. A card too narrow for number + 12 title characters + badge gives the title its own line.
-  const extraBadge = Math.max(0, [...badgeFace(task.badge)].length - 4) * s.badgeChar;
+  const extraBadge = Math.max(0, [...badgeFace(statusBadge)].length - 4) * s.badgeChar;
   const roomy = width === null || width >= s.cardRoomy + extraBadge;
   const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
   const shortReason = note ? [...note.text].length <= SHORT_REASON_CHARS : false;
   const badge = (
-    <View testID="card-status" accessibilityLabel={hint ? `${task.badge}${t("common.colon")}${hint.text}` : task.badge} style={{ flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
-      <Badge s={s} label={badgeFace(task.badge)} tone={compactTone(task)} dot fit />
+    <View testID="card-status" accessibilityLabel={hint ? `${statusBadge}${t("common.colon")}${hint.text}` : statusBadge} style={{ flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
+      <Badge s={s} label={badgeFace(statusBadge)} tone={compactTone(task)} dot fit />
     </View>
   );
   const title = <Text testID="card-title" numberOfLines={1} style={[s.cardTitle, { flex: 1, minWidth: 0 }]}>{task.title}</Text>;

@@ -8,6 +8,7 @@ import { cardDecisions, type DecisionView, type LeaderTarget } from "../shared/d
 import { t, type MessageKey } from "../shared/i18n";
 import { cardEffortLabel, cardFaceTone, cardTierLabel, eventHeadline, LEADER_LABEL, statusLabel, workspaceLine } from "../shared/labels";
 import { taskRpc, type TaskDetailView } from "../shared/rpc";
+import { scheduledWaitLabel } from "../shared/blocked";
 import { CardAttention } from "./decisions";
 import { eventExtra, eventLabel, FiveFacts, taskAlerts } from "./card-parts";
 import { IdentityLines } from "./identity-lines";
@@ -282,7 +283,7 @@ export function CardDrawer({ s, id, decisions, leaders, actions, openAgent, onOp
         <View style={[s.between, { padding: 12, borderBottomWidth: 1, borderBottomColor: s.p.border }]}>
           <View style={s.cardHead}>
             {data ? <Text style={s.mono}>{data.task.code}</Text> : null}
-            {data ? <Badge s={s} label={data.task.badge} tone={cardFaceTone(data.task)} dot /> : null}
+            {data ? <Badge s={s} label={data.task.status === "blocked" && data.task.blockedKind === "scheduled" && data.task.scheduledUntil ? scheduledWaitLabel(data.task.scheduledUntil) : data.task.badge} tone={cardFaceTone(data.task)} dot /> : null}
           </View>
           <Button s={s} label={t("cardDrawer.close.button")} tone="secondary" accessibilityLabel={t("cardDrawer.close.label")} onPress={onClose} />
         </View>
