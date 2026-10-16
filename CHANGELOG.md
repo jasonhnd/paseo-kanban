@@ -5,6 +5,10 @@ Eleven release candidates are recorded here. `0.1.0-rc.11` is the current unpubl
 
 ## Unreleased
 
+### Fixed
+
+- Add persistent `block --kind scheduled --until` waits with explicit ISO offsets and a seven-day limit. Timed waits avoid transient retries and early doctor alerts; the next due tick resumes once with a durable deduplication ID and existing agent recovery rules. Leads may unblock early. Board/list/detail, CLI/MCP help and executor protocols are synchronized in English and Simplified Chinese. Fixes [issue #5](https://github.com/jasonhnd/paseo-kanban/issues/5).
+
 ## 0.1.0-rc.11 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.11`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.10 tags are never moved.

@@ -1,5 +1,11 @@
 # Recommended workflow
 
+## Timed waits
+
+When the next step is only allowed after a known wall-clock time, the assigned worker can run `block <card> --kind scheduled --until "<future ISO time with offset>" --reason "<why>"`, or call `kanban_block` with `kind: "scheduled"` and `until`. Include an explicit `Z` or `+/-HH:MM` offset. The time must be in the future, at most seven days away. Missing, invalid or past times, and `--until` on another kind, are refused without changing the card. For longer or indefinite waits, ask the lead to use `wait-user`. Do not use `transient` for timed waits. Deliverables already ready for review still complete with `handoff.waitingOn` as usual.
+
+Board, list and detail show “Scheduled wait until <local time>”, including the timezone. The persisted deadline survives a restart. Before it, no transient retries or blocked doctor alerts occur. On the first scheduler tick at or after it, the original agent receives one resume prompt; a missing or archived agent returns to ready for normal redispatch and admission checks. Delivery failures remain pending. Database leases serialize sends, and a persisted Paseo `messageId` deduplicates retries after an interrupted acknowledgement. An interrupted lease expires after one minute. Doctor uses the existing `doctor.blockedHours.transient` grace (two hours by default), counted from the deadline, if the card has not resumed. A scoped lead may cancel the wait early with `unblock`.
+
 This workflow is configurable. Repository instructions and the user's authorized scope take precedence. Installing a plugin does not authorize publishing, merging or spending money.
 
 ## Roles and review

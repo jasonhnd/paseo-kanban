@@ -4,6 +4,10 @@
 
 ## 未发布
 
+### 修复（Fixed）
+
+- 新增持久 `block --kind scheduled --until` 定时等待，要求 ISO 时间带明确偏移且不超过七天。到点前不做 transient 重试、不因等待报 doctor 红；到点后下一次 tick 用持久去重消息 ID 恢复一次，复用原有 agent 恢复规则，允许负责人提前 unblock。同步中英看板／列表／详情、CLI／MCP 帮助及执行守则。修复 [issue #5](https://github.com/jasonhnd/paseo-kanban/issues/5)。
+
 ## 0.1.0-rc.11 — 待审查与发布
 
 本地候选 tag 为 `v0.1.0-rc.11`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.10 tag 绝不挪动。

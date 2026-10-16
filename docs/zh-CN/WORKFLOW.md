@@ -2,6 +2,12 @@
 
 # 推荐工作流
 
+## 定时等待
+
+下一步只允许在某个钟点之后执行时，当前执行者可用 `block <卡号> --kind scheduled --until "<带偏移的未来 ISO 时间>" --reason "<原因>"`，或调用 `kanban_block` 并传 `kind: "scheduled"` 和 `until`。时间必须明确带 `Z` 或 `+/-HH:MM` 偏移，是未来时间，且不超过七天。缺失、格式无效、过去时间，或其他 kind 携带 `--until` 均拒绝且不改卡。更长或无期限的等待请让负责人用 `wait-user`。按钟点等待不要用 `transient`；已可交审的产出仍照常 complete，并在 `handoff.waitingOn` 写明外部等待。
+
+看板、列表和详情显示「定时等待到 <本地时间>」，含时区。数据库保存期限，重启后继续等待。到点前不做 transient 重试，不因等待报 doctor 红。到点后第一次调度 tick 向原 agent 发送一次恢复提示；原 agent 消失或已归档时返回 ready，走原有重派与准入检查。发送失败保留等待，数据库租约防止并发发送，持久 Paseo `messageId` 对回执中断后的重试去重；中断租约一分钟后到期。过点仍未恢复时，doctor 从到点起计算现有 `doctor.blockedHours.transient` 阈值（默认两小时）。所属负责人可用 `unblock` 提前解除。
+
 这是可配置的建议。仓库说明及用户授权范围优先；安装插件不等于授权发布、合并或花钱。
 
 ## 角色与审查
