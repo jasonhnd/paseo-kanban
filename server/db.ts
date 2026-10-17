@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   code_seq INTEGER,
   wait_decision TEXT,
   project_read_scope TEXT CHECK (project_read_scope IS NULL OR project_read_scope = 'project'),
+  tmp_work_bytes INTEGER,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -328,6 +329,7 @@ function migrateDb(db: DatabaseSync): void {
     "ALTER TABLE tasks ADD COLUMN code_seq INTEGER",
     "ALTER TABLE tasks ADD COLUMN wait_decision TEXT",
     "ALTER TABLE tasks ADD COLUMN project_read_scope TEXT CHECK (project_read_scope IS NULL OR project_read_scope = 'project')",
+    "ALTER TABLE tasks ADD COLUMN tmp_work_bytes INTEGER",
   ]) {
     const name = statement.split("COLUMN ")[1]?.split(" ")[0];
     if (name && !columns.some((column) => column.name === name)) db.exec(statement);

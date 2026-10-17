@@ -63,6 +63,8 @@ export interface TaskRow {
   wait_decision: string | null;
   /** Explicit project-wide read access. Cleared on submission, completion or archive. */
   project_read_scope: "project" | null;
+  /** Allocated size of the card temp directory, recorded once when the card is completed. */
+  tmp_work_bytes: number | null;
   created_at: string;
   updated_at: string;
 }

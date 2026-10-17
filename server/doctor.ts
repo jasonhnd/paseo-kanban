@@ -26,6 +26,7 @@ import { realDispatchMatrixPath } from "./matrix";
 import { dataDir } from "./paths";
 import { samePath } from "./placement";
 import { currentCleanupSql } from "./cleanup-state";
+import { capacityAlertSuppressId, capacityFindings, markCapacityLeaderAlerted, refreshCapacityGuard } from "./capacity-guard";
 
 export const DOCTOR_REPORT_FILE = "doctor-report.json";
 
@@ -613,6 +614,9 @@ export async function runDoctor(input: DoctorRunInput = {}): Promise<DoctorRepor
   const now = nowDate.getTime();
   // Doctor only reads. A lost config is reported below as a red, so it must not stop the checkup.
   const settings = input.settings ?? doctorSettings(loadConfigForReport());
+  if (!process.env.NODE_TEST_CONTEXT) {
+    await refreshCapacityGuard({ now: nowDate, config: loadConfigForReport(), notify: false });
+  }
   const sources = input.sources ?? {};
   const findings: DoctorFinding[] = [];
   const deadline = started + settings.totalTimeoutMs;
@@ -780,6 +784,7 @@ export async function runDoctor(input: DoctorRunInput = {}): Promise<DoctorRepor
     }
   }
   if (skippedProjects.size > 0) add(removedProjectsNote([...skippedProjects].sort()));
+  for (const finding of capacityFindings()) add(finding);
   if (timedOut) {
     add({
       id: "check:timeout",
@@ -799,6 +804,8 @@ export async function runDoctor(input: DoctorRunInput = {}): Promise<DoctorRepor
   const reds = findings.filter((item) => item.severity === "red");
   const prev = readLastDoctorReport();
   const prevAlerted = new Set(prev?.alertedIds ?? []);
+  const capacitySuppress = capacityAlertSuppressId();
+  if (capacitySuppress) prevAlerted.add(capacitySuppress);
   const fresh = reds.filter((item) => !prevAlerted.has(item.id));
   let woke: string[] = [];
   if (input.wake) {
@@ -809,6 +816,7 @@ export async function runDoctor(input: DoctorRunInput = {}): Promise<DoctorRepor
     }
   }
   const wokeIds = new Set(woke);
+  if (wokeIds.has("board:capacity")) markCapacityLeaderAlerted();
   const redIds = new Set(reds.map((item) => item.id));
   const carried = [...prevAlerted].filter((id) => {
     if (redIds.has(id)) return false;

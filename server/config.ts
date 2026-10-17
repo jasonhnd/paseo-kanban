@@ -180,7 +180,17 @@ export interface KanbanConfig {
    * The file is not rewritten just to store these.
    */
   doctor?: DoctorSettings;
+  /**
+   * Card-work capacity brake. Present only when the file has a `capacity` object.
+   * Non-positive numbers fall back to the defaults (10 GiB of card work, 50 GiB free).
+   */
+  capacity?: { maxWorkGiB: number; minFreeGiB: number };
 }
+
+/** Card-work total above this many GiB pauses a new card's first work start. */
+export const DEFAULT_MAX_WORK_GIB = 10;
+/** Disk free below this many GiB pauses a new card's first work start. */
+export const DEFAULT_MIN_FREE_GIB = 50;
 
 /** A config file without a `language` field predates the setting: that board has always been in Chinese. */
 export const LEGACY_LANGUAGE: LanguageSetting = "zh-CN";
@@ -242,6 +252,15 @@ function stringMap(value: unknown): Record<string, string> {
 
 function positiveNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+/** Undefined means the file has no capacity key. A present key always stores both limits. */
+function readCapacity(value: unknown): { maxWorkGiB: number; minFreeGiB: number } {
+  const raw = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return {
+    maxWorkGiB: positiveNumber(raw.maxWorkGiB, DEFAULT_MAX_WORK_GIB),
+    minFreeGiB: positiveNumber(raw.minFreeGiB, DEFAULT_MIN_FREE_GIB),
+  };
 }
 
 function positiveInt(value: unknown, fallback: number): number {
@@ -503,6 +522,7 @@ export function parseConfig(source: Record<string, unknown>): KanbanConfig {
     doctor: readDoctor(raw.doctor),
     projects: projectMap(raw.projects),
     ...(raw.profileRules !== undefined ? { profileRules: parseProfileRuleOverrides(raw.profileRules) ?? {} } : {}),
+    ...(Object.prototype.hasOwnProperty.call(source, "capacity") ? { capacity: readCapacity(source.capacity) } : {}),
   };
 }
 

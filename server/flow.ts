@@ -32,6 +32,7 @@ import { isProjectDormant } from "./paused";
 import { completionHandoffWarnings } from "./write-source";
 import { isGoogleProfile } from "./profiles";
 import { t } from "../shared/i18n";
+import { recordCardWorkBytes } from "./capacity-guard";
 
 const COMPLETERS = new Set(["executor", "reader", "decision", "batch"]);
 
@@ -60,6 +61,9 @@ function move(id: number, from: Status, to: Status, actor: string, kind: string,
     .run(to, ts, ...params, id, from);
   if (info.changes !== 1) throw new KanbanError("conflict", t("flow.error.statusChanged", { card: cardMark(id) }), { id, from, to });
   appendEvent(id, kind, from, to, actor, data);
+  if ((kind === "complete" || kind === "accept") && (to === "in_review" || to === "acceptance" || to === "done")) {
+    recordCardWorkBytes(id);
+  }
   return getTask(id);
 }
 

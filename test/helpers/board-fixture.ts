@@ -12,7 +12,7 @@ export function boardCard(over: Record<string, unknown> = {}) {
     finishedAt: null, awaitingMerge: false, column: "doing", badge: zhCN("labels.status.running"), assigner: zhCN("labels.assigner.user"), assignerShort: zhCN("labels.assigner.user"), modelShort: "Claude Sonnet 5.5",
     related: ("demo_tasks · " + zhCNPart("boardView.drag", 0, 3) + "0 " + zhCNPart("missingCwd.purge.notThisCard", 4, 5)), assignee: ((zhCN("labels.role.executor") + " ") + "· Opus"), goal: "Implement feature GOAL-LONG-TEXT",
     acceptance: "Tests pass ACCEPT-LONG-TEXT", acceptanceMissing: false, returnNote: null, outcome: null, tier: "L2", tierLabel: "L2",
-    leaderUnresponsive: false, leaderHold: false, ...over,
+    leaderUnresponsive: false, leaderHold: false, workBytes: null, ...over,
   };
 }
 

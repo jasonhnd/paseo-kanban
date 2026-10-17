@@ -49,6 +49,7 @@ export const cardSchema = z.object({
   tierLabel: z.string(),
   leaderUnresponsive: z.boolean(),
   leaderHold: z.boolean(),
+  workBytes: z.number().nullable(),
 });
 
 export const projectRowSchema = z.object({
