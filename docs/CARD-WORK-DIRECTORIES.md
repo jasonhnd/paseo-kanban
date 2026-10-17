@@ -56,6 +56,14 @@ root that is itself a Git repository, a directory whose generation changed, a
 directory an agent opened by that card still has, and a directory any process
 is using as its working directory. It does not walk the tree or stop at a file
 count. A removal that fails is a doctor red and is retried with backoff.
+Process working directories come from one `lsof` listing per round. The board
+looks for `lsof` on PATH first, then at `/usr/sbin/lsof` and `/usr/bin/lsof`,
+because a service manager can start the daemon with a bare PATH. If there is no
+`lsof` at all, cleanup does not stay red forever: when no agent this card opened
+is still present and no live agent's working directory is inside the directory,
+the directory is deleted and an info line says that `lsof` was not found and the
+agent list confirmed it. A live agent working directory inside the directory
+keeps it and the doctor red.
 Config changes do not strand recorded paths. Default cleanup does not follow a
 replaced work-root symlink, and it never deletes an evidence directory.
 Preserve lasting evidence in the handoff or another authorized durable location
