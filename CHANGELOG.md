@@ -23,6 +23,7 @@ Local candidate tag: `v0.1.0-rc.19`. This candidate is prepared only. Install it
 ### Fixed
 
 - Leader reminders stay quiet when that project has an open decision created within the last 60 minutes (`RECENT_OPEN_DECISION_WINDOW_MS`), including a reply that paraphrases the options and phrases the title as a question. Outside that window, a retelling is still recognised only by the full normalized title or by at least two distinctive option bodies with the same recommendation letter. A new question is still reminded when no open decision was created in that window and neither path matches. Fixes [issue #6](https://github.com/jasonhnd/paseo-kanban/issues/6).
+- Cleanup unregisters a nested git worktree with `git worktree remove --force` before it deletes a finished card directory, and runs `git worktree prune` only when that directory is already gone. A prunable registration whose path no longer exists is not reported as the card-temp info. A git failure stays the existing cleanup red with backoff. Fixes [issue #10](https://github.com/jasonhnd/paseo-kanban/issues/10).
 
 ## 0.1.0-rc.18 — pending review and publication
 

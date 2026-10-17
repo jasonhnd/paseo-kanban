@@ -22,6 +22,7 @@
 ### 修复（Fixed）
 
 - 某项目在最近 60 分钟内新建了仍为 open 的决策时（`RECENT_OPEN_DECISION_WINDOW_MS`，可配置），leader 提醒保持安静，包括用自己的话转述选项并把标题说成问句的回复。时间窗外仍只按完整规范化标题，或至少两条有辨识度的选项正文且推荐字母一致来确认。该项目在这 60 分钟内没有新建 open 决策、且两条路径都不匹配的新问题仍会提醒。修复 [issue #6](https://github.com/jasonhnd/paseo-kanban/issues/6)。
+- 清理已完成卡的目录前，对嵌在里面的 git worktree 执行 `git worktree remove --force`；目录已经不在时，只对所属仓库执行 `git worktree prune`。列表里标成 prunable 且路径已不存在的登记，不再报成卡片临时目录那条 info。git 命令失败仍走原有的清理红和退避。修复 [issue #10](https://github.com/jasonhnd/paseo-kanban/issues/10)。
 
 ## 0.1.0-rc.18 — 待审查与发布
 
