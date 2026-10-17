@@ -1,17 +1,20 @@
 /// <reference types="node" />
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { syncBuiltinESMExports } from "node:module";
 import fsPromises from "node:fs/promises";
 import fs from "node:fs";
 import os from "node:os";
 import childProcess from "node:child_process";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { after, beforeEach, describe, it, mock, type TestContext } from "node:test";
 import { closeDb, getDb } from "../server/db";
 import { execFileSync } from "node:child_process";
+import { runDoctor } from "../server/doctor";
 import { resetMissingCwdForTests, setMissingCwdHooks } from "../server/missing-cwd";
+import * as cleanup from "../server/tmp-cleanup";
 import { cleanTmpDirs, flushTmpCleanup, resetTmpCleanupForTests, scheduleTmpCleanup, tmpNamesFor } from "../server/tmp-cleanup";
 import { cardMark } from "../server/card-ref";
 import { cardTmpEnv } from "../server/card-tmp";
@@ -70,6 +73,32 @@ function holdDu(t: TestContext) {
   return { started, release: () => release() };
 }
 
+function openProblems(): Array<{ taskId: number; path: string; reason: string }> {
+  const fn = (cleanup as { tmpCleanupProblems?: () => Array<{ taskId: number; path: string; reason: string }> }).tmpCleanupProblems;
+  assert.equal(typeof fn, "function");
+  return fn!();
+}
+
+function setProcessCwds(list: (() => string[] | null) | null): void {
+  const fn = (cleanup as { setTmpCleanupHooks?: (hooks: { listProcessCwds?: () => string[] | null } | null) => void }).setTmpCleanupHooks;
+  assert.equal(typeof fn, "function");
+  fn!(list ? { listProcessCwds: list } : null);
+}
+
+async function until(check: () => boolean, limitMs: number): Promise<boolean> {
+  const deadline = Date.now() + limitMs;
+  do {
+    if (check()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } while (Date.now() < deadline);
+  return check();
+}
+
+function processCwdVisible(path: string): boolean {
+  const out = childProcess.spawnSync("lsof", ["-d", "cwd", "-F", "pn"], { encoding: "utf8", timeout: 15_000, maxBuffer: 64 * 1024 * 1024 });
+  return String(out.stdout ?? "").includes(path);
+}
+
 describe("tmp cleanup", () => {
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), "tmpclean-root-"));
@@ -82,10 +111,10 @@ describe("tmp cleanup", () => {
     assert.deepEqual(tmpNamesFor("TEST_0136"), ["TEST_0136", "test_0136", "test-0136", "test0136"]);
   });
 
-  it("deletes dirs of a card done 24 hours ago and records tmp_cleaned", async () => {
+  it("deletes dirs of a finished card immediately and records tmp_cleaned", async () => {
     const c = card("done", T0);
     const paths = [mk(c.code), mk(c.code.toLowerCase().replace("_", "-")), mk(c.code.toLowerCase().replace("_", ""))];
-    const out = await cleanTmpDirs({ now: new Date(T0.getTime() + 24 * HOUR), roots: [root] });
+    const out = await cleanTmpDirs({ now: T0, roots: [root] });
     assert.equal(out.length, 3);
     for (const p of paths) assert.equal(existsSync(p), false);
     assert.equal(events(c.id).length, 3);
@@ -157,9 +186,17 @@ describe("tmp cleanup", () => {
     ev(new Date(T0.getTime() + 10 * HOUR), "done", "rework");
     ev(new Date(T0.getTime() + 100 * HOUR), "rework", "archived");
     const p = mk(c.code);
-    assert.equal((await cleanTmpDirs({ now: new Date(T0.getTime() + 101 * HOUR), roots: [root] })).length, 0);
-    assert.equal(existsSync(p), true);
-    assert.equal((await cleanTmpDirs({ now: new Date(T0.getTime() + 124 * HOUR), roots: [root] })).length, 1);
+    assert.equal((await cleanTmpDirs({ now: new Date(T0.getTime() + 101 * HOUR), roots: [root] })).length, 1);
+    assert.equal(existsSync(p), false);
+  });
+
+  it("keeps a rework or blocked card", async () => {
+    for (const status of ["rework", "blocked"]) {
+      const c = card(status, null);
+      const p = mk(c.code);
+      assert.equal((await cleanTmpDirs({ now: new Date(T0.getTime() + 100 * HOUR), roots: [root] })).length, 0);
+      assert.equal(existsSync(p), true);
+    }
   });
 
   it("done then auto-archived counts from done", async () => {
@@ -178,7 +215,7 @@ describe("tmp cleanup", () => {
   it("deletes archived cards too", async () => {
     const c = card("archived", T0);
     const p = mk(c.code);
-    await cleanTmpDirs({ now: new Date(T0.getTime() + 25 * HOUR), roots: [root] });
+    await cleanTmpDirs({ now: T0, roots: [root] });
     assert.equal(existsSync(p), false);
   });
 
@@ -247,7 +284,7 @@ describe("tmp cleanup", () => {
     assert.equal(existsSync(p), true);
   });
 
-  it("keeps new activity in an existing nested file while du is waiting", { timeout: 30_000 }, async (t) => {
+  it("still deletes when an existing nested file changes while du is waiting", { timeout: 30_000 }, async (t) => {
     const c = card("done", T0);
     const p = mk(c.code);
     mkdirSync(join(p, "nested"));
@@ -258,9 +295,9 @@ describe("tmp cleanup", () => {
     await du.started;
     writeFileSync(file, "new activity");
     du.release();
-    assert.equal((await cleaning).length, 0);
-    assert.equal(existsSync(file), true);
-    assert.deepEqual(events(c.id), []);
+    assert.equal((await cleaning).length, 1);
+    assert.equal(existsSync(file), false);
+    assert.equal(events(c.id).length, 1);
   });
 
   it("refreshes agent cwd protection after du", { timeout: 30_000 }, async (t) => {
@@ -343,10 +380,23 @@ describe("tmp cleanup", () => {
     getDb().prepare("UPDATE tasks SET status = 'running' WHERE id = ?").run(c.id);
     mkdirSync(p);
     writeFileSync(join(p, "new-run.txt"), "must survive");
-    assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 1);
+    assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 0, "the same timestamp stays in backoff");
+    assert.equal(existsSync(retired), true);
+    assert.equal(existsSync(join(p, "new-run.txt")), true);
+    assert.ok(openProblems().some((item) => item.path === p && item.reason.includes("cannot remove directory")));
+    const report = await runDoctor({ persist: false, wake: false, sources: {} });
+    const finding = report.findings.find((item) => item.taskId === c.id && item.severity === "red" && item.id.startsWith("tmp-cleanup:"));
+    if (!finding) assert.fail("doctor reports the failed removal");
+    assert.match(finding.evidence, /cannot remove directory/);
+    assert.equal(finding.object, p);
+    const later = new Date(now.getTime() + 60_000);
+    assert.equal((await cleanTmpDirs({ now: later, roots: [root] })).length, 1);
     assert.equal(existsSync(retired), false);
     assert.equal(existsSync(join(p, "new-run.txt")), true);
     assert.equal(events(c.id).length, 1);
+    assert.equal(openProblems().some((item) => item.path === p), false);
+    const cleared = await runDoctor({ persist: false, wake: false, sources: {} });
+    assert.equal(cleared.findings.some((item) => item.taskId === c.id && item.id.startsWith("tmp-cleanup:")), false);
   });
 
   it("does not retry a retirement path that has been replaced by a different inode", async (t) => {
@@ -369,7 +419,7 @@ describe("tmp cleanup", () => {
     assert.deepEqual(events(c.id), []);
   });
 
-  it("keeps dirs under 24 hours, running cards and unknown names", async () => {
+  it("deletes a finished card before 24 hours and keeps running cards and unknown names", async () => {
     const fresh = card("done", T0);
     const live = card("running", null);
     const p1 = mk(fresh.code);
@@ -378,11 +428,9 @@ describe("tmp cleanup", () => {
     const p4 = mk("other-program");
     const p5 = mk(`${fresh.code}-extra`);
     const out = await cleanTmpDirs({ now: new Date(T0.getTime() + 23 * HOUR), roots: [root] });
-    assert.equal(out.length, 0);
-    const later = await cleanTmpDirs({ now: new Date(T0.getTime() + 100 * HOUR), roots: [root] });
-    assert.equal(later.length, 1);
-    for (const p of [p2, p3, p4, p5]) assert.equal(existsSync(p), true);
+    assert.equal(out.length, 1);
     assert.equal(existsSync(p1), false);
+    for (const p of [p2, p3, p4, p5]) assert.equal(existsSync(p), true);
   });
 
   it("does not follow symlinks", async () => {
@@ -406,17 +454,170 @@ describe("tmp cleanup", () => {
     assert.equal((await cleanTmpDirs({ now, roots: [root], limit: 2 })).length, 1);
   });
 
-  it("scheduler hook is throttled and does not block", async () => {
+  it("scheduler hook runs on the next round and does not block", async () => {
     const c = card("done", T0);
     const p = mk(c.code);
     const now = new Date(T0.getTime() + 48 * HOUR);
+    const started = Date.now();
     scheduleTmpCleanup({ now, roots: [root] });
+    assert.ok(Date.now() - started < 1000);
     await flushTmpCleanup();
     assert.equal(existsSync(p), false);
     const again = mk(c.code);
     scheduleTmpCleanup({ now: new Date(now.getTime() + 60_000), roots: [root] });
     await flushTmpCleanup();
-    assert.equal(existsSync(again), true);
+    assert.equal(existsSync(again), false);
+  });
+
+  it("deletes every finished card in one round", async () => {
+    const cards = Array.from({ length: 25 }, () => card("done", T0));
+    for (const c of cards) mk(c.code);
+    assert.equal((await cleanTmpDirs({ now: T0, roots: [root] })).length, 25);
+  });
+
+  it("deletes a finished card whose generation marker is unchanged", async (t) => {
+    const c = card("done", T0);
+    const p = mk(c.code);
+    process.env.KANBAN_TMP_ROOT = root;
+    t.after(() => { delete process.env.KANBAN_TMP_ROOT; });
+    cardTmpEnv(c.code);
+    assert.equal((await cleanTmpDirs({ now: T0, roots: [root] })).length, 1);
+    assert.equal(existsSync(p), false);
+  });
+
+  it("keeps the directory while an agent this card opened is still present", async (t) => {
+    t.after(() => resetMissingCwdForTests());
+    const c = card("done", T0);
+    const p = mk(c.code);
+    getDb().prepare("UPDATE tasks SET agent_id = ? WHERE id = ?").run("agent-live", c.id);
+    const agent = { id: "agent-live", cwd: root, provider: "x", title: "t", archived: false, lastActivityAt: null, labels: {} };
+    setMissingCwdHooks({ listAgents: () => [agent] });
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 0);
+    assert.equal(existsSync(p), true);
+    assert.ok(openProblems().some((item) => item.path === p && item.reason.includes("still present")));
+    setMissingCwdHooks({ listAgents: () => [{ ...agent, archived: true }] });
+    assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 1);
+    assert.equal(existsSync(p), false);
+    assert.equal(openProblems().some((item) => item.path === p), false);
+  });
+
+  it("keeps a directory a process is using as its cwd and doctor shows red until the retry", { timeout: 120_000 }, async (t) => {
+    const c = card("done", T0);
+    const p = mk(c.code);
+    setMissingCwdHooks({ listAgents: () => [] });
+    t.after(() => resetMissingCwdForTests());
+    const child = childProcess.spawn(process.execPath, ["-e", "setInterval(() => {}, 1e9)"], { cwd: p, stdio: "ignore" });
+    t.after(() => { if (child.exitCode == null) child.kill("SIGKILL"); });
+    const real = realpathSync(p);
+    assert.equal(await until(() => processCwdVisible(real) || processCwdVisible(p), 8_000), true, "lsof sees the child cwd");
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 0);
+    assert.equal(existsSync(p), true);
+    assert.ok(openProblems().some((item) => item.path === p && item.reason.includes("process working directory")));
+    const report = await runDoctor({ persist: false, wake: false, sources: {} });
+    const finding = report.findings.find((item) => item.taskId === c.id && item.severity === "red" && item.id.startsWith("tmp-cleanup:"));
+    if (!finding) assert.fail("doctor reports the live process");
+    assert.match(finding.evidence, /process working directory/);
+    assert.equal(finding.object, p);
+    child.kill("SIGKILL");
+    assert.equal(await until(() => !processCwdVisible(real) && !processCwdVisible(p), 8_000), true);
+    assert.equal((await cleanTmpDirs({ now: new Date(now.getTime() + 1000), roots: [root] })).length, 1);
+    assert.equal(existsSync(p), false);
+    assert.equal(openProblems().some((item) => item.path === p), false);
+    const cleared = await runDoctor({ persist: false, wake: false, sources: {} });
+    assert.equal(cleared.findings.some((item) => item.taskId === c.id && item.id.startsWith("tmp-cleanup:")), false);
+  });
+
+  it("reports red when process working directories cannot be listed", async (t) => {
+    t.after(() => { resetMissingCwdForTests(); resetTmpCleanupForTests(); });
+    const c = card("done", T0);
+    const p = mk(c.code);
+    setMissingCwdHooks({ listAgents: () => [] });
+    setProcessCwds(() => null);
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 0);
+    assert.equal(existsSync(p), true);
+    assert.ok(openProblems().some((item) => item.path === p && item.reason.includes("could not be listed")));
+    setProcessCwds(() => []);
+    assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 1);
+    assert.equal(openProblems().some((item) => item.path === p), false);
+  });
+
+  it("does not delete evidence or a card directory stored inside it", async () => {
+    const c = card("done", T0);
+    const beside = join(root, ".local-evidence");
+    mkdirSync(beside);
+    writeFileSync(join(beside, "keep.txt"), "keep");
+    const p = mk(c.code);
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 1);
+    assert.equal(existsSync(p), false);
+    assert.equal(existsSync(join(beside, "keep.txt")), true);
+    const buried = card("done", T0);
+    const evidence = join(root, ".local-evidence");
+    const inside = join(evidence, buried.code);
+    mkdirSync(inside, { recursive: true });
+    writeFileSync(join(inside, "keep.txt"), "keep");
+    assert.equal((await cleanTmpDirs({ now, roots: [evidence] })).length, 0);
+    assert.equal(existsSync(join(inside, "keep.txt")), true);
+  });
+
+  it("cleans a card that finishes while a round is still running", { timeout: 30_000 }, async (t) => {
+    const first = card("done", T0);
+    const p1 = mk(first.code);
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    const original = fsPromises.rm;
+    let calls = 0;
+    const mocked = mock.method(fsPromises, "rm", async (...args: Parameters<typeof original>) => {
+      calls += 1;
+      if (calls === 1) {
+        entered();
+        await released;
+      }
+      return original(...args);
+    });
+    syncBuiltinESMExports();
+    t.after(() => { mocked.mock.restore(); syncBuiltinESMExports(); });
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    scheduleTmpCleanup({ now, roots: [root] });
+    await started;
+    const second = card("done", T0);
+    const p2 = mk(second.code);
+    scheduleTmpCleanup({ now, roots: [root] });
+    release();
+    await flushTmpCleanup();
+    assert.equal(existsSync(p1), false);
+    assert.equal(existsSync(p2), false);
+  });
+
+  it("deletes a finished directory with more than a million nodes", { timeout: 600_000 }, async (t) => {
+    const base = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "cleanup-million");
+    rmSync(base, { recursive: true, force: true });
+    t.after(() => rmSync(base, { recursive: true, force: true }));
+    const c = card("done", T0);
+    const p = join(base, c.code);
+    mkdirSync(p);
+    writeFileSync(join(p, "kanban.db"), "x");
+    const filesPerDir = 1000;
+    const dirCount = 1000;
+    for (let bucket = 0; bucket < dirCount; bucket += 1) {
+      const sub = join(p, `n${bucket}`);
+      mkdirSync(sub);
+      for (let i = 0; i < filesPerDir; i += 1) closeSync(openSync(join(sub, String(i)), "w"));
+    }
+    const nodes = 1 + dirCount + dirCount * filesPerDir + 1;
+    assert.ok(nodes > 1_000_000);
+    try {
+      const out = await cleanTmpDirs({ now: T0, roots: [base] });
+      assert.equal(out.length, 1);
+      assert.equal(existsSync(p), false);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 
   describe("keeps directories it must not delete", () => {
@@ -433,7 +634,7 @@ describe("tmp cleanup", () => {
       assert.equal((await cleanTmpDirs({ now: later, roots: [root], ownerUid: me })).length, 1);
     });
 
-    it("skips a git directory with unpushed commits and deletes a clean one", async () => {
+    it("skips a git directory with unpushed commits", async () => {
       const dirty = card("done", T0);
       const p = mk(dirty.code);
       const git = (...args: string[]) => execFileSync("git", ["-C", p, "-c", "user.email=a@b", "-c", "user.name=t", ...args], { stdio: "ignore" });
@@ -441,6 +642,25 @@ describe("tmp cleanup", () => {
       git("add", "-A");
       git("commit", "-qm", "wip");
       assert.equal((await cleanTmpDirs({ now: later, roots: [root] })).length, 0);
+      assert.equal(existsSync(p), true);
+    });
+
+    it("keeps a card directory that is itself a git repository", async () => {
+      const published = card("done", T0);
+      const p = mk(published.code);
+      const git = (...args: string[]) => execFileSync("git", ["-C", p, "-c", "user.email=a@b", "-c", "user.name=t", ...args], { stdio: "ignore" });
+      git("init", "-q", "-b", "main");
+      git("add", "-A");
+      git("commit", "-qm", "base");
+      git("update-ref", "refs/remotes/origin/main", "HEAD");
+      assert.equal((await cleanTmpDirs({ now: later, roots: [root] })).length, 0);
+      assert.equal(existsSync(p), true);
+      const nested = card("done", T0);
+      const n = mk(nested.code);
+      mkdirSync(join(n, "inner"));
+      execFileSync("git", ["init", "-q", "-b", "main", join(n, "inner")], { stdio: "ignore" });
+      assert.equal((await cleanTmpDirs({ now: later, roots: [root] })).length, 1);
+      assert.equal(existsSync(n), false);
       assert.equal(existsSync(p), true);
     });
 
@@ -462,6 +682,7 @@ describe("tmp cleanup", () => {
       setMissingCwdHooks({ listAgents: () => null });
       assert.equal((await cleanTmpDirs({ now: later, roots: [root] })).length, 0);
       assert.equal(existsSync(p), true);
+      assert.ok(openProblems().some((item) => item.path === p && item.reason.includes("agent list")));
     });
 
     it("skips a git directory whose only unpushed commit is on a detached HEAD", async () => {
