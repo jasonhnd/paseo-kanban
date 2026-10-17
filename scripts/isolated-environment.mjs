@@ -1,5 +1,6 @@
 import { accessSync, constants, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
+import { sharedNpmCache } from "./shared-runtime.mjs";
 
 // POSIX tools used by real Git/shell/filesystem fixture tests, not provider executables.
 export const TEST_TOOLS = ["npm", "git", "env", "sh", "dirname", "cat", "uniq", "find", "file", "true", "du", "tar"];
@@ -12,7 +13,7 @@ export function executable(name, path = process.env.PATH ?? "") {
   throw new Error(`required fixture tool is unavailable: ${name}`);
 }
 
-export function isolatedEnvironment(directory, { release = false, sourceEnv = process.env } = {}) {
+export function isolatedEnvironment(directory, { release = false, voice = false, sourceEnv = process.env } = {}) {
   const tools = join(directory, "tools"); mkdirSync(tools, { recursive: true });
   symlinkSync(process.execPath, join(tools, "node"));
   for (const name of [...TEST_TOOLS, ...(release ? ["gitleaks"] : [])]) symlinkSync(executable(name, sourceEnv.PATH), join(tools, name));
@@ -27,7 +28,8 @@ export function isolatedEnvironment(directory, { release = false, sourceEnv = pr
     KANBAN_TMP_ROOT: join(directory, "tmp"), KANBAN_TMP: directory, TMPDIR: join(directory, "tmp"),
     KANBAN_WORKTREES_ROOT: join(directory, "worktrees"),
     XDG_CACHE_HOME: join(directory, "cache"), XDG_CONFIG_HOME: join(directory, "home/config"),
-    npm_config_cache: join(directory, "cache/npm"), LANG: "C.UTF-8", LC_ALL: "C.UTF-8",
+    npm_config_cache: sharedNpmCache(sourceEnv), LANG: "C.UTF-8", LC_ALL: "C.UTF-8",
+    PASEO_VOICE_MODE_ENABLED: voice ? "1" : "0", PASEO_DICTATION_ENABLED: voice ? "1" : "0",
     GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: join(directory, "home/no-global"),
     GIT_AUTHOR_NAME: "paseo-fleet contributors", GIT_COMMITTER_NAME: "paseo-fleet contributors",
     GIT_AUTHOR_EMAIL: "noreply@example.invalid", GIT_COMMITTER_EMAIL: "noreply@example.invalid",
@@ -39,4 +41,44 @@ export function isolatedEnvironment(directory, { release = false, sourceEnv = pr
   }
   if (release && sourceEnv.FLEET_PRIVATE_DENYLIST?.trim()) env.FLEET_PRIVATE_DENYLIST = sourceEnv.FLEET_PRIVATE_DENYLIST;
   return env;
+}
+
+const PROVIDERS = ["claude", "codex", "copilot", "opencode", "pi", "omp"];
+
+/** Config for a disposable Paseo host. Speech and dictation stay off unless a caller turns them on. */
+export function testHostConfig(overrides = {}) {
+  const config = {
+    version: 1,
+    daemon: {
+      agentProfiles: [],
+      relay: { enabled: false },
+      browserTools: { enabled: false },
+      mcp: { injectIntoAgents: false },
+    },
+    agents: { providers: Object.fromEntries(PROVIDERS.map((name) => [name, { enabled: false }])) },
+    pluginsEnabled: true,
+    plugins: {},
+    features: {
+      webUi: { enabled: true },
+      voiceMode: { enabled: false },
+      dictation: { enabled: false },
+    },
+  };
+  if (overrides.daemon) {
+    config.daemon = {
+      ...config.daemon, ...overrides.daemon,
+      relay: { ...config.daemon.relay, ...overrides.daemon.relay },
+      browserTools: { ...config.daemon.browserTools, ...overrides.daemon.browserTools },
+      mcp: { ...config.daemon.mcp, ...overrides.daemon.mcp },
+    };
+  }
+  if (overrides.features) {
+    config.features = {
+      ...config.features, ...overrides.features,
+      webUi: { ...config.features.webUi, ...overrides.features.webUi },
+      voiceMode: { ...config.features.voiceMode, ...overrides.features.voiceMode },
+      dictation: { ...config.features.dictation, ...overrides.features.dictation },
+    };
+  }
+  return config;
 }

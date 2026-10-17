@@ -81,6 +81,14 @@ While the brake is on, `start` and automatic start return the reason for a brand
 
 Completing or accepting a card stores `tmp_work_bytes` once. `show`, list and the board show that size when it is present. Later growth does not change the stored number. A missing directory or a failed `du` leaves the field empty and does not block completion.
 
+## Shared programs and what the card root keeps
+
+The card root keeps only writable state that this card must not share: the host `HOME` and `PASEO_HOME`, the board database, and port configuration. Program trees, dependency installs and the npm cache stay outside the card, in shared directories. The default runtime directory is `$HOME/.kanban-cache/paseo-runtime/<sha256 of the official package-lock>`, prepared once by `scripts/shared-runtime.mjs` and then made read-only. A second install of the same lock waits on a lock file and reuses that directory. `KANBAN_SHARED_RUNTIME_ROOT` selects another parent directory. Tests point `PASEO_SERVER_DIR` at `node_modules/@getpaseo/server` inside it. A writable copy, when one is actually required, is an APFS clone (`cp -c`), not another `npm ci`.
+
+The default npm cache is `$HOME/.kanban-cache/npm`. `KANBAN_SHARED_NPM_CACHE` overrides it. `scripts/isolated-environment.mjs` sets that cache and also sets `PASEO_VOICE_MODE_ENABLED=0` and `PASEO_DICTATION_ENABLED=0`. Host `config.json` written for tests sets `features.voiceMode.enabled` and `features.dictation.enabled` to false. An explicit voice check is a separate host that turns those switches on; it is not the default.
+
+A successful test deletes its card-root workspace immediately. Put receipts, hashes and log summaries in the evidence directory before that deletion. The evidence directory is not inside the workspace that the test deletes. The board's later cleanup of a finished card directory is unchanged.
+
 ## Tests and switching an existing installation
 
 The full test runner overrides inherited `KANBAN_TMP_ROOT` with a run-owned root;

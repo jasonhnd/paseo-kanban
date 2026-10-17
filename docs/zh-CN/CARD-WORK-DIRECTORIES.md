@@ -43,6 +43,14 @@ workspace 必须是可写的 Git 仓库根。看板会保留已有规则，只�
 
 卡片完成或验收时记录一次 `tmp_work_bytes`。`show`、列表和看板在有这个数时显示临时目录大小。之后目录再变大也不改已记录的数。目录不存在或 `du` 失败时字段留空，不挡住完成。
 
+## 共享程序，以及卡根里留什么
+
+卡根只放这张卡不能和别人共用的可写状态：宿主的 `HOME` 和 `PASEO_HOME`、看板数据库、端口配置。程序、依赖安装和 npm 缓存放在卡外的共享目录。默认 runtime 目录是 `$HOME/.kanban-cache/paseo-runtime/<官方 package-lock 的 sha256>`，由 `scripts/shared-runtime.mjs` 只安装一次，然后改成只读。同一份 lock 的第二次安装会等锁文件，然后复用那个目录。`KANBAN_SHARED_RUNTIME_ROOT` 用来换父目录。测试把 `PASEO_SERVER_DIR` 指到其中的 `node_modules/@getpaseo/server`。真的需要一份可写副本时，用 APFS clone（`cp -c`），不要再 `npm ci` 一次。
+
+默认 npm 缓存是 `$HOME/.kanban-cache/npm`，用 `KANBAN_SHARED_NPM_CACHE` 覆盖。`scripts/isolated-environment.mjs` 会设置这个缓存，并设置 `PASEO_VOICE_MODE_ENABLED=0` 和 `PASEO_DICTATION_ENABLED=0`。测试写出的宿主 `config.json` 把 `features.voiceMode.enabled` 和 `features.dictation.enabled` 写成 false。要显式检查语音时，另起一个打开这两个开关的宿主，那不是默认。
+
+测试成功后立刻删掉卡根里的工作副本。收据、哈希和日志摘要要在删除前放进证据目录。证据目录不在被删的工作副本里面。看板之后对已结束卡片目录的清理不变。
+
 ## 测试与现有安装切换
 
 完整测试入口覆盖继承的 `KANBAN_TMP_ROOT`，每个测试进程还预载自己的显式卡片根，结束后清理。CLI 和假 launcher 的子进程继承这个根。每轮测试前后对比真实默认根的卡目录名称，发现新增即失败；负向验证只在自建项目目录中模拟残留。
