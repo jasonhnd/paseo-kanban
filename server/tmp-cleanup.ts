@@ -84,6 +84,7 @@ interface RootMark {
 
 interface OpenFailure {
   attempt: number;
+  reason: string;
   retryAt: number;
 }
 
@@ -261,11 +262,11 @@ function openFailure(taskId: number, path: string): OpenFailure | null {
     .get(taskId, path) as { id: number; at: string } | undefined;
   if (cleaned && eventTime(cleaned, fail)) return null;
   try {
-    const data = JSON.parse(fail.data_json) as { attempt?: unknown; retryAt?: unknown };
+    const data = JSON.parse(fail.data_json) as { attempt?: unknown; retryAt?: unknown; reason?: unknown };
     const retryAt = typeof data.retryAt === "string" ? Date.parse(data.retryAt) : Number.NaN;
-    return { attempt: typeof data.attempt === "number" ? data.attempt : 1, retryAt: Number.isFinite(retryAt) ? retryAt : 0 };
+    return { attempt: typeof data.attempt === "number" ? data.attempt : 1, reason: typeof data.reason === "string" ? data.reason : "", retryAt: Number.isFinite(retryAt) ? retryAt : 0 };
   } catch {
-    return { attempt: 1, retryAt: 0 };
+    return { attempt: 1, reason: "", retryAt: 0 };
   }
 }
 
@@ -277,6 +278,25 @@ function recordProblem(taskId: number, path: string, reason: string, now: number
     path, reason, attempt, retryAt: new Date(now + delay).toISOString(),
   }, { at: new Date(now).toISOString() });
   console.error(`[paseo-kanban] tmp cleanup failed ${path}: ${reason}`);
+}
+
+/** A reason that cannot change by waiting is written once; the same reason on a later round is neither stored nor logged again. */
+function keepProblem(taskId: number, path: string, reason: string, now: number): void {
+  if (openFailure(taskId, path)?.reason === reason) return;
+  recordProblem(taskId, path, reason, now, true);
+}
+
+/** The directory is already gone: close any open red for it. Without a red there is nothing to say. */
+function clearIfGone(taskId: number, path: string, now: number): void {
+  if (!openFailure(taskId, path)) return;
+  // A path that was only renamed to its retired name is not gone; the retired directory still has to be removed.
+  const retiring = getDb().prepare(`SELECT 1 FROM events e WHERE e.task_id = ? AND e.kind = 'tmp_retirement_prepared'
+    AND json_extract(e.data_json, '$.path') = ?
+    AND NOT EXISTS (SELECT 1 FROM events f WHERE f.task_id = e.task_id AND f.kind IN ('tmp_cleaned', 'tmp_retirement_cancelled')
+      AND (json_extract(f.data_json, '$.retirementId') = e.id
+        OR EXISTS (SELECT 1 FROM json_each(f.data_json, '$.retirementIds') j WHERE j.value = e.id))) LIMIT 1`).get(taskId, path);
+  if (retiring) return;
+  upsertSummaryEvent(taskId, "tmp_cleaned", "scheduler", path, { path, gone: true }, { at: new Date(now).toISOString() });
 }
 
 function waiting(taskId: number, path: string, now: number): boolean {
@@ -368,9 +388,11 @@ function retire(task: TerminalTask, before: RootMark, record: Retirement, uid: n
 /** Most retirement ids one tmp_cleaned summary row remembers; an older id simply finds its prepared row with no match and lstat says the path is gone. */
 const RETIREMENT_ID_CAP = 200;
 
-async function removeRetired(taskId: number, retirementId: number, record: Retirement, done: TmpCleaned[], now: number): Promise<void> {
-  await rm(record.retiredPath, { recursive: true, force: true });
-  done.push({ taskId, path: record.path, bytes: record.bytes });
+async function removeRetired(taskId: number, retirementId: number, record: Retirement, done: TmpCleaned[], now: number, gone = false): Promise<void> {
+  if (!gone) {
+    await rm(record.retiredPath, { recursive: true, force: true });
+    done.push({ taskId, path: record.path, bytes: record.bytes });
+  }
   upsertSummaryEvent(taskId, "tmp_cleaned", "scheduler", record.path, { ...record, retirementId }, {
     at: new Date(now).toISOString(),
     list: { field: "retirementIds", entry: retirementId, cap: RETIREMENT_ID_CAP },
@@ -397,14 +419,29 @@ async function retryRetired(root: string, budget: number, done: TmpCleaned[], ui
         if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
         throw err;
       });
-      if (!info) continue;
-      if (!info.isDirectory() || info.isSymbolicLink() || String(info.dev) !== record.dev || String(info.ino) !== record.ino) continue;
-      if (uid != null && Number(info.uid) !== uid) continue;
+      if (!info) {
+        await removeRetired(row.task_id, row.id, record, done, now, true);
+        continue;
+      }
+      if (!info.isDirectory() || info.isSymbolicLink() || String(info.dev) !== record.dev || String(info.ino) !== record.ino) {
+        keepProblem(row.task_id, record.path, "kept: the retired path is no longer the recorded directory (inode mismatch)", now);
+        continue;
+      }
+      if (uid != null && Number(info.uid) !== uid) {
+        keepProblem(row.task_id, record.path, "kept: the retired directory is not owned by the current user (owner mismatch)", now);
+        continue;
+      }
       const fresh = lstatSync(record.retiredPath, { bigint: true });
-      if (!fresh.isDirectory() || fresh.isSymbolicLink() || fresh.dev !== info.dev || fresh.ino !== info.ino) continue;
+      if (!fresh.isDirectory() || fresh.isSymbolicLink() || fresh.dev !== info.dev || fresh.ino !== info.ino) {
+        keepProblem(row.task_id, record.path, "kept: the retired directory changed while it was checked (inode mismatch)", now);
+        continue;
+      }
       // A missing marker is a partial removal. Only a marker that is still present and different is another directory.
       const generation = cardTmpGeneration(record.retiredPath);
-      if (record.generation != null && generation != null && generation !== record.generation) continue;
+      if (record.generation != null && generation != null && generation !== record.generation) {
+        keepProblem(row.task_id, record.path, "kept: the retired directory generation marker changed", now);
+        continue;
+      }
       await removeRetired(row.task_id, row.id, record, done, now);
     } catch (err) {
       if (record) recordProblem(row.task_id, record.path, `cannot remove directory: ${errorText(err)}`, now, true);
@@ -424,6 +461,10 @@ async function cleanRoot(root: string, names: Map<string, TerminalTask>, budget:
     const reason = `cannot read work root: ${errorText(err)}`;
     for (const [entry, task] of names) recordProblem(task.id, join(root, entry), reason, now, true);
     return;
+  }
+  const present = new Set(entries);
+  for (const [entry, task] of names) {
+    if (!present.has(entry)) clearIfGone(task.id, join(root, entry), now);
   }
   for (const entry of entries) {
     if (done.length >= budget) return;
@@ -472,6 +513,7 @@ async function cleanRoot(root: string, names: Map<string, TerminalTask>, budget:
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       // Already gone, or the root changed before we committed to it: not a failed removal.
+      if (code === "ENOENT") clearIfGone(task.id, path, now);
       if (code === "ENOENT" || (err instanceof Error && err.message === "tmp directory changed")) continue;
       recordProblem(task.id, path, `cannot remove directory: ${errorText(err)}`, now, true);
     }
@@ -482,9 +524,9 @@ async function cleanRoot(root: string, names: Map<string, TerminalTask>, budget:
 async function occupancy(task: TerminalTask, path: string): Promise<Hold | null> {
   const agents = readCwdAgentList();
   if (!agents) return { reason: "the agent list could not be read", backoff: false };
-  if (openedAgentLive(task, agents)) return { reason: "an agent opened by this card is still present", backoff: false };
+  if (openedAgentLive(task, agents)) return { reason: "an agent is still in use: one this card opened is still present", backoff: false };
   const live = agents.filter((agent) => !agent.archived).map((agent) => agent.cwd.trim()).filter(Boolean);
-  if (await cwdInside(path, live)) return { reason: "an agent working directory is inside this card directory", backoff: false };
+  if (await cwdInside(path, live)) return { reason: "an agent is still in use: its working directory is inside this card directory", backoff: false };
   const processes = roundProcessCwds();
   if (!processes) return { reason: "process working directories could not be listed", backoff: false };
   if (await cwdInside(path, processes)) return { reason: "a process working directory is inside this card directory", backoff: false };
