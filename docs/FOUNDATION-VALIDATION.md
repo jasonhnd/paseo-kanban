@@ -17,7 +17,7 @@ Uncommitted changes are not part of that run.
 
 The child environment is an allowlist, not a copy of the user's environment.
 The executable set is Node, npm and these declared POSIX fixture tools:
-`git`, `env`, `sh`, `dirname`, `cat`, `uniq`, `find`, `file`, `true`, `du`, `tar`.
+`git`, `env`, `sh`, `dirname`, `cat`, `uniq`, `find`, `file`, `true`, `du`, `tar`, `lsof`.
 No Python interpreter, provider command, daemon, real `gh`, real `ps` or real
 profiles are available on the default test PATH. Anonymous Node executables
 model command protocols where needed. Release runs additionally require real
