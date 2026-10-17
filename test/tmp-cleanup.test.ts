@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import assert from "node:assert/strict";
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { syncBuiltinESMExports } from "node:module";
 import fsPromises from "node:fs/promises";
@@ -83,6 +83,28 @@ function setProcessCwds(list: (() => string[] | null) | null): void {
   const fn = (cleanup as { setTmpCleanupHooks?: (hooks: { listProcessCwds?: () => string[] | null } | null) => void }).setTmpCleanupHooks;
   assert.equal(typeof fn, "function");
   fn!(list ? { listProcessCwds: list } : null);
+}
+
+/** A stand-in lsof that prints the given process cwds in `-F pn` form. */
+function fakeLsof(directory: string, cwds: string[]): string {
+  mkdirSync(directory, { recursive: true });
+  const path = join(directory, "lsof");
+  writeFileSync(path, `#!/bin/sh\nprintf '%s\\n' ${["p1", ...cwds.map((cwd) => `n${cwd}`)].map((line) => `'${line}'`).join(" ")}\n`);
+  chmodSync(path, 0o755);
+  return path;
+}
+
+/** Run the body with PATH set to the given directories only, then restore it. */
+async function withPath<T>(dirs: string[], body: () => Promise<T>): Promise<T> {
+  const previous = process.env.PATH;
+  process.env.PATH = dirs.join(":");
+  try { return await body(); } finally { if (previous === undefined) delete process.env.PATH; else process.env.PATH = previous; }
+}
+
+function setLsofFallbacks(paths: string[]): void {
+  const fn = (cleanup as { setTmpCleanupHooks?: (hooks: { lsofFallbacks?: string[] } | null) => void }).setTmpCleanupHooks;
+  assert.equal(typeof fn, "function");
+  fn!({ lsofFallbacks: paths });
 }
 
 async function until(check: () => boolean, limitMs: number): Promise<boolean> {
@@ -673,6 +695,95 @@ describe("tmp cleanup", () => {
     setProcessCwds(() => []);
     assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 1);
     assert.equal(openProblems().some((item) => item.path === p), false);
+  });
+
+  it("finds lsof in a fallback location when PATH has none", async (t) => {
+    t.after(() => { resetMissingCwdForTests(); resetTmpCleanupForTests(); });
+    const c = card("done", T0);
+    const p = mk(c.code);
+    setMissingCwdHooks({ listAgents: () => [] });
+    const bare = join(root, "bare-path");
+    mkdirSync(bare);
+    const busy = fakeLsof(join(root, "fallback-busy"), [realpathSync(p)]);
+    const idle = fakeLsof(join(root, "fallback-idle"), ["/"]);
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    setLsofFallbacks([busy]);
+    assert.equal((await withPath([bare], () => cleanTmpDirs({ now, roots: [root] }))).length, 0);
+    assert.equal(existsSync(p), true);
+    assert.ok(openProblems().some((item) => item.path === p && item.reason.includes("process working directory")));
+    setLsofFallbacks([join(root, "missing", "lsof"), idle]);
+    assert.equal((await withPath([bare], () => cleanTmpDirs({ now: new Date(now.getTime() + 1000), roots: [root] }))).length, 1);
+    assert.equal(existsSync(p), false);
+    assert.equal(openProblems().some((item) => item.path === p), false);
+  });
+
+  it("uses the lsof on PATH before any fallback", async (t) => {
+    t.after(() => { resetMissingCwdForTests(); resetTmpCleanupForTests(); });
+    const c = card("done", T0);
+    const p = mk(c.code);
+    setMissingCwdHooks({ listAgents: () => [] });
+    fakeLsof(join(root, "on-path"), [realpathSync(p)]);
+    const idle = fakeLsof(join(root, "fallback-idle"), ["/"]);
+    setLsofFallbacks([idle]);
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    assert.equal((await withPath([join(root, "on-path")], () => cleanTmpDirs({ now, roots: [root] }))).length, 0);
+    assert.equal(existsSync(p), true);
+    assert.ok(openProblems().some((item) => item.path === p && item.reason.includes("process working directory")));
+  });
+
+  it("with no lsof anywhere, deletes once the agent list confirms and writes an info line", async (t) => {
+    t.after(() => { resetMissingCwdForTests(); resetTmpCleanupForTests(); });
+    const c = card("done", T0);
+    const p = mk(c.code);
+    getDb().prepare("UPDATE tasks SET agent_id = ? WHERE id = ?").run("agent-gone", c.id);
+    const archived = { id: "agent-gone", cwd: p, provider: "x", title: "t", archived: true, lastActivityAt: null, labels: {} };
+    setMissingCwdHooks({ listAgents: () => [archived] });
+    setLsofFallbacks([]);
+    const bare = join(root, "bare-path");
+    mkdirSync(bare);
+    const lines: string[] = [];
+    const info = mock.method(console, "info", (...args: unknown[]) => { lines.push(args.map(String).join(" ")); });
+    t.after(() => info.mock.restore());
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    assert.equal((await withPath([bare], () => cleanTmpDirs({ now, roots: [root] }))).length, 1);
+    assert.equal(existsSync(p), false);
+    assert.equal(openProblems().some((item) => item.path === p), false);
+    assert.equal(lines.filter((line) => line.includes("lsof was not found") && line.includes("agent list")).length, 1);
+    const row = getDb().prepare("SELECT data_json FROM events WHERE task_id = ? AND kind = 'tmp_cleaned'").get(c.id) as { data_json: string };
+    assert.equal(JSON.parse(row.data_json).confirmedBy, "agent-list");
+  });
+
+  it("with no lsof anywhere, keeps the directory and reports red while an agent cwd is inside it", async (t) => {
+    t.after(() => { resetMissingCwdForTests(); resetTmpCleanupForTests(); });
+    const c = card("done", T0);
+    const p = mk(c.code);
+    const other = { id: "agent-other", cwd: join(p, "work"), provider: "x", title: "t", archived: false, lastActivityAt: null, labels: {} };
+    setMissingCwdHooks({ listAgents: () => [other] });
+    setLsofFallbacks([]);
+    const bare = join(root, "bare-path");
+    mkdirSync(bare);
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    assert.equal((await withPath([bare], () => cleanTmpDirs({ now, roots: [root] }))).length, 0);
+    assert.equal(existsSync(p), true);
+    assert.ok(openProblems().some((item) => item.path === p && item.reason.includes("an agent is still in use")));
+    setMissingCwdHooks({ listAgents: () => [] });
+    assert.equal((await withPath([bare], () => cleanTmpDirs({ now: new Date(now.getTime() + 1000), roots: [root] }))).length, 1);
+    assert.equal(existsSync(p), false);
+    assert.equal(openProblems().some((item) => item.path === p), false);
+  });
+
+  it("with no lsof anywhere, still keeps the directory when the agent list cannot be read", async (t) => {
+    t.after(() => { resetMissingCwdForTests(); resetTmpCleanupForTests(); });
+    const c = card("done", T0);
+    const p = mk(c.code);
+    setMissingCwdHooks({ listAgents: () => null });
+    setLsofFallbacks([]);
+    const bare = join(root, "bare-path");
+    mkdirSync(bare);
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    assert.equal((await withPath([bare], () => cleanTmpDirs({ now, roots: [root] }))).length, 0);
+    assert.equal(existsSync(p), true);
+    assert.ok(openProblems().some((item) => item.path === p && item.reason.includes("agent list could not be read")));
   });
 
   it("does not delete evidence or a card directory stored inside it", async () => {
