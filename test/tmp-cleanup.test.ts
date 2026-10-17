@@ -190,6 +190,80 @@ describe("tmp cleanup", () => {
     assert.equal(existsSync(p), false);
   });
 
+  async function failedRetirement(t: TestContext): Promise<{ c: { id: number; code: string }; p: string; retired: string; now: Date }> {
+    const c = card("done", T0);
+    const p = mk(c.code);
+    const mocked = mock.method(fsPromises, "rm", async () => { throw new Error("simulated rm failure"); });
+    syncBuiltinESMExports();
+    t.after(() => { mocked.mock.restore(); syncBuiltinESMExports(); });
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    await cleanTmpDirs({ now, roots: [root] });
+    const record = getDb().prepare("SELECT data_json FROM events WHERE task_id = ? AND kind = 'tmp_retirement_prepared' ORDER BY id DESC LIMIT 1").get(c.id) as { data_json: string };
+    const retired = JSON.parse(record.data_json).retiredPath as string;
+    mocked.mock.restore();
+    syncBuiltinESMExports();
+    assert.ok(openProblems().some((item) => item.path === p && item.reason.includes("cannot remove directory")));
+    return { c, p, retired, now };
+  }
+
+  function failureAttempt(taskId: number): number {
+    const row = getDb().prepare("SELECT data_json FROM events WHERE task_id = ? AND kind = 'tmp_cleanup_failed' ORDER BY id DESC LIMIT 1").get(taskId) as { data_json: string };
+    return JSON.parse(row.data_json).attempt as number;
+  }
+
+  it("clears the red when the retired directory is already gone on retry", async (t) => {
+    const { c, p, retired, now } = await failedRetirement(t);
+    rmSync(retired, { recursive: true, force: true });
+    assert.equal((await cleanTmpDirs({ now: new Date(now.getTime() + 60_000), roots: [root] })).length, 0);
+    assert.equal(openProblems().some((item) => item.path === p), false);
+    assert.equal(events(c.id).length, 1);
+    const report = await runDoctor({ persist: false, wake: false, sources: {} });
+    assert.equal(report.findings.some((item) => item.taskId === c.id && item.id.startsWith("tmp-cleanup:")), false);
+  });
+
+  it("names an inode mismatch as the red reason and reports it once", async (t) => {
+    const { c, p, retired, now } = await failedRetirement(t);
+    fs.renameSync(retired, join(root, "saved-old-directory"));
+    mkdirSync(retired);
+    writeFileSync(join(retired, "keep.txt"), "other directory");
+    await cleanTmpDirs({ now: new Date(now.getTime() + 60_000), roots: [root] });
+    const shown = openProblems().filter((item) => item.path === p);
+    assert.equal(shown.length, 1);
+    assert.match(shown[0].reason, /inode/);
+    assert.doesNotMatch(shown[0].reason, /cannot remove directory/);
+    const attempt = failureAttempt(c.id);
+    const errors = mock.method(console, "error", () => {});
+    t.after(() => errors.mock.restore());
+    await cleanTmpDirs({ now: new Date(now.getTime() + 3 * 3_600_000), roots: [root] });
+    assert.equal(failureAttempt(c.id), attempt, "the same reason is not written again");
+    assert.equal(errors.mock.calls.length, 0, "and not logged again");
+    assert.equal(existsSync(join(retired, "keep.txt")), true);
+  });
+
+  it("names an owner mismatch as the red reason and does not delete", async (t) => {
+    const { p, retired, now } = await failedRetirement(t);
+    await cleanTmpDirs({ now: new Date(now.getTime() + 60_000), roots: [root], ownerUid: (process.getuid?.() ?? 0) + 1 });
+    const shown = openProblems().filter((item) => item.path === p);
+    assert.equal(shown.length, 1);
+    assert.match(shown[0].reason, /owner/);
+    assert.equal(existsSync(retired), true);
+  });
+
+  it("clears the red when the directory vanishes while an agent held it", async (t) => {
+    t.after(() => resetMissingCwdForTests());
+    const c = card("done", T0);
+    const p = mk(c.code);
+    getDb().prepare("UPDATE tasks SET agent_id = ? WHERE id = ?").run("agent-live", c.id);
+    const agent = { id: "agent-live", cwd: root, provider: "x", title: "t", archived: false, lastActivityAt: null, labels: {} };
+    setMissingCwdHooks({ listAgents: () => [agent] });
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    await cleanTmpDirs({ now, roots: [root] });
+    assert.ok(openProblems().some((item) => item.path === p));
+    rmSync(p, { recursive: true, force: true });
+    await cleanTmpDirs({ now, roots: [root] });
+    assert.equal(openProblems().some((item) => item.path === p), false);
+  });
+
   it("keeps a rework or blocked card", async () => {
     for (const status of ["rework", "blocked"]) {
       const c = card(status, null);
@@ -552,7 +626,7 @@ describe("tmp cleanup", () => {
     const now = new Date(T0.getTime() + 48 * HOUR);
     assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 0);
     assert.equal(existsSync(p), true);
-    assert.ok(openProblems().some((item) => item.path === p && item.reason.includes("still present")));
+    assert.ok(openProblems().some((item) => item.path === p && item.reason.includes("an agent is still in use")));
     setMissingCwdHooks({ listAgents: () => [{ ...agent, archived: true }] });
     assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 1);
     assert.equal(existsSync(p), false);
