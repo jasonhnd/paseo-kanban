@@ -1,9 +1,9 @@
 /// <reference types="node" />
 import { execFile, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { lstatSync, renameSync, type BigIntStats } from "node:fs";
+import { accessSync, constants, lstatSync, renameSync, statSync, type BigIntStats } from "node:fs";
 import { lstat, readdir, realpath, rm } from "node:fs/promises";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
 import { formatCardCode } from "../shared/card-code";
 import { agentsOpenedBy } from "./archive-book";
 import { cardMarkOf } from "./card-ref";
@@ -68,6 +68,8 @@ export interface TmpCleanupProblem {
 export interface TmpCleanupHooks {
   /** One process-cwd listing. null means the listing could not be read. */
   listProcessCwds?: () => string[] | null;
+  /** Where to look for lsof when PATH has none. */
+  lsofFallbacks?: string[];
 }
 
 interface Hold {
@@ -102,7 +104,7 @@ let running: Promise<TmpCleaned[]> | null = null;
 /** A schedule that arrived while a round was running. One follow-up starts when that round ends. */
 let pending: TmpCleanOptions | null = null;
 let hooks: TmpCleanupHooks = {};
-let roundCwds: string[] | null | undefined;
+let roundCwds: ProcessCwds | undefined;
 
 export function setTmpCleanupHooks(next: TmpCleanupHooks | null): void {
   hooks = next ?? {};
@@ -224,10 +226,34 @@ async function cwdInside(path: string, cwds: string[]): Promise<boolean> {
   return false;
 }
 
-/** One `lsof -d cwd` listing for this round. null when it cannot be read. Not a per-file walk. */
-export function listProcessCwds(): string[] | null {
+/** Stands in for a listing when no lsof exists at all; the agent list decides instead. */
+export const NO_LSOF = "no-lsof";
+type ProcessCwds = string[] | null | typeof NO_LSOF;
+
+/** A service manager can start the daemon with a bare PATH, so lsof is also looked for where the system installs it. */
+const LSOF_FALLBACKS = ["/usr/sbin/lsof", "/usr/bin/lsof"];
+
+function runnable(path: string): boolean {
+  try {
+    accessSync(path, constants.X_OK);
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** lsof on PATH first, then the system locations. null when none is there. */
+export function findLsof(): string | null {
+  const onPath = (process.env.PATH ?? "").split(delimiter).filter(Boolean).map((dir) => join(dir, "lsof"));
+  return [...onPath, ...(hooks.lsofFallbacks ?? LSOF_FALLBACKS)].find(runnable) ?? null;
+}
+
+/** One `lsof -d cwd` listing for this round. null when it cannot be read, NO_LSOF when there is no lsof. Not a per-file walk. */
+export function listProcessCwds(): ProcessCwds {
   if (hooks.listProcessCwds) return hooks.listProcessCwds();
-  const out = spawnSync("lsof", ["-d", "cwd", "-F", "pn"], { encoding: "utf8", timeout: 15_000, maxBuffer: 64 * 1024 * 1024 });
+  const lsof = findLsof();
+  if (!lsof) return NO_LSOF;
+  const out = spawnSync(lsof, ["-d", "cwd", "-F", "pn"], { encoding: "utf8", timeout: 15_000, maxBuffer: 64 * 1024 * 1024 });
   if (out.error || out.status == null) return null;
   if (out.status !== 0 && out.status !== 1) return null;
   if (!out.stdout && out.stderr) return null;
@@ -238,7 +264,7 @@ export function listProcessCwds(): string[] | null {
   return cwds;
 }
 
-function roundProcessCwds(): string[] | null {
+function roundProcessCwds(): ProcessCwds {
   if (roundCwds === undefined) roundCwds = listProcessCwds();
   return roundCwds;
 }
@@ -388,12 +414,12 @@ function retire(task: TerminalTask, before: RootMark, record: Retirement, uid: n
 /** Most retirement ids one tmp_cleaned summary row remembers; an older id simply finds its prepared row with no match and lstat says the path is gone. */
 const RETIREMENT_ID_CAP = 200;
 
-async function removeRetired(taskId: number, retirementId: number, record: Retirement, done: TmpCleaned[], now: number, gone = false): Promise<void> {
+async function removeRetired(taskId: number, retirementId: number, record: Retirement, done: TmpCleaned[], now: number, gone = false, confirmedBy?: "agent-list"): Promise<void> {
   if (!gone) {
     await rm(record.retiredPath, { recursive: true, force: true });
     done.push({ taskId, path: record.path, bytes: record.bytes });
   }
-  upsertSummaryEvent(taskId, "tmp_cleaned", "scheduler", record.path, { ...record, retirementId }, {
+  upsertSummaryEvent(taskId, "tmp_cleaned", "scheduler", record.path, { ...record, retirementId, ...(confirmedBy ? { confirmedBy } : {}) }, {
     at: new Date(now).toISOString(),
     list: { field: "retirementIds", entry: retirementId, cap: RETIREMENT_ID_CAP },
   });
@@ -509,7 +535,9 @@ async function cleanRoot(root: string, names: Map<string, TerminalTask>, budget:
         appendEvent(task.id, "tmp_retirement_cancelled", null, null, "scheduler", { retirementId });
         continue;
       }
-      await removeRetired(task.id, retirementId, record, done, now);
+      const byAgentList = roundCwds === NO_LSOF;
+      await removeRetired(task.id, retirementId, record, done, now, false, byAgentList ? "agent-list" : undefined);
+      if (byAgentList) console.info(`[paseo-kanban] tmp cleanup info: lsof was not found (looked on PATH, ${LSOF_FALLBACKS.join(", ")}); removed ${path} after the agent list confirmed no agent uses it`);
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       // Already gone, or the root changed before we committed to it: not a failed removal.
@@ -528,6 +556,7 @@ async function occupancy(task: TerminalTask, path: string): Promise<Hold | null>
   const live = agents.filter((agent) => !agent.archived).map((agent) => agent.cwd.trim()).filter(Boolean);
   if (await cwdInside(path, live)) return { reason: "an agent is still in use: its working directory is inside this card directory", backoff: false };
   const processes = roundProcessCwds();
+  if (processes === NO_LSOF) return null;
   if (!processes) return { reason: "process working directories could not be listed", backoff: false };
   if (await cwdInside(path, processes)) return { reason: "a process working directory is inside this card directory", backoff: false };
   return null;
