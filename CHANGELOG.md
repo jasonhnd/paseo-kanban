@@ -10,6 +10,7 @@ Seventeen release candidates are recorded here. `0.1.0-rc.17` is the current unp
 - A finished card's work directory is deleted on the cleanup round that finds the card done or archived, with no 24-hour wait and no file-count cap. A directory that cannot be removed stays a doctor red and is retried with backoff.
 - The capacity guard pauses a new card's first work start when card-work usage exceeds 10 GiB or the disk has under 50 GiB free. Review, rework, and resume still start. Doctor reports red, the leader is reminded once, thresholds are configurable, and a completed card stores its temp-dir size once. Usage that falls back under both limits, including after acceptance cleanup, clears the pause on the next round.
 - Test hosts turn voice mode and dictation off, and reuse one read-only official runtime plus a shared npm cache outside the card root.
+- Corrected the release checklist to require English-only GitHub Release bodies, with Chinese release documentation kept under `docs/zh-CN/`.
 
 ## 0.1.0-rc.17 — pending review and publication
 

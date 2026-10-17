@@ -77,7 +77,7 @@ paseo plugin ls paseo-kanban --json
 
 ## 发布正文的替换
 
-双语发布正文先供审查。下面的记号只整段替换：
+GitHub Release 正文只用英文，先供审查；中文发布说明保留在 [`docs/zh-CN/`](RELEASE.md)。下面的记号只整段替换：
 
 | 记号 | 替换成 |
 |---|---|
