@@ -83,7 +83,7 @@ Installation performs locked dependency preparation and generates the command bu
 
 Use [workflow](docs/WORKFLOW.md) and [troubleshooting](docs/COMPATIBILITY.md) if dispatch is held. Never share authentication files, raw board databases, backups or unredacted doctor output in an issue.
 
-Card scratch uses the project’s `.kanban-work/<card code>/`; see [card work directories](docs/CARD-WORK-DIRECTORIES.md) for configuration, fallback and cleanup.
+Card scratch uses the project’s `.kanban-work/<card code>/`; see [card work directories](docs/CARD-WORK-DIRECTORIES.md) for configuration, fallback, cleanup and the capacity brake (new cards pause above 10 GiB of card work or below 50 GiB free).
 
 ## Update, disable or remove
 

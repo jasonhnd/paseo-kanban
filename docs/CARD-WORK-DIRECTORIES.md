@@ -55,6 +55,26 @@ per-round limits remain. Config changes do not strand recorded paths. Default
 cleanup does not follow a replaced work-root symlink. Preserve lasting evidence
 in the handoff or another authorized durable location before completion.
 
+## Capacity
+
+Each scheduler round measures the allocated size of the card-work roots with `du -sk` (allocated blocks, not apparent size; a symlink at the measured path is not followed). A successful reading is cached for about 10 minutes, or until that directory's mtime changes. Files that grow inside a card directory without changing that directory's mtime can lag until the cache expires. Free space is read with `statfs` on every round and is not cached.
+
+The measured roots are each project's `.kanban-work` directory and the plugin-data fallback root. When `KANBAN_TMP_ROOT` is set, only that root is measured. The total is the `du` of each root, not a second sum of its children. If roots sit on more than one disk, the free-space figure is the smallest, and any disk under the free-space limit pauses new starts.
+
+Defaults: pause when card-work usage is greater than 10 GiB, or when free space is less than 50 GiB. Either limit is enough. Configure both in `kanban.config.json`:
+
+```json
+"capacity": { "maxWorkGiB": 10, "minFreeGiB": 50 }
+```
+
+A missing `capacity` key uses those defaults and is not written back by a save. `0` and any other non-positive number falls back to the same defaults. Exactly 10 GiB of card work, or exactly 50 GiB free, does not pause.
+
+While the brake is on, `start` and automatic start return the reason and leave the card queued. Cards already running or reviewing are not interrupted. The next round that is back under both limits clears the pause by itself.
+
+`kanban doctor` reports red `board:capacity` with the current amounts, both thresholds, and the five largest card directories with each card's status. The Kanban leader gets one reminder for that episode, not a repeat on every round. A failed `du` or `statfs` does not start a pause on its own: the last good reading is kept and judged against the current limits, and doctor adds an info line. With no earlier reading, new starts continue.
+
+Completing or accepting a card stores `tmp_work_bytes` once. `show`, list and the board show that size when it is present. Later growth does not change the stored number. A missing directory or a failed `du` leaves the field empty and does not block completion.
+
 ## Tests and switching an existing installation
 
 The full test runner overrides inherited `KANBAN_TMP_ROOT` with a run-owned root;

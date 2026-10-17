@@ -5,6 +5,8 @@ Seventeen release candidates are recorded here. `0.1.0-rc.17` is the current unp
 
 ## Unreleased
 
+- The capacity guard pauses new card starts when card-work usage exceeds 10 GiB or the disk has under 50 GiB free, with a doctor red, one leader reminder, configurable thresholds, and a one-time temp-dir size on completed cards.
+
 ## 0.1.0-rc.17 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.17`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.16 tags are never moved.

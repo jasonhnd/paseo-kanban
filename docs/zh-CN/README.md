@@ -16,7 +16,7 @@
 
 ![显示合成额度套餐的 Fleet 页面](../../assets/quota.png)
 
-卡片的临时内容现在使用项目下的 `.kanban-work/<卡号>/`；配置、回退与清理见[卡片工作目录](CARD-WORK-DIRECTORIES.md)。
+卡片的临时内容现在使用项目下的 `.kanban-work/<卡号>/`；配置、回退、清理和容量刹车（卡片用量超过 10 GiB，或磁盘剩余低于 50 GiB 时暂停开新卡）见[卡片工作目录](CARD-WORK-DIRECTORIES.md)。
 
 ## Paseo 0.11.2 的 Command Center 与图标
 
