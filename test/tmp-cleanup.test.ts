@@ -12,10 +12,11 @@ import { fileURLToPath } from "node:url";
 import { after, beforeEach, describe, it, mock, type TestContext } from "node:test";
 import { closeDb, getDb } from "../server/db";
 import { execFileSync } from "node:child_process";
-import { runDoctor } from "../server/doctor";
+import { doctorSettings } from "../server/config";
+import { parseWorktreePorcelain, runDoctor } from "../server/doctor";
 import { resetMissingCwdForTests, setMissingCwdHooks } from "../server/missing-cwd";
 import * as cleanup from "../server/tmp-cleanup";
-import { cleanTmpDirs, flushTmpCleanup, resetTmpCleanupForTests, scheduleTmpCleanup, tmpNamesFor } from "../server/tmp-cleanup";
+import { cleanTmpDirs, flushTmpCleanup, resetTmpCleanupForTests, scheduleTmpCleanup, setTmpCleanupHooks, tmpNamesFor } from "../server/tmp-cleanup";
 import { cardMark } from "../server/card-ref";
 import { cardTmpEnv } from "../server/card-tmp";
 import { unifiedDataRoot } from "../server/storage/root";
@@ -859,6 +860,109 @@ describe("tmp cleanup", () => {
       assert.equal(existsSync(p), false);
     } finally {
       rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  function initRepo(repo: string): void {
+    mkdirSync(repo, { recursive: true });
+    execFileSync("git", ["init", "-q", "-b", "main", repo], { stdio: "ignore" });
+    writeFileSync(join(repo, "README"), "a\n");
+    execFileSync("git", ["-C", repo, "add", "README"], { stdio: "ignore" });
+    execFileSync("git", ["-C", repo, "-c", "user.email=t@example.com", "-c", "user.name=Test", "commit", "-q", "-m", "init"], { stdio: "ignore" });
+  }
+
+  function quietOccupancy(t: TestContext): void {
+    setMissingCwdHooks({ listAgents: () => [] });
+    setTmpCleanupHooks({ listProcessCwds: () => [] });
+    t.after(() => {
+      resetMissingCwdForTests();
+      resetTmpCleanupForTests();
+    });
+  }
+
+  function nestedFixture(): { repo: string; cardDir: string; nested: string; outside: string; id: number } {
+    const repo = join(root, "repo");
+    initRepo(repo);
+    const outside = join(root, "outside");
+    execFileSync("git", ["-C", repo, "worktree", "add", "-q", "-b", "keep-me", outside, "HEAD"], { stdio: "ignore" });
+    const c = card("done", T0);
+    const cardDir = join(repo, ".kanban-work", c.code);
+    const nested = join(cardDir, "src");
+    mkdirSync(dirname(nested), { recursive: true });
+    execFileSync("git", ["-C", repo, "worktree", "add", "--detach", "-q", nested, "HEAD"], { stdio: "ignore" });
+    return { repo, cardDir, nested, outside, id: c.id };
+  }
+
+  function porcelain(repo: string): string {
+    return execFileSync("git", ["-C", repo, "worktree", "list", "--porcelain"], { encoding: "utf8" });
+  }
+
+  it("drops a nested worktree registration when cleanup removes the card directory", async (t) => {
+    quietOccupancy(t);
+    const { repo, cardDir, nested, outside } = nestedFixture();
+    const workRoot = dirname(cardDir);
+    const out = await cleanTmpDirs({ now: T0, roots: [workRoot] });
+    assert.equal(out.length, 1);
+    assert.equal(existsSync(cardDir), false);
+    assert.equal(existsSync(outside), true);
+    const listed = porcelain(repo);
+    assert.equal(listed.includes(nested), false);
+    assert.equal(listed.includes(outside), true);
+    assert.match(execFileSync("git", ["-C", repo, "branch", "--list", "keep-me"], { encoding: "utf8" }), /keep-me/);
+    const report = await runDoctor({
+      now: new Date(T0.getTime() + 48 * HOUR),
+      settings: doctorSettings(null),
+      sources: {
+        dirs: { root: workRoot, worktrees: [], list: () => [], placeholderAgents: () => null },
+        git: {
+          repos: [repo],
+          async worktrees() { return parseWorktreePorcelain(porcelain(repo)); },
+          async dirty() { return false; },
+          async branches() { return []; },
+          async pushed() { return true; },
+          async pr() { return "none"; },
+        },
+      },
+    });
+    assert.equal(report.findings.some((item) => item.check === "worktree" && item.object === nested), false);
+  });
+
+  it("prunes a worktree registration when the card directory is already gone", async (t) => {
+    quietOccupancy(t);
+    const { repo, cardDir, nested, outside } = nestedFixture();
+    rmSync(cardDir, { recursive: true, force: true });
+    assert.match(porcelain(repo), /prunable/);
+    const out = await cleanTmpDirs({ now: T0, roots: [dirname(cardDir)] });
+    assert.equal(out.length, 0);
+    assert.equal(existsSync(outside), true);
+    const listed = porcelain(repo);
+    assert.equal(listed.includes(nested), false);
+    assert.doesNotMatch(listed, /prunable/);
+    assert.match(execFileSync("git", ["-C", repo, "branch", "--list", "keep-me"], { encoding: "utf8" }), /keep-me/);
+    assert.equal(openProblems().some((item) => item.path === cardDir), false);
+  });
+
+  it("keeps the card directory and records backoff when worktree remove fails", async (t) => {
+    quietOccupancy(t);
+    const { repo, cardDir, nested } = nestedFixture();
+    const bin = join(root, "bin");
+    mkdirSync(bin);
+    const realGit = execFileSync("/usr/bin/which", ["git"], { encoding: "utf8" }).trim();
+    writeFileSync(join(bin, "git"), `#!/bin/sh\nif [ "$1" = worktree ] && [ "$2" = remove ]; then\n  echo remove-refused >&2\n  exit 1\nfi\nexec ${JSON.stringify(realGit)} "$@"\n`);
+    chmodSync(join(bin, "git"), 0o755);
+    const previous = process.env.PATH;
+    process.env.PATH = `${bin}${previous ? `:${previous}` : ""}`;
+    t.after(() => { if (previous === undefined) delete process.env.PATH; else process.env.PATH = previous; });
+    try {
+      const out = await cleanTmpDirs({ now: T0, roots: [dirname(cardDir)] });
+      assert.equal(out.length, 0);
+      assert.equal(existsSync(cardDir), true);
+      assert.equal(existsSync(nested), true);
+      assert.ok(openProblems().some((item) => item.path === cardDir && /worktree remove/.test(item.reason)));
+      assert.equal((await cleanTmpDirs({ now: T0, roots: [dirname(cardDir)] })).length, 0);
+      assert.equal(existsSync(nested), true);
+    } finally {
+      if (previous === undefined) delete process.env.PATH; else process.env.PATH = previous;
     }
   });
 

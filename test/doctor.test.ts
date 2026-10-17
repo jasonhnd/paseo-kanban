@@ -306,6 +306,34 @@ describe("doctor", () => {
     assert.equal(left[0]?.severity, "red");
   });
 
+  it("does not report a prunable worktree whose directory is already gone", async () => {
+    const repo = join(ROOT, "prunable-repo");
+    mkdirSync(repo, { recursive: true });
+    execFileSync("git", ["init", "-q", "-b", "main", repo], { stdio: "ignore" });
+    writeFileSync(join(repo, "README"), "a\n");
+    execFileSync("git", ["-C", repo, "add", "README"], { stdio: "ignore" });
+    execFileSync("git", ["-C", repo, "-c", "user.email=t@example.com", "-c", "user.name=Test", "commit", "-q", "-m", "init"], { stdio: "ignore" });
+    const done = open("Finished nested");
+    const mark = cardMark(done.id);
+    getDb().prepare("UPDATE tasks SET status = 'done', updated_at = ? WHERE id = ?").run(hoursAgo(3), done.id);
+    const cardDir = join(repo, ".kanban-work", mark);
+    const nested = join(cardDir, "src");
+    execFileSync("git", ["-C", repo, "worktree", "add", "--detach", "-q", nested, "HEAD"], { stdio: "ignore" });
+    rmSync(cardDir, { recursive: true, force: true });
+    const text = execFileSync("git", ["-C", repo, "worktree", "list", "--porcelain"], { encoding: "utf8" });
+    assert.match(text, /prunable/);
+    const parsed = parseWorktreePorcelain(text);
+    assert.equal(parsed.find((tree) => tree.path === nested)?.prunable, true);
+    const report = await check({
+      dirs: { root: join(repo, ".kanban-work"), worktrees: [], list: () => [], placeholderAgents: () => null },
+      git: git({
+        repos: [repo],
+        async worktrees() { return parsed; },
+      }),
+    });
+    assert.equal(report.findings.some((item) => item.check === "worktree" && item.object === nested), false);
+  });
+
   it("keeps a git worktree that an unfinished card borrows by workspace id, and flags it once every card is done", async () => {
     const owner = open(zhCN("labels.role.reader"));
     const reviewer = open(zhCN("labels.role.reviewer"));
