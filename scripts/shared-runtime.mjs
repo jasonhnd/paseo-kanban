@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 
 const READY = ".shared-runtime-ready";
 
@@ -52,15 +52,25 @@ function claim(lockDir, deadline) {
   throw new Error("timed out waiting for the shared runtime lock");
 }
 
-function run(command, args) {
-  const result = spawnSync(command, args, { encoding: "utf8" });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error((result.stderr || result.stdout || `${command} failed`).trim());
+// The release lab replaces PATH with its own tool directory, which has no chmod or cp.
+export function hostCommand(name, env = process.env) {
+  const listed = (env.PATH ?? "").split(delimiter).filter(Boolean).map((dir) => join(dir, name));
+  for (const candidate of [...listed, join("/bin", name), join("/usr/bin", name)]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return name;
 }
 
-function removeTree(dir) {
+function run(command, args, env = process.env) {
+  const resolved = hostCommand(command, env);
+  const result = spawnSync(resolved, args, { encoding: "utf8" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error((result.stderr || result.stdout || `${resolved} failed`).trim());
+}
+
+function removeTree(dir, env = process.env) {
   if (!existsSync(dir)) return;
-  spawnSync("chmod", ["-R", "u+w", dir]);
+  spawnSync(hostCommand("chmod", env), ["-R", "u+w", dir]);
   rmSync(dir, { recursive: true, force: true });
 }
 
@@ -84,23 +94,23 @@ export function ensureSharedRuntime({ manifestDir, cacheRoot, env = process.env,
       if (ready(dir, hash)) return done();
     }
     if (!owned) throw new Error("timed out waiting for the shared runtime lock");
-    removeTree(dir);
+    removeTree(dir, env);
     mkdirSync(dir, { recursive: true });
     copyFileSync(join(manifestDir, "package.json"), join(dir, "package.json"));
     copyFileSync(join(manifestDir, "package-lock.json"), join(dir, "package-lock.json"));
     const childEnv = { ...env, npm_config_cache: env.npm_config_cache?.trim() || sharedNpmCache(env) };
     const installed = spawnSync(npmBin, ["ci"], { cwd: dir, env: childEnv, encoding: "utf8" });
     if (installed.error || installed.status !== 0) {
-      removeTree(dir);
+      removeTree(dir, env);
       throw new Error((installed.stderr || installed.stdout || "shared runtime npm ci failed").trim());
     }
     const after = readFileSync(join(dir, "package-lock.json"));
     if (Buffer.compare(after, lockBytes) !== 0) {
-      removeTree(dir);
+      removeTree(dir, env);
       throw new Error("package-lock changed during shared runtime npm ci");
     }
     writeFileSync(join(dir, READY), `${hash}\n`);
-    run("chmod", ["-R", "a-w", dir]);
+    run("chmod", ["-R", "a-w", dir], env);
     return { dir, hash, serverDir, installed: true };
   } finally {
     if (owned) rmSync(lockDir, { recursive: true, force: true });
@@ -110,7 +120,7 @@ export function ensureSharedRuntime({ manifestDir, cacheRoot, env = process.env,
 export function cloneWritableRuntime(source, destination) {
   if (existsSync(destination)) throw new Error("clone destination already exists");
   mkdirSync(dirname(destination), { recursive: true });
-  run("cp", ["-c", "-R", source, destination]);
-  run("chmod", ["-R", "u+w", destination]);
+  run("cp", ["-c", "-R", source, destination], process.env);
+  run("chmod", ["-R", "u+w", destination], process.env);
   return destination;
 }

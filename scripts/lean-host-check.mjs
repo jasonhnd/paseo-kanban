@@ -5,12 +5,12 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
-import { existsSync, mkdirSync, openSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isolatedEnvironment, testHostConfig } from "./isolated-environment.mjs";
-import { ensureSharedRuntime } from "./shared-runtime.mjs";
+import { ensureSharedRuntime, hostCommand } from "./shared-runtime.mjs";
 
 const DOWNLOAD = "Starting model download";
 
@@ -152,8 +152,9 @@ async function main() {
     sleep(1000);
   }
   stop(cli, on.env);
-  spawnSync("chmod", ["-R", "u+w", onRoot]);
-  spawnSync("rm", ["-rf", onRoot, onLog]);
+  spawnSync(hostCommand("chmod"), ["-R", "u+w", onRoot]);
+  rmSync(onRoot, { recursive: true, force: true });
+  rmSync(onLog, { force: true });
   if (!onDownload) throw new Error("speech-on host did not start a model download");
   if (existsSync(onRoot) || existsSync(modelsDir(on.env))) throw new Error("speech-on host was not removed");
   const compilerAfter = sha256(compiler);

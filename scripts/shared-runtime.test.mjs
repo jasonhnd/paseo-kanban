@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
-import { cloneWritableRuntime, ensureSharedRuntime } from "./shared-runtime.mjs";
+import { cloneWritableRuntime, ensureSharedRuntime, hostCommand } from "./shared-runtime.mjs";
 
 function scratch() {
   return mkdtempSync(join(process.env.KANBAN_TMP || process.env.TMPDIR || tmpdir(), "shared-runtime-"));
@@ -94,7 +94,7 @@ test("one lock hash is installed once, stays read-only, and host state stays sep
     assert.equal(readFileSync(join(hostB, "state.txt"), "utf8"), "B");
     assert.equal(existsSync(join(hostA, "local-note.txt")), false);
   } finally {
-    spawnSync("chmod", ["-R", "u+w", root]);
+    spawnSync(hostCommand("chmod"), ["-R", "u+w", root]);
     rmSync(root, { recursive: true, force: true });
   }
 });
