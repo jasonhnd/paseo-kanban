@@ -4,6 +4,10 @@
 
 ## 未发布
 
+### 修复（Fixed）
+
+- 体检不再把位于看板卡片临时目录里的 git worktree 报成红：路径在任一项目的 `.kanban-work/<卡号>/` 下，或在 `card_tmp_prepared` 记录的根目录里时，归到那张卡。卡未完成，或已 done／archived 且临时目录清理尚未失败时，至多一条 info，目录清掉后这条也消失。已有未关闭的 `tmp_cleanup_failed`，或无法归到任何卡时，仍按原规则报红。修复 [issue #10](https://github.com/jasonhnd/paseo-kanban/issues/10)。
+
 ## 0.1.0-rc.18 — 待审查与发布
 
 本地候选 tag 为 `v0.1.0-rc.18`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.17 tag 绝不挪动。
