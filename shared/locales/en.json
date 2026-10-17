@@ -734,6 +734,8 @@
   "doctor.format.none": "Nothing to handle",
   "doctor.format.suggestion": "Suggestion: {text}",
   "doctor.format.unfinished": " · unfinished",
+  "doctor.git.worktree.cardTmp": "git worktree is inside a finished card directory that cleanup has not failed to remove",
+  "doctor.git.worktree.cardTmpSuggestion": "Cleanup removes it with that card directory. doctor does not do this.",
   "doctor.git.worktree.noCard": "git worktree matches no unfinished card",
   "doctor.git.worktree.notUnfinished": "git worktree does not belong to an unfinished card",
   "doctor.hours": "{hours} hours",
