@@ -1,26 +1,27 @@
 /// <reference types="node" />
-import { execFile } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { execFile, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { lstatSync, renameSync, type BigIntStats } from "node:fs";
 import { lstat, readdir, realpath, rm } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { formatCardCode } from "../shared/card-code";
+import { agentsOpenedBy } from "./archive-book";
 import { cardMarkOf } from "./card-ref";
 import { cardTmpGeneration, cardTmpRoots } from "./card-tmp";
 import { cardTmpTaskContext, preparedCardTmpDir } from "./card-tmp-record";
 import { getDb } from "./db";
 import { upsertSummaryEvent } from "./event-summary";
-import { pathWithin, readCwdAgentList } from "./missing-cwd";
+import { pathWithin, readCwdAgentList, type CwdAgent } from "./missing-cwd";
 import { countIo, round } from "./perf";
 import { displayProjectCode } from "./project-codes";
 import { appendEvent, type TaskRow } from "./store";
 
-/** A card's own temp directory is deleted this long after the card turned done or archived. */
-export const TMP_KEEP_MS = 24 * 60 * 60_000;
-/** At most this many directories are deleted per round, so one tick never meets a flood of rm -rf. */
-export const TMP_CLEAN_PER_ROUND = 20;
-/** The scan reads project work roots at most this often. */
-export const TMP_SCAN_EVERY_MS = 5 * 60_000;
+/** First removal failure waits this long. Later failures double until the cap. Occupancy is retried on the next round. */
+export const TMP_FAIL_BACKOFF_MS = 60_000;
+/** Removal retries keep going. The wait never grows past this, and a failure is never dropped. */
+export const TMP_FAIL_BACKOFF_CAP_MS = 60 * 60_000;
+
+const FAILURE_KIND = "tmp_cleanup_failed";
 
 type TerminalTask = TaskRow & { ended_at: string | null; ended_event_id: number | null };
 // Event id identifies the terminal stretch even if two events have the same timestamp.
@@ -29,15 +30,22 @@ const TERMINAL_TASKS = `SELECT t.*, e.at AS ended_at, e.id AS ended_event_id FRO
     AND to_status IN ('done', 'archived') AND COALESCE(from_status, '') NOT IN ('done', 'archived')
     ORDER BY id DESC LIMIT 1)`;
 
-function expired(task: TerminalTask, now: number): boolean {
-  return (task.status === "done" || task.status === "archived") && now - Date.parse(task.ended_at ?? task.updated_at) >= TMP_KEEP_MS;
+function terminal(task: TerminalTask): boolean {
+  return task.status === "done" || task.status === "archived";
+}
+
+/** Same finished stretch we started with. A reopen, or a new done/archived event, keeps the directory. */
+function sameStretch(task: TerminalTask, started: TerminalTask): boolean {
+  return terminal(task) && task.ended_event_id === started.ended_event_id &&
+    (task.ended_at ?? task.updated_at) === (started.ended_at ?? started.updated_at);
 }
 
 export interface TmpCleanOptions {
   now?: Date;
   roots?: string[];
+  /** Tests cap one round. The scheduler cleans every finished directory it can see. */
   limit?: number;
-  /** Tests skip the throttle. */
+  /** Accepted from older callers. Every round already runs. */
   force?: boolean;
   /** Only directories owned by this uid are deleted. Defaults to the current user. */
   ownerUid?: number;
@@ -49,12 +57,61 @@ export interface TmpCleaned {
   bytes: number;
 }
 
-let lastScanAt = 0;
+export interface TmpCleanupProblem {
+  taskId: number;
+  project: string;
+  card: string | null;
+  path: string;
+  reason: string;
+}
+
+export interface TmpCleanupHooks {
+  /** One process-cwd listing. null means the listing could not be read. */
+  listProcessCwds?: () => string[] | null;
+}
+
+interface Hold {
+  reason: string;
+  /** Permission, busy and I/O failures wait. A live process is checked again on the next call. */
+  backoff: boolean;
+}
+
+interface RootMark {
+  dev: bigint;
+  ino: bigint;
+  generation: string | null;
+}
+
+interface OpenFailure {
+  attempt: number;
+  retryAt: number;
+}
+
+interface Retirement {
+  path: string;
+  retiredPath: string;
+  bytes: number;
+  dev: string;
+  ino: string;
+  card: string;
+  generation: string | null;
+}
+
 let running: Promise<TmpCleaned[]> | null = null;
+/** A schedule that arrived while a round was running. One follow-up starts when that round ends. */
+let pending: TmpCleanOptions | null = null;
+let hooks: TmpCleanupHooks = {};
+let roundCwds: string[] | null | undefined;
+
+export function setTmpCleanupHooks(next: TmpCleanupHooks | null): void {
+  hooks = next ?? {};
+}
 
 export function resetTmpCleanupForTests(): void {
-  lastScanAt = 0;
   running = null;
+  pending = null;
+  hooks = {};
+  roundCwds = undefined;
 }
 
 /** The directory names that belong to one card and no other: DEMO_0001, demo_0001, demo-0001, demo0001. */
@@ -65,17 +122,16 @@ export function tmpNamesFor(code: string): string[] {
   return [code, lower, `${prefix}-${seq}`, `${prefix}${seq}`];
 }
 
-function codeOf(task: TaskRow): string | null {
+function codeOf(task: Pick<TaskRow, "project" | "code_seq">): string | null {
   if (task.code_seq == null) return null;
   const code = displayProjectCode(task.project);
   return code ? formatCardCode(code, task.code_seq) : null;
 }
 
-/** Directory name → card, for cards that have been over for the full keep time. Names claimed by two cards are dropped. */
-function expiredNames(now: number, root?: string): Map<string, TerminalTask> {
+/** Directory name → card, for cards that are done or archived now. Names claimed by a live card are dropped. */
+function terminalNames(root?: string): Map<string, TerminalTask> {
   const names = new Map<string, TerminalTask>();
   const clash = new Set<string>();
-  // One query: each card's start of its current terminal stretch is its latest event into done/archived from a non-terminal state.
   const rows = getDb()
     .prepare(`${TERMINAL_TASKS} WHERE t.code_seq IS NOT NULL`)
     .all() as unknown as TerminalTask[];
@@ -83,7 +139,7 @@ function expiredNames(now: number, root?: string): Map<string, TerminalTask> {
     const code = codeOf(task);
     if (!code) continue;
     if (root && !taskRoots(task).includes(root)) continue;
-    const over = expired(task, now);
+    const over = terminal(task);
     for (const name of tmpNamesFor(code)) {
       if (names.has(name) || clash.has(name)) {
         names.delete(name);
@@ -159,7 +215,7 @@ async function realOr(path: string): Promise<string> {
 }
 
 /** Compare real paths so aliases and symlinks cannot bypass an agent's cwd protection. */
-async function agentInside(path: string, cwds: string[]): Promise<boolean> {
+async function cwdInside(path: string, cwds: string[]): Promise<boolean> {
   const real = await realOr(path);
   for (const cwd of cwds) {
     if (pathWithin(path, cwd) || pathWithin(real, cwd) || pathWithin(real, await realOr(cwd))) return true;
@@ -167,71 +223,140 @@ async function agentInside(path: string, cwds: string[]): Promise<boolean> {
   return false;
 }
 
-/** Why a directory must be kept, or null when it is safe to delete. Anything unreadable counts as a reason to keep. */
-async function keepReason(path: string, uid: number | null): Promise<string | null> {
-  const info = await lstat(path);
-  if (uid != null && info.uid !== uid) return "owner";
-  const agents = readCwdAgentList();
-  if (!agents) return "agent_list_unreadable";
-  if (await agentInside(path, agents.map((agent) => agent.cwd.trim()).filter(Boolean))) return "agent_cwd";
-  const git = await lstat(join(path, ".git")).then(() => true, () => false);
-  if (!git) return null;
-  const unpushed = await new Promise<string | null>((resolve) => {
-    execFile("git", ["-C", path, "rev-list", "HEAD", "--branches", "--not", "--remotes", "--max-count=1"], { timeout: 30_000 }, (err, stdout) => {
-      resolve(err ? "unpushed_unknown" : String(stdout).trim() ? "unpushed" : null);
-    });
-  });
-  return unpushed;
+/** One `lsof -d cwd` listing for this round. null when it cannot be read. Not a per-file walk. */
+export function listProcessCwds(): string[] | null {
+  if (hooks.listProcessCwds) return hooks.listProcessCwds();
+  const out = spawnSync("lsof", ["-d", "cwd", "-F", "pn"], { encoding: "utf8", timeout: 15_000, maxBuffer: 64 * 1024 * 1024 });
+  if (out.error || out.status == null) return null;
+  if (out.status !== 0 && out.status !== 1) return null;
+  if (!out.stdout && out.stderr) return null;
+  const cwds: string[] = [];
+  for (const line of String(out.stdout).split("\n")) {
+    if (line.startsWith("n") && line.length > 1) cwds.push(line.slice(1));
+  }
+  return cwds;
 }
 
-function statMark(info: BigIntStats): string {
-  return `${info.dev}:${info.ino}:${info.mode}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
+function roundProcessCwds(): string[] | null {
+  if (roundCwds === undefined) roundCwds = listProcessCwds();
+  return roundCwds;
 }
 
-/** Include nested writes, replacements and removals; never follow symlinks or read file contents. */
-async function activity(path: string): Promise<{ digest: string; info: BigIntStats; generation: string | null }> {
-  const digest = createHash("sha256");
+function backoffDelay(attempt: number): number {
+  const shift = Math.min(20, Math.max(0, attempt - 1));
+  return Math.min(TMP_FAIL_BACKOFF_CAP_MS, TMP_FAIL_BACKOFF_MS * 2 ** shift);
+}
+
+function eventTime(row: { at: string; id: number }, other: { at: string; id: number }): boolean {
+  if (row.at !== other.at) return row.at > other.at;
+  return row.id > other.id;
+}
+
+function openFailure(taskId: number, path: string): OpenFailure | null {
+  const db = getDb();
+  const fail = db.prepare(`SELECT id, at, data_json FROM events WHERE task_id = ? AND kind = ? AND json_extract(data_json, '$.summaryKey') = ? ORDER BY id DESC LIMIT 1`)
+    .get(taskId, FAILURE_KIND, path) as { id: number; at: string; data_json: string } | undefined;
+  if (!fail) return null;
+  const cleaned = db.prepare(`SELECT id, at FROM events WHERE task_id = ? AND kind = 'tmp_cleaned' AND json_extract(data_json, '$.summaryKey') = ? ORDER BY id DESC LIMIT 1`)
+    .get(taskId, path) as { id: number; at: string } | undefined;
+  if (cleaned && eventTime(cleaned, fail)) return null;
+  try {
+    const data = JSON.parse(fail.data_json) as { attempt?: unknown; retryAt?: unknown };
+    const retryAt = typeof data.retryAt === "string" ? Date.parse(data.retryAt) : Number.NaN;
+    return { attempt: typeof data.attempt === "number" ? data.attempt : 1, retryAt: Number.isFinite(retryAt) ? retryAt : 0 };
+  } catch {
+    return { attempt: 1, retryAt: 0 };
+  }
+}
+
+function recordProblem(taskId: number, path: string, reason: string, now: number, backoff: boolean): void {
+  const open = openFailure(taskId, path);
+  const attempt = (open?.attempt ?? 0) + 1;
+  const delay = backoff ? backoffDelay(attempt) : 0;
+  upsertSummaryEvent(taskId, FAILURE_KIND, "scheduler", path, {
+    path, reason, attempt, retryAt: new Date(now + delay).toISOString(),
+  }, { at: new Date(now).toISOString() });
+  console.error(`[paseo-kanban] tmp cleanup failed ${path}: ${reason}`);
+}
+
+function waiting(taskId: number, path: string, now: number): boolean {
+  const open = openFailure(taskId, path);
+  return open != null && open.retryAt > now;
+}
+
+/** Problems still open: a later successful clean of the same path drops the red. */
+export function tmpCleanupProblems(): TmpCleanupProblem[] {
+  const rows = getDb().prepare(`SELECT e.id, e.at, e.task_id, e.kind, e.data_json, t.project, t.code_seq
+    FROM events e JOIN tasks t ON t.id = e.task_id
+    WHERE e.kind IN (?, 'tmp_cleaned')`).all(FAILURE_KIND) as Array<{
+    id: number; at: string; task_id: number; kind: string; data_json: string; project: string; code_seq: number | null;
+  }>;
+  const latest = new Map<string, { id: number; at: string; kind: string; data_json: string; project: string; code_seq: number | null; task_id: number }>();
+  for (const row of rows) {
+    let path = "";
+    try {
+      const data = JSON.parse(row.data_json) as { path?: unknown; summaryKey?: unknown };
+      path = typeof data.path === "string" ? data.path : typeof data.summaryKey === "string" ? data.summaryKey : "";
+    } catch { path = ""; }
+    if (!path) continue;
+    const key = `${row.task_id}\0${path}`;
+    const prev = latest.get(key);
+    if (!prev || eventTime(row, prev)) latest.set(key, { ...row, id: row.id });
+  }
+  const problems: TmpCleanupProblem[] = [];
+  for (const row of latest.values()) {
+    if (row.kind !== FAILURE_KIND) continue;
+    let reason = "cleanup failed";
+    let path = "";
+    try {
+      const data = JSON.parse(row.data_json) as { path?: unknown; reason?: unknown };
+      if (typeof data.path === "string") path = data.path;
+      if (typeof data.reason === "string" && data.reason) reason = data.reason;
+    } catch { /* keep the fallback reason */ }
+    if (!path) continue;
+    problems.push({ taskId: row.task_id, project: row.project, card: codeOf(row), path, reason });
+  }
+  return problems;
+}
+
+function errorText(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.slice(0, 300);
+}
+
+/** Outside the card root, or an evidence directory, is never a deletion target. */
+function protectedPath(root: string, path: string): boolean {
+  if (!pathWithin(root, path)) return true;
+  return path.split(sep).includes(".local-evidence");
+}
+
+async function rootMark(path: string): Promise<RootMark> {
   const info = await lstat(path, { bigint: true });
   if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("tmp directory changed");
-  const pending = [""];
-  let count = 0;
-  while (pending.length) {
-    if (++count > 100_000) throw new Error("tmp activity scan limit reached; keeping directory");
-    const relative = pending.pop()!;
-    const item = relative ? await lstat(join(path, relative), { bigint: true }) : info;
-    digest.update(JSON.stringify([relative, statMark(item)]));
-    if (item.isDirectory()) {
-      const entries = (await readdir(join(path, relative))).sort().reverse();
-      for (const entry of entries) pending.push(join(relative, entry));
-    }
-  }
-  return { digest: digest.digest("hex"), info, generation: cardTmpGeneration(path) };
+  return { dev: info.dev, ino: info.ino, generation: cardTmpGeneration(path) };
 }
 
-interface Retirement {
-  path: string;
-  retiredPath: string;
-  bytes: number;
-  dev: string;
-  ino: string;
-  card: string;
-  generation: string | null;
+function sameRoot(before: RootMark, after: RootMark): boolean {
+  return before.dev === after.dev && before.ino === after.ino && before.generation === after.generation;
+}
+
+function statIdentity(info: BigIntStats): string {
+  return `${info.dev}:${info.ino}`;
 }
 
 /** The write lock serializes status changes from other CLI/plugin processes with the sync rename.
  * No await or recursive I/O inside the lock. A new run can then recreate the canonical path safely.
  */
-function retire(task: TerminalTask, before: Awaited<ReturnType<typeof activity>>, record: Retirement, now: number, uid: number | null): boolean {
+function retire(task: TerminalTask, before: RootMark, record: Retirement, uid: number | null): boolean {
   const db = getDb();
   db.exec("BEGIN IMMEDIATE");
   try {
     const fresh = db.prepare(`${TERMINAL_TASKS} WHERE t.id = ?`).get(task.id) as TerminalTask | undefined;
-    if (!fresh || !expired(fresh, now) || fresh.ended_event_id !== task.ended_event_id ||
-      (fresh.ended_at ?? fresh.updated_at) !== (task.ended_at ?? task.updated_at) || codeOf(fresh) !== record.card ||
+    if (!fresh || !sameStretch(fresh, task) || codeOf(fresh) !== record.card ||
       !tmpNamesFor(record.card).includes(basename(record.path))) return false;
     const info = lstatSync(record.path, { bigint: true });
-    if (!info.isDirectory() || info.isSymbolicLink() || (uid != null && info.uid !== BigInt(uid)) ||
-      statMark(info) !== statMark(before.info) || cardTmpGeneration(record.path) !== before.generation) return false;
+    if (!info.isDirectory() || info.isSymbolicLink() || (uid != null && Number(info.uid) !== uid) ||
+      statIdentity(info) !== `${before.dev}:${before.ino}` || cardTmpGeneration(record.path) !== before.generation) return false;
     renameSync(record.path, record.retiredPath);
     return true;
   } finally {
@@ -243,52 +368,59 @@ function retire(task: TerminalTask, before: Awaited<ReturnType<typeof activity>>
 /** Most retirement ids one tmp_cleaned summary row remembers; an older id simply finds its prepared row with no match and lstat says the path is gone. */
 const RETIREMENT_ID_CAP = 200;
 
-async function removeRetired(taskId: number, retirementId: number, record: Retirement, done: TmpCleaned[]): Promise<void> {
+async function removeRetired(taskId: number, retirementId: number, record: Retirement, done: TmpCleaned[], now: number): Promise<void> {
   await rm(record.retiredPath, { recursive: true, force: true });
   done.push({ taskId, path: record.path, bytes: record.bytes });
-  // One summary row per card and path (DEMO_0001). `retirementIds` keeps every journaled retirement this row settles.
-  upsertSummaryEvent(taskId, "tmp_cleaned", "scheduler", record.path, { ...record, retirementId }, { list: { field: "retirementIds", entry: retirementId, cap: RETIREMENT_ID_CAP } });
+  upsertSummaryEvent(taskId, "tmp_cleaned", "scheduler", record.path, { ...record, retirementId }, {
+    at: new Date(now).toISOString(),
+    list: { field: "retirementIds", entry: retirementId, cap: RETIREMENT_ID_CAP },
+  });
 }
 
-/** A failed rm (or a crash after rename) can only retry the journaled old inode, never the card path. */
-async function retryRetired(root: string, budget: number, done: TmpCleaned[], uid: number | null): Promise<void> {
+/** A failed rm (or a crash after rename) retries the journaled old inode, never a newer card path. */
+async function retryRetired(root: string, budget: number, done: TmpCleaned[], uid: number | null, now: number): Promise<void> {
   const rows = getDb().prepare(`SELECT e.id, e.task_id, e.data_json FROM events e WHERE e.kind = 'tmp_retirement_prepared'
     AND NOT EXISTS (SELECT 1 FROM events f WHERE f.task_id = e.task_id AND f.kind IN ('tmp_cleaned', 'tmp_retirement_cancelled')
       AND (json_extract(f.data_json, '$.retirementId') = e.id
         OR EXISTS (SELECT 1 FROM json_each(f.data_json, '$.retirementIds') j WHERE j.value = e.id)))`).all() as Array<{ id: number; task_id: number; data_json: string }>;
   for (const row of rows) {
     if (done.length >= budget) return;
+    let record: Retirement | null = null;
     try {
-      const record = JSON.parse(row.data_json) as Retirement;
+      record = JSON.parse(row.data_json) as Retirement;
       if (dirname(record.path) !== root || dirname(record.retiredPath) !== root ||
         !/^[A-Za-z0-9]+_\d+$/.test(record.card) || !tmpNamesFor(record.card).includes(basename(record.path)) ||
         !new RegExp(`^\\.kanban-tmp-retired-${record.card}-[0-9a-f-]{36}$`).test(basename(record.retiredPath))) continue;
+      if (protectedPath(root, record.path) || protectedPath(root, record.retiredPath)) continue;
+      if (waiting(row.task_id, record.path, now)) continue;
       const info = await lstat(record.retiredPath, { bigint: true }).catch((err) => {
         if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
         throw err;
       });
-      if (!info) continue; // Preparation may have crashed before rename, or rm finished before recording success.
+      if (!info) continue;
       if (!info.isDirectory() || info.isSymbolicLink() || String(info.dev) !== record.dev || String(info.ino) !== record.ino) continue;
-      if (await keepReason(record.retiredPath, uid)) continue;
+      if (uid != null && Number(info.uid) !== uid) continue;
       const fresh = lstatSync(record.retiredPath, { bigint: true });
       if (!fresh.isDirectory() || fresh.isSymbolicLink() || fresh.dev !== info.dev || fresh.ino !== info.ino ||
         cardTmpGeneration(record.retiredPath) !== record.generation) continue;
-      await removeRetired(row.task_id, row.id, record, done);
+      await removeRetired(row.task_id, row.id, record, done, now);
     } catch (err) {
-      console.error("[paseo-kanban] tmp retirement retry", err instanceof Error ? err.message : err);
+      if (record) recordProblem(row.task_id, record.path, `cannot remove directory: ${errorText(err)}`, now, true);
+      else console.error("[paseo-kanban] tmp retirement retry", errorText(err));
     }
   }
 }
 
 async function cleanRoot(root: string, names: Map<string, TerminalTask>, budget: number, done: TmpCleaned[], uid: number | null, now: number): Promise<void> {
-  await retryRetired(root, budget, done, uid);
+  await retryRetired(root, budget, done, uid, now);
   if (done.length >= budget || names.size === 0) return;
   let entries: string[];
   try {
     countIo("readdir");
     entries = await readdir(root);
   } catch (err) {
-    console.error("[paseo-kanban] tmp cleanup", err instanceof Error ? err.message : err);
+    const reason = `cannot read work root: ${errorText(err)}`;
+    for (const [entry, task] of names) recordProblem(task.id, join(root, entry), reason, now, true);
     return;
   }
   for (const entry of entries) {
@@ -296,59 +428,98 @@ async function cleanRoot(root: string, names: Map<string, TerminalTask>, budget:
     const task = names.get(entry);
     if (!task) continue;
     const path = join(root, entry);
+    if (protectedPath(root, path) || waiting(task.id, path, now)) continue;
     try {
       countIo("stat");
       const info = await lstat(path);
       if (info.isSymbolicLink() || !info.isDirectory()) continue;
-      const before = await activity(path);
-      const keep = await keepReason(path, uid);
-      if (keep) {
-        console.error(`[paseo-kanban] tmp cleanup keeps ${path}: ${keep}`);
+      if (uid != null && info.uid !== uid) {
+        console.error(`[paseo-kanban] tmp cleanup keeps ${path}: owner`);
+        continue;
+      }
+      const git = await lstat(join(path, ".git")).then(() => true, () => false);
+      if (git) {
+        console.error(`[paseo-kanban] tmp cleanup keeps ${path}: git_repository`);
+        continue;
+      }
+      const before = await rootMark(path);
+      const hold = await occupancy(task, path);
+      if (hold) {
+        recordProblem(task.id, path, hold.reason, now, hold.backoff);
         continue;
       }
       const bytes = await sizeOf(path);
-      // du/git/path resolution all await: refresh cwd/owner/git protection and the full activity snapshot.
-      if (await keepReason(path, uid)) continue;
-      const after = await activity(path);
-      if (before.digest !== after.digest || before.generation !== after.generation) continue;
+      const again = await occupancy(task, path);
+      if (again) {
+        recordProblem(task.id, path, again.reason, now, again.backoff);
+        continue;
+      }
+      const after = await rootMark(path);
+      if (!sameRoot(before, after)) continue;
       const record: Retirement = {
         path, retiredPath: join(root, `.kanban-tmp-retired-${cardMarkOf(task)}-${randomUUID()}`), bytes,
-        dev: String(before.info.dev), ino: String(before.info.ino), card: cardMarkOf(task), generation: before.generation,
+        dev: String(before.dev), ino: String(before.ino), card: cardMarkOf(task), generation: before.generation,
       };
-      // Persist the exact target before the rename, so a crash cannot leave an untracked old directory.
+      if (protectedPath(root, record.retiredPath)) continue;
       const retirementId = appendEvent(task.id, "tmp_retirement_prepared", null, null, "scheduler", { ...record });
-      if (!retire(task, before, record, now, uid)) {
+      if (!retire(task, before, record, uid)) {
         appendEvent(task.id, "tmp_retirement_cancelled", null, null, "scheduler", { retirementId });
         continue;
       }
-      await removeRetired(task.id, retirementId, record, done);
+      await removeRetired(task.id, retirementId, record, done, now);
     } catch (err) {
-      console.error("[paseo-kanban] tmp cleanup", path, err instanceof Error ? err.message : err);
+      const code = (err as NodeJS.ErrnoException).code;
+      // Already gone, or the root changed before we committed to it: not a failed removal.
+      if (code === "ENOENT" || (err instanceof Error && err.message === "tmp directory changed")) continue;
+      recordProblem(task.id, path, `cannot remove directory: ${errorText(err)}`, now, true);
     }
   }
 }
 
-/** Delete owned card work directories 24 hours after completion; unrelated names stay untouched. */
+/** Live agents, their cwd, and any process cwd. Owner and git are decided by the caller. */
+async function occupancy(task: TerminalTask, path: string): Promise<Hold | null> {
+  const agents = readCwdAgentList();
+  if (!agents) return { reason: "the agent list could not be read", backoff: false };
+  if (openedAgentLive(task, agents)) return { reason: "an agent opened by this card is still present", backoff: false };
+  const live = agents.filter((agent) => !agent.archived).map((agent) => agent.cwd.trim()).filter(Boolean);
+  if (await cwdInside(path, live)) return { reason: "an agent working directory is inside this card directory", backoff: false };
+  const processes = roundProcessCwds();
+  if (!processes) return { reason: "process working directories could not be listed", backoff: false };
+  if (await cwdInside(path, processes)) return { reason: "a process working directory is inside this card directory", backoff: false };
+  return null;
+}
+
+function openedAgentLive(task: TerminalTask, agents: CwdAgent[]): boolean {
+  const live = new Set(agents.filter((agent) => !agent.archived).map((agent) => agent.id));
+  return agentsOpenedBy(task).some((id) => live.has(id));
+}
+
+/** Delete owned card work directories as soon as the card is done or archived. Unrelated names stay. */
 export async function cleanTmpDirs(options: TmpCleanOptions = {}): Promise<TmpCleaned[]> {
   const now = (options.now ?? new Date()).getTime();
   const done: TmpCleaned[] = [];
   const found = await roots(options.roots ?? defaultRoots(), !options.roots);
-  // After the first await, so the tick that started this has already returned.
-  await new Promise((resolve) => setImmediate(resolve));
-  const budget = options.limit ?? TMP_CLEAN_PER_ROUND;
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+  const budget = options.limit ?? Number.POSITIVE_INFINITY;
   const uid = options.ownerUid ?? (typeof process.getuid === "function" ? process.getuid() : null);
+  roundCwds = undefined;
   for (const root of found) {
     if (done.length >= budget) break;
-    await cleanRoot(root, expiredNames(now, options.roots ? undefined : root), budget, done, uid, now);
+    await cleanRoot(root, terminalNames(options.roots ? undefined : root), budget, done, uid, now);
   }
+  roundCwds = undefined;
   return done;
 }
 
-/** Scheduler hook: throttled, one scan at a time, never awaited by the tick. */
+/** Scheduler hook: one scan at a time, every round, never awaited by the tick.
+ * A request that arrives mid-round is kept and runs as soon as this round finishes,
+ * so a card that ends during a long delete is still cleaned on the next round.
+ */
 export function scheduleTmpCleanup(options: TmpCleanOptions = {}): void {
-  const now = (options.now ?? new Date()).getTime();
-  if (running || (!options.force && now - lastScanAt < TMP_SCAN_EVERY_MS)) return;
-  lastScanAt = now;
+  if (running) {
+    pending = options;
+    return;
+  }
   running = round("tmpCleanup", () => cleanTmpDirs(options))
     .catch((err) => {
       console.error("[paseo-kanban] tmp cleanup", err instanceof Error ? err.message : err);
@@ -356,10 +527,13 @@ export function scheduleTmpCleanup(options: TmpCleanOptions = {}): void {
     })
     .finally(() => {
       running = null;
+      const next = pending;
+      pending = null;
+      if (next) scheduleTmpCleanup(next);
     });
 }
 
-/** Wait for the scan in flight. For tests. */
+/** Wait until every round already started, including one queued follow-up, has finished. For tests. */
 export async function flushTmpCleanup(): Promise<void> {
-  if (running) await running;
+  while (running) await running;
 }
