@@ -2,7 +2,7 @@
 import { zhCN } from "./helpers/locale";
 import { DEMO_BANNED, DEMO_FAMILIES, DEMO_PROFILE_RULES } from "./helpers/dispatch-policy";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { after, beforeEach, describe, it } from "node:test";
@@ -26,7 +26,10 @@ import { runDoctor } from "../server/doctor";
 import { KanbanError } from "../server/errors";
 import { acceptTask, completeTask } from "../server/flow";
 import type { Profile } from "../server/profiles";
-import { claimStatus, createTask, getTask } from "../server/store";
+import { resetMissingCwdForTests, setMissingCwdHooks } from "../server/missing-cwd";
+import { appendEvent, claimStatus, createTask, getTask } from "../server/store";
+import { cleanTmpDirs } from "../server/tmp-cleanup";
+import { recordFixtureDelivery } from "./helpers/delivery";
 import { listBoard } from "../server/board-cards";
 import { getDetail } from "../server/task-detail";
 import { startTask } from "./helpers/compat-dispatch";
@@ -389,5 +392,99 @@ describe("capacity guard", () => {
     assert.equal(typeof accepted, "number");
     assert.ok((accepted ?? 0) > 0);
     assert.equal(getTask(missing.id).status, "done");
+  });
+
+  it("queues only a new card's first start, still opens review and rework, and clears after acceptance cleanup", async () => {
+    saveConfig(baseConfig({
+      concurrency: { global: 20, pools: {}, roles: { executor: 8, reviewer: 4, batch: 4, reader: 4, decision: 4 } },
+    }));
+    const heavyOwner = createTask({ project: "gauge", title: "finished", role: "batch", workspacePath: workspace("finished-space") });
+    const heavy = join(workRoot, cardMark(heavyOwner.id));
+    mkdirSync(heavy, { recursive: true });
+    writeFileSync(join(heavy, "blob.bin"), "x");
+    claimStatus(heavyOwner.id, "ready", "running", "test");
+    await completeTask(heavyOwner.id, "batch", "done", { files: [], verification: "ok", risks: [] });
+    assert.equal(getTask(heavyOwner.id).status, "acceptance");
+    installProbe({
+      du: (path) => (basename(path) === basename(workRoot) && existsSync(heavy) ? 11 * GIB : GIB),
+      free: () => 80 * GIB,
+    });
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+
+    const fresh = (["executor", "batch", "reader", "decision"] as const).map((role) =>
+      createTask({ project: "gauge", title: role, role, workspacePath: workspace(`fresh-${role}`) }));
+    const review = createTask({ project: "gauge", title: "review", role: "executor", workspacePath: workspace("review-progress") });
+    getDb()
+      .prepare("UPDATE tasks SET status = 'in_review', executor_agent_id = ?, executor_profile = 'executor', executor_family = 'xai' WHERE id = ?")
+      .run(`exec-${review.id}`, review.id);
+    recordFixtureDelivery(review.id, "grok-4.7");
+    const rework = createTask({ project: "gauge", title: "rework", role: "executor", workspacePath: workspace("rework-resume") });
+    getDb()
+      .prepare("UPDATE tasks SET status = 'rework', executor_agent_id = 'orig-exec', agent_id = 'orig-exec', executor_profile = 'executor' WHERE id = ?")
+      .run(rework.id);
+    const reopened = createTask({ project: "gauge", title: "reopened", role: "executor", workspacePath: workspace("rework-reopen") });
+    appendEvent(reopened.id, "rework_reopen_pending", "rework", "ready", "scheduler", {
+      oldAgentId: "gone-exec", oldProfile: "executor", presence: "missing", reason: "gone",
+    });
+
+    const resumed: string[] = [];
+    let openedCount = 0;
+    const result = await runTick({
+      profiles,
+      launcher: {
+        async create() {
+          openedCount += 1;
+          return { id: `agent-capacity-open-${openedCount}` };
+        },
+        async send(id) { resumed.push(id); },
+      },
+      config: loadConfig(),
+      agentState: () => "alive",
+      send: async () => {},
+    });
+    const held = holdFor(11 * GIB, 80 * GIB);
+    for (const task of fresh) {
+      assert.equal(result.started.includes(task.id), false);
+      assert.equal(getTask(task.id).status, "ready");
+      assert.equal(getTask(task.id).hold_reason, held);
+    }
+    assert.ok(result.started.includes(review.id), getTask(review.id).hold_reason ?? getTask(review.id).status);
+    assert.equal(getTask(review.id).status, "reviewing");
+    assert.deepEqual(resumed, ["orig-exec"]);
+    assert.ok(result.started.includes(rework.id), getTask(rework.id).hold_reason ?? "");
+    assert.equal(getTask(rework.id).status, "running");
+    assert.ok(result.started.includes(reopened.id), getTask(reopened.id).hold_reason ?? getTask(reopened.id).blocked_reason ?? "");
+    assert.equal(getTask(reopened.id).status, "running");
+    await assert.rejects(() => startTask(fresh[0]!.id, launcher(), "supervisor"), (err: unknown) => {
+      assert.ok(err instanceof KanbanError);
+      assert.equal(err.code, "not_ready");
+      assert.equal(err.message, held);
+      return true;
+    });
+    const reviewer = createTask({ project: "gauge", title: "reviewer card", role: "reviewer", workspacePath: workspace("reviewer-card") });
+    const opened = await startTask(reviewer.id, launcher(), "supervisor", { profiles, chosen: profiles[1] });
+    assert.equal(getTask(reviewer.id).status, "reviewing");
+    assert.ok(opened.agentId);
+
+    await acceptTask(heavyOwner.id, "supervisor");
+    assert.equal(getTask(heavyOwner.id).status, "done");
+    setMissingCwdHooks({ listAgents: () => [] });
+    try {
+      const cleaned = await cleanTmpDirs({
+        now: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        roots: [workRoot],
+      });
+      assert.ok(cleaned.some((row) => row.path === heavy));
+    } finally {
+      resetMissingCwdForTests();
+    }
+    assert.equal(existsSync(heavy), false);
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.equal(capacityHoldReason(), null);
+    const report = await runDoctor({ wake: false, persist: false });
+    assert.equal(report.findings.some((item) => item.id === "board:capacity"), false);
+    const again = await tick();
+    assert.equal(again.started.includes(fresh[0]!.id), true);
+    assert.equal(getTask(fresh[0]!.id).status, "running");
   });
 });
