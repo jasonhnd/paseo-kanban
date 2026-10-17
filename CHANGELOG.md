@@ -5,6 +5,10 @@ Eighteen release candidates are recorded here. `0.1.0-rc.18` is the current unpu
 
 ## Unreleased
 
+### Fixed
+
+- When a review card that borrowed another card's temporary workspace finishes, it releases that claim by deleting only its own agents and retrying the owner's cleanup at once, including a backoff that is still waiting; archived or removed agents of a finished card no longer block cleanup, while an unfinished card, a still-live agent, or a process working directory inside the directory still does. Fixes [issue #11](https://github.com/jasonhnd/paseo-kanban/issues/11).
+
 ## 0.1.0-rc.18 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.18`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.17 tags are never moved.

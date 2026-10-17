@@ -4,6 +4,10 @@
 
 ## 未发布
 
+### 修复（Fixed）
+
+- 审查卡借了别的卡的临时 workspace、自己完成后会放开占用：只删自己的 agent，并立刻重试拥有者还在退避中的清理；已完成卡上已归档或已清掉的 agent 不再挡住别的已完成卡，未完成的卡、仍存活的 agent，以及工作目录还在这个目录里的进程，仍然挡住。修复 [issue #11](https://github.com/jasonhnd/paseo-kanban/issues/11)。
+
 ## 0.1.0-rc.18 — 待审查与发布
 
 本地候选 tag 为 `v0.1.0-rc.18`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.17 tag 绝不挪动。
