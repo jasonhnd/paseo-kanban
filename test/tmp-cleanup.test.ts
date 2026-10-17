@@ -399,6 +399,43 @@ describe("tmp cleanup", () => {
     assert.equal(cleared.findings.some((item) => item.taskId === c.id && item.id.startsWith("tmp-cleanup:")), false);
   });
 
+  it("retries a partial removal after the generation marker is already gone", async (t) => {
+    const c = card("done", T0);
+    const p = mk(c.code);
+    writeFileSync(join(p, ".kanban-tmp-generation"), "gen-1");
+    writeFileSync(join(p, "leftover.txt"), "still here");
+    let fail = true;
+    const original = fsPromises.rm;
+    const mocked = mock.method(fsPromises, "rm", async (...args: Parameters<typeof original>) => {
+      if (!fail) return original(...args);
+      rmSync(join(String(args[0]), ".kanban-tmp-generation"), { force: true });
+      throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+    });
+    syncBuiltinESMExports();
+    t.after(() => { mocked.mock.restore(); syncBuiltinESMExports(); });
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 0);
+    const record = getDb().prepare("SELECT data_json FROM events WHERE task_id = ? AND kind = 'tmp_retirement_prepared' ORDER BY id DESC LIMIT 1").get(c.id) as { data_json: string };
+    const retired = JSON.parse(record.data_json).retiredPath as string;
+    assert.equal(existsSync(retired), true);
+    assert.equal(existsSync(join(retired, ".kanban-tmp-generation")), false);
+    assert.equal(existsSync(join(retired, "leftover.txt")), true);
+    assert.ok(openProblems().some((item) => item.path === p && item.reason.includes("cannot remove directory")));
+    const reported = await runDoctor({ persist: false, wake: false, sources: {} });
+    assert.ok(reported.findings.some((item) => item.taskId === c.id && item.severity === "red" && item.id.startsWith("tmp-cleanup:")));
+    fail = false;
+    assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 0, "the same timestamp stays in backoff");
+    assert.equal(existsSync(retired), true);
+    const later = new Date(now.getTime() + 60_000);
+    assert.equal((await cleanTmpDirs({ now: later, roots: [root] })).length, 1);
+    assert.equal(existsSync(retired), false);
+    assert.equal(existsSync(p), false);
+    assert.equal(fs.readdirSync(root).some((name) => name.startsWith(".kanban-tmp-retired-")), false);
+    assert.equal(openProblems().some((item) => item.path === p), false);
+    const cleared = await runDoctor({ persist: false, wake: false, sources: {} });
+    assert.equal(cleared.findings.some((item) => item.taskId === c.id && item.id.startsWith("tmp-cleanup:")), false);
+  });
+
   it("does not retry a retirement path that has been replaced by a different inode", async (t) => {
     const c = card("done", T0);
     mk(c.code);
