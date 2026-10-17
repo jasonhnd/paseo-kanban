@@ -734,6 +734,8 @@
   "doctor.format.none": "没有要处理的问题",
   "doctor.format.suggestion": "建议：{text}",
   "doctor.format.unfinished": " · 未完成",
+  "doctor.git.worktree.cardTmp": "git worktree 在已完成卡的临时目录里，清理尚未失败",
+  "doctor.git.worktree.cardTmpSuggestion": "清理会连同该卡片目录一起删除。doctor 不执行。",
   "doctor.git.worktree.noCard": "git worktree 对不上任何未完成卡",
   "doctor.git.worktree.notUnfinished": "git worktree 不属于未完成卡",
   "doctor.hours": "{hours} 小时",

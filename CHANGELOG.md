@@ -5,6 +5,10 @@ Eighteen release candidates are recorded here. `0.1.0-rc.18` is the current unpu
 
 ## Unreleased
 
+### Fixed
+
+- Doctor no longer raises a red for a git worktree inside a board-owned card temp directory (any project's `.kanban-work/<card>/`, or the root recorded by `card_tmp_prepared`) when that card is unfinished, or done or archived and temp cleanup has not failed. A finished card waiting on cleanup is at most an info line, and that line disappears once the worktree is gone. An open `tmp_cleanup_failed`, or a worktree that matches no card, still follows the existing red rules. Fixes [issue #10](https://github.com/jasonhnd/paseo-kanban/issues/10).
+
 ## 0.1.0-rc.18 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.18`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.17 tags are never moved.

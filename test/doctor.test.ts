@@ -235,6 +235,77 @@ describe("doctor", () => {
     assert.equal(report.findings.filter((item) => item.check === "worktree").length, 1);
   });
 
+  it("keeps a worktree inside a board card temp root quiet unless cleanup has failed", async () => {
+    const done = open("Finished batch");
+    const archived = open("Archived batch");
+    const live = open("Still working");
+    const failed = open("Cleanup failed");
+    const doneMark = cardMark(done.id);
+    const archivedMark = cardMark(archived.id);
+    const liveMark = cardMark(live.id);
+    const failedMark = cardMark(failed.id);
+    const nested = join(ROOT, "other-project", ".kanban-work", doneMark, "src");
+    const alias = join(ROOT, "lower-project", ".kanban-work", doneMark.toLowerCase(), "src");
+    const preparedRoot = join(ROOT, "plugin-data", archivedMark);
+    const preparedTree = join(preparedRoot, "checkout");
+    const liveTree = join(ROOT, "live-project", ".kanban-work", liveMark, "src");
+    const failedRoot = join(ROOT, "failed-project", ".kanban-work", failedMark);
+    const failedTree = join(failedRoot, "src");
+    const foreign = join(ROOT, "foreign-docs");
+    getDb().prepare("UPDATE tasks SET status = 'done', updated_at = ? WHERE id = ?").run(hoursAgo(3), done.id);
+    getDb().prepare("UPDATE tasks SET status = 'archived', updated_at = ? WHERE id = ?").run(hoursAgo(3), archived.id);
+    getDb().prepare("UPDATE tasks SET status = 'done', updated_at = ? WHERE id = ?").run(hoursAgo(3), failed.id);
+    event(archived.id, "card_tmp_prepared", { path: preparedRoot }, hoursAgo(3));
+    event(failed.id, "tmp_cleanup_failed", { path: failedRoot, reason: "busy", summaryKey: failedRoot }, hoursAgo(1));
+    const trees = [
+      { path: nested, branch: null },
+      { path: alias, branch: null },
+      { path: preparedTree, branch: null },
+      { path: liveTree, branch: null },
+      { path: failedTree, branch: null },
+      { path: foreign, branch: "docs/topic" },
+    ];
+    const sources = (): DoctorSources => ({
+      dirs: dirs(trees.map((tree) => tree.path), trees.map((tree) => tree.path)),
+      git: git({
+        async worktrees() {
+          return trees;
+        },
+      }),
+    });
+    const of = (report: DoctorReport, path: string) => report.findings.find((item) => item.check === "worktree" && item.object === path);
+    const report = await check(sources());
+    assert.equal(of(report, nested)?.severity, "info");
+    assert.equal(of(report, nested)?.taskId, done.id);
+    assert.equal(of(report, nested)?.card, doneMark);
+    assert.equal(of(report, nested)?.symptom, zhCN("doctor.git.worktree.cardTmp"));
+    assert.equal(of(report, alias)?.severity, "info");
+    assert.equal(of(report, alias)?.taskId, done.id);
+    assert.equal(of(report, preparedTree)?.severity, "info");
+    assert.equal(of(report, preparedTree)?.taskId, archived.id);
+    assert.equal(of(report, preparedTree)?.card, archivedMark);
+    assert.equal(of(report, liveTree), undefined);
+    assert.equal(of(report, failedTree)?.severity, "red");
+    assert.equal(of(report, failedTree)?.taskId, failed.id);
+    assert.equal(of(report, foreign)?.severity, "red");
+    assert.equal(of(report, foreign)?.taskId, null);
+    event(failed.id, "tmp_cleaned", { path: failedRoot, summaryKey: failedRoot });
+    const cleared = await check(sources());
+    assert.equal(of(cleared, failedTree)?.severity, "info");
+    assert.equal(of(cleared, failedTree)?.taskId, failed.id);
+    const gone = await check({
+      dirs: dirs([foreign], [foreign]),
+      git: git({
+        async worktrees() {
+          return [{ path: foreign, branch: "docs/topic" }];
+        },
+      }),
+    });
+    const left = gone.findings.filter((item) => item.check === "worktree");
+    assert.deepEqual(left.map((item) => item.object), [foreign]);
+    assert.equal(left[0]?.severity, "red");
+  });
+
   it("keeps a git worktree that an unfinished card borrows by workspace id, and flags it once every card is done", async () => {
     const owner = open(zhCN("labels.role.reader"));
     const reviewer = open(zhCN("labels.role.reviewer"));
