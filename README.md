@@ -4,7 +4,7 @@ A [Paseo](https://github.com/getpaseo/paseo) plugin that combines a cross-projec
 
 [Simplified Chinese](docs/zh-CN/README.md)
 
-> **Experimental RC `0.1.0-rc.17`, unpublished.** Public prerelease rc.16 was published on 2026-10-16 and its GitHub Release exists, frozen at `6ed3be48e5e002351668a2d2d8765c2cca67413a` (annotated object `9747d649314d270b581d95ba5aebb37c0e4276b7`). Install the rc.17 tag only after the matching GitHub prerelease targets the independently reviewed commit in the [release record](docs/RELEASE.md). Isolated official **0.11.2 Web UI** has been checked in Microsoft Edge on macOS; native app, physical phones and an authenticated provider first-card cycle remain unverified. No stable release, npm publication, official registry listing or response-time commitment is declared.
+> **Experimental RC `0.1.0-rc.18`, unpublished.** Public prerelease rc.17 was published on 2026-10-16 and its GitHub Release exists, frozen at `d7eec4188a108eb660c77f806b6ce91f85e5c26f` (annotated object `077ca0f5a83d2f827b1169c82ccfb0ece9307c8c`). Install the rc.18 tag only after the matching GitHub prerelease targets the independently reviewed commit in the [release record](docs/RELEASE.md). Isolated official **0.11.2 Web UI** has been checked in Microsoft Edge on macOS; native app, physical phones and an authenticated provider first-card cycle remain unverified. No stable release, npm publication, official registry listing or response-time commitment is declared.
 
 One plugin id, `paseo-kanban`, opens Board, Fleet and Settings from one sidebar entry. The board uses host-qualified deep links and retains workspace project filtering.
 
@@ -41,12 +41,12 @@ Paseo plugins are **trusted, unsandboxed code**. Server and preparation code can
 
 ## Install from GitHub
 
-Check the CLI, daemon and app versions, and the daemon's Node environment first. `paseo --version` reports the CLI version, not proof of the app/daemon versions. **Run the following tag command only when the GitHub Release record for `v0.1.0-rc.17` exists and its target commit equals the reviewed full SHA in the [release record](docs/RELEASE.md). While that record is absent, the candidate is unpublished and the tag is not a GitHub install target.**
+Check the CLI, daemon and app versions, and the daemon's Node environment first. `paseo --version` reports the CLI version, not proof of the app/daemon versions. **Run the following tag command only when the GitHub Release record for `v0.1.0-rc.18` exists and its target commit equals the reviewed full SHA in the [release record](docs/RELEASE.md). While that record is absent, the candidate is unpublished and the tag is not a GitHub install target.**
 
 ```sh
 paseo --version
 node --version
-paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.17
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.18
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -56,7 +56,7 @@ This uses the official Paseo CLI's GitHub acquisition path. The tag must never m
 paseo plugin install github:jasonhnd/paseo-kanban --ref c106efb88a659931d01f40a236001823473561a8 --json
 ```
 
-That baseline has package metadata `0.1.0`. It is not `0.1.0-rc.17`, and it is not the unpublished local `0.1.0-rc.1` preparation. See [the RC changelog](CHANGELOG.md) for source changes and unresolved dependency alerts.
+That baseline has package metadata `0.1.0`. It is not `0.1.0-rc.18`, and it is not the unpublished local `0.1.0-rc.1` preparation. See [the RC changelog](CHANGELOG.md) for source changes and unresolved dependency alerts.
 
 1. In the intended host's **Settings -> Plugins**, turn on **Enable plugins** and the individual `paseo-kanban` switch. The global switch starts other individually enabled plugins too. You can enable this plugin with `paseo plugin enable paseo-kanban --json` once the global switch is on.
 2. Repeat `paseo plugin ls paseo-kanban --json`; require `running` without a load error. Open **Paseo Kanban** from that host's sidebar. Board, Fleet and Settings should share that entry. Check the actual page; `running` alone does not prove client mounting. A compact viewport does not prove a physical phone.
@@ -90,12 +90,12 @@ Card scratch uses the project’s `.kanban-work/<card code>/`; see [card work di
 Back up state and record the current full revision, source, installed path and enabled state first. After RC publication is confirmed, preview and apply an **explicit ref each time**:
 
 ```sh
-paseo plugin update paseo-kanban --check --ref v0.1.0-rc.17 --json
-paseo plugin update paseo-kanban --ref v0.1.0-rc.17 --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.18 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.18 --json
 paseo plugin ls paseo-kanban --json
 ```
 
-Use those two update commands only when the GitHub Release record authorizes `v0.1.0-rc.17`, as in [Install from GitHub](#install-from-github). After a managed update, board and Fleet information exports can still name a removed checkout for about 600 seconds. That is their existing export period. The new command handlers resolve the current managed path when an action runs; the export delay remains unchanged.
+Use those two update commands only when the GitHub Release record authorizes `v0.1.0-rc.18`, as in [Install from GitHub](#install-from-github). After a managed update, board and Fleet information exports can still name a removed checkout for about 600 seconds. That is their existing export period. The new command handlers resolve the current managed path when an action runs; the export delay remains unchanged.
 
 During an update or reload, mounted panels keep their last data and show “Plugin is updating…” for temporary “Plugin not available” read failures. Audited reads retry up to five times with backoff (a 15-second retry window); other errors remain visible. Saves and actions are never automatically retried: check the result before trying again. If the plugin stays unavailable, the panel asks you to refresh later.
 

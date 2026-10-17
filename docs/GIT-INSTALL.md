@@ -4,14 +4,14 @@
 
 ## Select the host and source
 
-Install to the intended daemon. **RC `0.1.0-rc.17` is unpublished until the GitHub Release record for `v0.1.0-rc.17` exists, is a prerelease, and its target commit equals the reviewed full commit. While that record is absent, do not run the tag commands as a GitHub install.** Public prerelease rc.16 was published on 2026-10-16 and its GitHub Release exists, frozen at `6ed3be48e5e002351668a2d2d8765c2cca67413a` (annotated object `9747d649314d270b581d95ba5aebb37c0e4276b7`). The earlier public rc.8 remains frozen at `0af33ec7e49891bf3dba2549cb8b6b83487bba4c` (annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`). `v0.1.0-rc.1` remains the unpublished local preparation and is not moved. `v0.1.0-rc.2` remains frozen at `8be11b6144b6cc7b81bcf741a360acf18111001f` (annotated object `0e16a0c43de421db583a31b3dee7b6e6b67e6b82`), unpublished. `v0.1.0-rc.3` remains frozen at `61cce0d8ba07e8bf01fe7239ddf0ceeaf5983df4` (tree `633c99456b05cdbf7156f5c3ab1149451a767738`, annotated object `7e288e22f42598a651edef407dcdb82871c3d9de`), unpublished and rejected for publication because stale default policy could reopen a stopped pool or ignore a matrix pause. This candidate retains the prior fixes and corrects those default admission paths; explicit legacy compatibility behavior is unchanged. With the default local home, after the Release record matches:
+Install to the intended daemon. **RC `0.1.0-rc.18` is unpublished until the GitHub Release record for `v0.1.0-rc.18` exists, is a prerelease, and its target commit equals the reviewed full commit. While that record is absent, do not run the tag commands as a GitHub install.** Public prerelease rc.17 was published on 2026-10-16 and its GitHub Release exists, frozen at `d7eec4188a108eb660c77f806b6ce91f85e5c26f` (annotated object `077ca0f5a83d2f827b1169c82ccfb0ece9307c8c`). The earlier public rc.8 remains frozen at `0af33ec7e49891bf3dba2549cb8b6b83487bba4c` (annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`). `v0.1.0-rc.1` remains the unpublished local preparation and is not moved. `v0.1.0-rc.2` remains frozen at `8be11b6144b6cc7b81bcf741a360acf18111001f` (annotated object `0e16a0c43de421db583a31b3dee7b6e6b67e6b82`), unpublished. `v0.1.0-rc.3` remains frozen at `61cce0d8ba07e8bf01fe7239ddf0ceeaf5983df4` (tree `633c99456b05cdbf7156f5c3ab1149451a767738`, annotated object `7e288e22f42598a651edef407dcdb82871c3d9de`), unpublished and rejected for publication because stale default policy could reopen a stopped pool or ignore a matrix pause. This candidate retains the prior fixes and corrects those default admission paths; explicit legacy compatibility behavior is unchanged. With the default local home, after the Release record matches:
 
 ```sh
 paseo --version
 node --version
 git --version
 npm --version
-paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.17 --json
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.18 --json
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -26,7 +26,7 @@ paseo plugin install github:jasonhnd/paseo-kanban --ref "$REVIEWED_COMMIT" --jso
 For another daemon, select its endpoint explicitly for **every** operation:
 
 ```sh
-paseo --host "$PASEO_TARGET" plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.17 --json
+paseo --host "$PASEO_TARGET" plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.18 --json
 paseo --host "$PASEO_TARGET" plugin ls paseo-kanban --json
 ```
 
@@ -44,7 +44,7 @@ paseo plugin ls paseo-kanban --json
 paseo plugin logs paseo-kanban --json
 ```
 
-Require `running` without a load error. Record the returned source kind, full installed revision, enabled state and actual path. Confirm the managed package/lock version is `0.1.0-rc.17` and the installed full revision matches the RC release record; version metadata alone cannot distinguish source commits. Official 0.11.2's Git identity is the revision, not a manifest version field. Do not guess the managed cache path. Open the real sidebar entry and test the board/Fleet page on the same host.
+Require `running` without a load error. Record the returned source kind, full installed revision, enabled state and actual path. Confirm the managed package/lock version is `0.1.0-rc.18` and the installed full revision matches the RC release record; version metadata alone cannot distinguish source commits. Official 0.11.2's Git identity is the revision, not a manifest version field. Do not guess the managed cache path. Open the real sidebar entry and test the board/Fleet page on the same host.
 
 The install does not put plugin commands on PATH. Set `BOARD_INSTALL` to the path from `ls`, then use the generated launchers with the same home/data-root environment as the daemon:
 
@@ -61,8 +61,8 @@ No end-user build is needed after successful Git preparation. Authentication/rol
 Save current revision/path/enabled state, pause dispatch and other writers, and take consistent [data/settings backups](DATA.md#backup-and-data-restore). After publication confirmation, use the immutable RC tag or its full reviewed public SHA on **both** commands:
 
 ```sh
-paseo plugin update paseo-kanban --check --ref v0.1.0-rc.17 --json
-paseo plugin update paseo-kanban --ref v0.1.0-rc.17 --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.18 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.18 --json
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -96,7 +96,7 @@ paseo plugin reload paseo-kanban --json
 paseo plugin ls paseo-kanban --json
 ```
 
-For `0.1.0-rc.17`, the previous public prerelease is `v0.1.0-rc.16` at `6ed3be48e5e002351668a2d2d8765c2cca67413a`. `PREVIOUS_COMMIT=c106efb88a659931d01f40a236001823473561a8` remains the older verified public code baseline, not a versioned release. Do not roll a GitHub install back to unpublished `v0.1.0-rc.1`. After code rollback or upgrade, exports can keep a removed checkout's command path for about 600 seconds. Use the current installed path and wait for both exports to match it, then complete the required reload (for older code) and real write/Undo checks above before resuming dispatch. The export delay is unchanged. Otherwise take it from the saved release record, not from package version alone. Code downgrade does not undo data writes. Data restore needs a separate consistent, compatible backup and can discard newer writes. A directory-to-Git switch needs remove/install rather than Git update; see the [prepared runbook](RELEASE.md#directory-to-git-switch-runbook), which does not declare a production switch complete.
+For `0.1.0-rc.18`, the previous public prerelease is `v0.1.0-rc.17` at `d7eec4188a108eb660c77f806b6ce91f85e5c26f`. `PREVIOUS_COMMIT=c106efb88a659931d01f40a236001823473561a8` remains the older verified public code baseline, not a versioned release. Do not roll a GitHub install back to unpublished `v0.1.0-rc.1`. After code rollback or upgrade, exports can keep a removed checkout's command path for about 600 seconds. Use the current installed path and wait for both exports to match it, then complete the required reload (for older code) and real write/Undo checks above before resuming dispatch. The export delay is unchanged. Otherwise take it from the saved release record, not from package version alone. Code downgrade does not undo data writes. Data restore needs a separate consistent, compatible backup and can discard newer writes. A directory-to-Git switch needs remove/install rather than Git update; see the [prepared runbook](RELEASE.md#directory-to-git-switch-runbook), which does not declare a production switch complete.
 
 ## Git preparation and local development
 

@@ -1,15 +1,25 @@
 # 变更记录
 
-单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.17` 是当前未公开、待独立审查的候选。已公开预发布 rc.16 于 2026-10-16 发布，GitHub Release 存在，冻结在 `6ed3be48e5e002351668a2d2d8765c2cca67413a`（annotated object `9747d649314d270b581d95ba5aebb37c0e4276b7`）。已公开预发布 rc.12 于 2026-10-16 发布，GitHub Release 存在，冻结在 `4162cbca1acb2aa70ad1d5fb77c0c78f25c68ab2`（annotated object `a5d68644e9d02206e2cf07ee7d32005f59801ee9`）。已公开预发布 rc.11 于 2026-10-15 发布，GitHub Release 存在，冻结在 `09963b85e0d7c9c5d881aa39e3c65ebbb719b7a0`（annotated object `042413d64aeee4f41c34120b4b3af4003c685741`）。已公开预发布 rc.10 于 2026-10-15 发布，GitHub Release 存在，冻结在 `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129`（annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`）。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
+单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.18` 是当前未公开、待独立审查的候选。已公开预发布 rc.17 于 2026-10-16 发布，GitHub Release 存在，冻结在 `d7eec4188a108eb660c77f806b6ce91f85e5c26f`（annotated object `077ca0f5a83d2f827b1169c82ccfb0ece9307c8c`）。已公开预发布 rc.16 于 2026-10-16 发布，GitHub Release 存在，冻结在 `6ed3be48e5e002351668a2d2d8765c2cca67413a`（annotated object `9747d649314d270b581d95ba5aebb37c0e4276b7`）。已公开预发布 rc.12 于 2026-10-16 发布，GitHub Release 存在，冻结在 `4162cbca1acb2aa70ad1d5fb77c0c78f25c68ab2`（annotated object `a5d68644e9d02206e2cf07ee7d32005f59801ee9`）。已公开预发布 rc.11 于 2026-10-15 发布，GitHub Release 存在，冻结在 `09963b85e0d7c9c5d881aa39e3c65ebbb719b7a0`（annotated object `042413d64aeee4f41c34120b4b3af4003c685741`）。已公开预发布 rc.10 于 2026-10-15 发布，GitHub Release 存在，冻结在 `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129`（annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`）。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
 
 ## 未发布
 
+## 0.1.0-rc.18 — 待审查与发布
+
+本地候选 tag 为 `v0.1.0-rc.18`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.17 tag 绝不挪动。
+
 ### 变更（Changed）
 
-- 卡片进入 done 或 archived 后，当轮或下一轮清理会删除其工作目录，不再等待 24 小时，也不再按文件数设上限。删不掉时 doctor 报红，并按退避重试。
-- 容量刹车在卡片临时目录用量超过 10 GiB，或磁盘剩余低于 50 GiB 时，只暂停全新卡的首次开工。审查、返工和续跑照常开工。doctor 报红，leader 只提醒一次，阈值可配置，完成的卡记录一次临时目录大小。用量回到两项阈值以内（包括验收后清理）时，下一轮自动解除。
+- 卡片进入 done 或 archived 后，下一轮清理就会删除其工作目录，不再等待 24 小时，也不再按文件数设上限。删不掉时 doctor 报红，并按退避重试。目录一旦消失（包括已被提前删除）红灯立即解除；inode、属主或 generation 不符时保留目录，并只提示一次具体原因。
+- 容量刹车在卡片临时目录用量超过 10 GiB，或磁盘剩余低于 50 GiB 时，只暂停全新卡的首次开工。审查、返工和续跑照常开工。doctor 报红，leader 只提醒一次，阈值可配置，完成的卡记录一次临时目录大小。由于完成卡的目录现在在下一轮就被删除、成功的测试也立即删掉卡根工作区，删除成功后用量立即回到两项阈值以内，下一轮自动解除。
 - 测试宿主默认关闭语音模式和听写，并在卡外复用一份只读官方 runtime 与一份共享 npm 缓存。
 - 更正发布清单：GitHub Release 正文只用英文，中文发布说明保留在 `docs/zh-CN/`。
+
+### 说明（Notes）
+
+- package 与根 lock 版本统一为 `0.1.0-rc.18`。Node 仍要求 `>=24.21.0`，Paseo daemon/app 仍要求 `>=0.11.0 <0.12.0`。相对 rc.17，依赖选择、schema 和契约版本不变，不新增存储文件，也不引入自动数据或凭证导入。保留 20 个开发／构建依赖告警。
+- 只有看板运维工具和发布文档有变化：卡片目录清理、新卡容量刹车、测试宿主环境和 Release 正文语言规则。体检的仓库扫描、按 Paseo 项目列表过滤以及卡片的产品行为没有其他变化。共享 runtime 只是测试环境缓存；产品本身在语音开启时首次启动仍会下载语音模型。隔离测试环境（pre-push 门使用）现在额外链接 `lsof`，即时清理及其测试通过 PATH 调用它；贡献者需要安装 `lsof`。
+- 精确 rc.18 验证只计 rc.18 回执；此前 rc.17 成绩不认证本候选。GitHub 冷安装、本候选的真实浏览器挂载、已安装宿主生命周期（含真实看板上的清理与容量刹车）、含待恢复定时卡的升级／回退、原生 app、手机、已认证 provider 闭环、其他平台与生产恢复仍未验证。本次准备不执行生产切换。
 
 ## 0.1.0-rc.17 — 待审查与发布
 
