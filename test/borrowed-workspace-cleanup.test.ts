@@ -191,7 +191,6 @@ describe("a review card that borrowed a temporary workspace", () => {
             name: owner.workspaceId,
             directory: owner.directory,
             projectRoot: owner.root,
-            projectId: "p",
             kind: "worktree",
             archived: true,
           }],

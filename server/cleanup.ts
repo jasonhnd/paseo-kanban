@@ -37,6 +37,7 @@ import {
   stuckLabel,
   waitReason,
   overdueLabel,
+  releaseCleanupBackoff,
 } from "./archive-book";
 import {
   DEFAULT_ARCHIVE_TIMEOUT_MS,
@@ -52,7 +53,8 @@ import { laneBranchDue, settleLaneBranch } from "./lane";
 import { isLaneWorkspace } from "./lane-mark";
 import { isTempWorkspace, tempCleaned } from "./temp-mark";
 import { rebuiltCleanupPending, overdueTempWorkspaces, settleTempWorkspace, suppressTempArchiveStuck, tempCleanupDue } from "./temp-workspace";
-import { gitRemovalDue, settleOwnedWorktree } from "./worktree-gc";
+import { createdWorktree, gitRemovalDue, settleOwnedWorktree } from "./worktree-gc";
+import { agentOccupiesDirectory, agentsTouching, purgeCardAgents, readCwdAgentList } from "./missing-cwd";
 import { wakeKanbanSupervisor, wakeOverdueArchives, type OverdueArchive } from "./wake";
 import { round, stage } from "./perf";
 import { invalidateAgentIndex } from "./agent-index";
@@ -298,6 +300,15 @@ function confirmResumeRequests(due: ReadonlySet<number>, now: Date): void {
       console.error("[paseo-kanban] cleanup request", err instanceof Error ? err.message : err);
     }
   }
+}
+
+/** Owners whose next cleanup must run now because a borrower just released the directory. */
+const borrowedKick = new Set<number>();
+
+function kickBorrowedOwner(ownerId: number, now: Date): void {
+  releaseCleanupBackoff(ownerId, now);
+  borrowedKick.add(ownerId);
+  enqueue(ownerId, now);
 }
 
 function enqueue(id: number, now = new Date()): void {
@@ -840,6 +851,8 @@ async function cleanupBody(id: number, chosen: CleanupOps, now: Date): Promise<v
     return;
   }
   try {
+    // A failure row may have been written after the kick, while this card was still running.
+    if (borrowedKick.delete(id)) releaseCleanupBackoff(id, now);
     if (cardErrorBlocks(readCleanupEvents(id, { verify: false }), now)) return;
     await cleanupInner(id, chosen, now);
     settleCardError(id);
@@ -1060,7 +1073,45 @@ async function cleanupInner(id: number, chosen: CleanupOps, now: Date): Promise<
           agentActivity: (agentId) => readActivity(chosen, agentId),
         });
   if (git === "pending") return;
+  if (!(await releaseBorrowedClaim(id, now))) return;
   finish();
+}
+
+/**
+ * This card followed another card's temporary workspace. Delete only this card's agents, then
+ * let the owner retry at once. A live agent of ours still holds the claim, so cleanup stays open
+ * and tries again. An unfinished owner is left to its own shared wait.
+ */
+async function releaseBorrowedClaim(id: number, now: Date): Promise<boolean> {
+  const task = getTask(id);
+  if (isTempWorkspace(id)) return true;
+  const workspaceId = task.paseo_workspace_id;
+  if (!workspaceId) return true;
+  const others = getDb().prepare("SELECT id, status FROM tasks WHERE paseo_workspace_id = ? AND id != ?").all(workspaceId, id) as Array<{ id: number; status: string }>;
+  const owners = others.filter((row) => (row.status === "done" || row.status === "archived") && isTempWorkspace(row.id) && createdWorktree(row.id));
+  if (owners.length === 0) return true;
+  try {
+    await purgeCardAgents(id);
+  } catch (err) {
+    console.error("[paseo-kanban] cleanup", err instanceof Error ? err.message : err);
+    return false;
+  }
+  invalidateAgentIndex();
+  const current = getTask(id);
+  const mine = new Set(agentsOpenedBy(current));
+  let held = false;
+  for (const owner of owners) {
+    const directory = createdWorktree(owner.id)?.directory;
+    if (!directory) continue;
+    const listed = readCwdAgentList();
+    const occupies = listed == null || agentsTouching(directory, listed).some((agent) => mine.has(agent.id) && agentOccupiesDirectory(agent));
+    if (occupies) {
+      held = true;
+      continue;
+    }
+    kickBorrowedOwner(owner.id, now);
+  }
+  return !held;
 }
 
 export async function workspaceDecision(

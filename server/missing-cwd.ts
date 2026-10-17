@@ -1,7 +1,8 @@
 /// <reference types="node" />
 import { createNativeAgentReader, type NativeAgentReader } from "./native-agent-index";
 import { prepareNativeSessionsForPurge, nativeSessionAfterPurge } from "./native-sessions";
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import { accessSync, constants } from "node:fs";
 import { commandInvocation } from "./command-invocation";
 import { createHash } from "node:crypto";
 import { agentIndexGeneration, agentIndexTtlMs, forgetAgentRecord, invalidateAgentIndex } from "./agent-index";
@@ -9,7 +10,7 @@ import { pruneCachedRecords, readCachedRecord } from "./agent-snapshot";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "./perf-fs";
 import { DatabaseSync } from "node:sqlite";
 import { homedir } from "node:os";
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { agentsOpenedBy, archiveSucceeded, cleanupFinished, readCleanupEvents } from "./archive-book";
 import { addBoardWakeMark, hasBoardWakeMark } from "./board-wake-marks";
 import { DEFAULT_MISSING_CWD_PATROL_MS, loadConfig, loadConfigForReport } from "./config";
@@ -69,6 +70,9 @@ interface CardLink {
   handoff_json: string | null;
 }
 
+/** `lsof` is not installed. Directory cleanup then trusts the agent list alone. */
+export const PROCESS_CWD_UNAVAILABLE = "no-lsof";
+
 export interface MissingCwdHooks {
   listAgents?: () => CwdAgent[] | null;
   deleteAgent?: (agentId: string) => Promise<void>;
@@ -76,6 +80,11 @@ export interface MissingCwdHooks {
   decideList?: () => Promise<string>;
   decideAdd?: (input: { title: string; detail: string }) => Promise<void>;
   log?: (line: string) => void;
+  /**
+   * Process working directories. null means the listing could not be read.
+   * PROCESS_CWD_UNAVAILABLE means there is no lsof, so the agent list decides.
+   */
+  listProcessCwds?: () => string[] | null | typeof PROCESS_CWD_UNAVAILABLE;
 }
 
 interface Notice {
@@ -462,6 +471,71 @@ function finished(status: string): boolean {
   return status === "done" || status === "archived";
 }
 
+/**
+ * True while this agent still holds a directory: a linked card is unfinished, or the agent
+ * itself is still alive. An archived agent of a finished card, and an archived agent with
+ * no card, does not. A live agent does, including one whose card is already finished.
+ */
+export function agentOccupiesDirectory(agent: CwdAgent): boolean {
+  let cards: CardLink[];
+  try {
+    cards = cardsForAgent(agent.id, agent.labels);
+  } catch (err) {
+    logLine(`cannot read cards for ${agent.id}: ${err instanceof Error ? err.message : err}`);
+    return true;
+  }
+  if (cards.some((card) => !finished(card.status))) return true;
+  return !agent.archived;
+}
+
+const LSOF_FALLBACKS = ["/usr/sbin/lsof", "/usr/bin/lsof"];
+
+function lsofRunnable(path: string): boolean {
+  try {
+    accessSync(path, constants.X_OK);
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function findLocalLsof(): string | null {
+  const onPath = (process.env.PATH ?? "").split(delimiter).filter(Boolean).map((dir) => join(dir, "lsof"));
+  return [...onPath, ...LSOF_FALLBACKS].find(lsofRunnable) ?? null;
+}
+
+/** One process-cwd listing. A thrown hook is unreadable, which holds the directory. */
+function listedProcessCwds(): string[] | null | typeof PROCESS_CWD_UNAVAILABLE {
+  if (hooks.listProcessCwds) {
+    try {
+      return hooks.listProcessCwds();
+    } catch (err) {
+      logLine(`cannot read process working directories: ${err instanceof Error ? err.message : err}`);
+      return null;
+    }
+  }
+  const lsof = findLocalLsof();
+  if (!lsof) return PROCESS_CWD_UNAVAILABLE;
+  const out = spawnSync(lsof, ["-d", "cwd", "-F", "pn"], { encoding: "utf8", timeout: 15_000, maxBuffer: 64 * 1024 * 1024 });
+  if (out.error || out.status == null || (out.status !== 0 && out.status !== 1) || (!out.stdout && out.stderr)) return null;
+  const cwds: string[] = [];
+  for (const line of String(out.stdout).split("\n")) {
+    if (line.startsWith("n") && line.length > 1) cwds.push(line.slice(1));
+  }
+  return cwds;
+}
+
+/**
+ * True when a process working directory is inside this directory.
+ * No lsof means the agent list already decided. An unreadable listing holds the directory.
+ */
+export function directoryHeldByProcess(directory: string): boolean {
+  const listed = listedProcessCwds();
+  if (listed === PROCESS_CWD_UNAVAILABLE) return false;
+  if (listed == null) return true;
+  return listed.some((cwd) => cwd.trim() && pathWithin(directory, cwd));
+}
+
 export interface CardAgentScope {
   taskId: number;
   recorded: ReadonlySet<string>;
@@ -589,11 +663,14 @@ export async function retainAgentsBeforeDirectoryRemoval(
   const waiting: string[] = [];
   const unread: string[] = [];
   const outside: string[] = [];
+  let releasedForeign = false;
   const readAgent = createNativeAgentReader();
   for (const agent of touching) {
     // Another card's agent shares this directory. Leave it, and do not ask whether it is running.
+    // An archived agent of a finished card no longer holds the directory.
     if (scope && agentOutsideCardScope(agent, scope)) {
-      outside.push(agent.id);
+      if (agentOccupiesDirectory(agent)) outside.push(agent.id);
+      else releasedForeign = true;
       continue;
     }
     if (running) {
@@ -620,6 +697,8 @@ export async function retainAgentsBeforeDirectoryRemoval(
     if (outcome === "purged") purged.push(agent.id);
     else kept.push(agent);
   }
+  // Only look at process cwd once an archived foreign agent would otherwise be ignored.
+  if (outside.length === 0 && releasedForeign && directoryHeldByProcess(directory)) outside.push("process");
   return { kept, purged, waiting, unread, outside };
 }
 
