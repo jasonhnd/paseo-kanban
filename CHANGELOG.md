@@ -5,7 +5,7 @@ Seventeen release candidates are recorded here. `0.1.0-rc.17` is the current unp
 
 ## Unreleased
 
-- The capacity guard pauses new card starts when card-work usage exceeds 10 GiB or the disk has under 50 GiB free, with a doctor red, one leader reminder, configurable thresholds, and a one-time temp-dir size on completed cards.
+- The capacity guard pauses a new card's first work start when card-work usage exceeds 10 GiB or the disk has under 50 GiB free. Review, rework, and resume still start. Doctor reports red, the leader is reminded once, thresholds are configurable, and a completed card stores its temp-dir size once. Usage that falls back under both limits, including after acceptance cleanup, clears the pause on the next round.
 
 ## 0.1.0-rc.17 — pending review and publication
 
