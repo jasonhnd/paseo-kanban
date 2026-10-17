@@ -20,6 +20,10 @@ Local candidate tag: `v0.1.0-rc.19`. This candidate is prepared only. Install it
 - The product changes are the doctor finding for a git worktree inside a card temp directory and cleanup of a workspace borrowed by a review card. Release documents record rc.18 as the published prerelease. Shared runtime, voice and dictation defaults, and the lsof lookup from rc.18 are unchanged.
 - Exact rc.19 verification uses only rc.19 receipts. Earlier rc.18 results do not pass this candidate. GitHub cold installs, a real-browser mount of this candidate, installed-host lifecycle, upgrade/rollback with pending waits, native app, phones, authenticated provider cycles, other platforms and production recovery remain unverified. This preparation does not perform the production switch.
 
+### Fixed
+
+- Leader reminders stay quiet when that project has an open decision created within the last 60 minutes (`RECENT_OPEN_DECISION_WINDOW_MS`), including a reply that paraphrases the options and phrases the title as a question. Outside that window, a retelling is still recognised only by the full normalized title or by at least two distinctive option bodies with the same recommendation letter. A new question is still reminded when no open decision was created in that window and neither path matches. Fixes [issue #6](https://github.com/jasonhnd/paseo-kanban/issues/6).
+
 ## 0.1.0-rc.18 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.18`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.17 tags are never moved.
