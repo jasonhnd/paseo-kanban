@@ -49,11 +49,17 @@ allowed configured/fallback/explicit work root. Real paths are checked before
 reading, so an escaping symlink remains refused. Arbitrary system temp files are
 no longer accepted by default.
 
-Done/archived card directories remain eligible for cleanup after 24 hours. The
-existing ownership, agent-cwd, Git, activity/generation, retirement-journal and
-per-round limits remain. Config changes do not strand recorded paths. Default
-cleanup does not follow a replaced work-root symlink. Preserve lasting evidence
-in the handoff or another authorized durable location before completion.
+A card directory is deleted on the cleanup round that finds the card done or
+archived. The board does not wait. Rework, blocked and other unfinished cards
+keep their directories. Cleanup still refuses another user's directory, a card
+root that is itself a Git repository, a directory whose generation changed, a
+directory an agent opened by that card still has, and a directory any process
+is using as its working directory. It does not walk the tree or stop at a file
+count. A removal that fails is a doctor red and is retried with backoff.
+Config changes do not strand recorded paths. Default cleanup does not follow a
+replaced work-root symlink, and it never deletes an evidence directory.
+Preserve lasting evidence in the handoff or another authorized durable location
+before completion.
 
 ## Tests and switching an existing installation
 

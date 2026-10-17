@@ -21,6 +21,7 @@ import type { CockpitHealth, ContractHealth } from "./afc-sources";
 import { STALE_FACTOR } from "./contract";
 import { isLaneDirectory, isLaneWorkspace } from "./lane-mark";
 import { agentCwdMissing } from "./missing-cwd";
+import { tmpCleanupProblems } from "./tmp-cleanup";
 import { realDispatchMatrixPath } from "./matrix";
 import { dataDir } from "./paths";
 import { samePath } from "./placement";
@@ -729,6 +730,29 @@ export async function runDoctor(input: DoctorRunInput = {}): Promise<DoctorRepor
     fail("board", "MIGRATION.json", err instanceof Error ? err.message : String(err));
   }
   if (dbReady) checkProjectCodes(tasks.map((task) => task.project), add);
+  // Pushed directly: a finished card's directory stays visible even when its project has left Paseo.
+  if (dbReady) {
+    try {
+      for (const problem of tmpCleanupProblems()) {
+        const id = `tmp-cleanup:${problem.taskId}:${problem.path}`;
+        if (findings.some((item) => item.id === id)) continue;
+        findings.push({
+          id,
+          severity: "red",
+          check: "directory",
+          project: problem.project,
+          card: problem.card,
+          taskId: problem.taskId,
+          object: problem.path,
+          symptom: t("doctor.tmpCleanup.symptom"),
+          evidence: t("doctor.tmpCleanup.evidence", { path: problem.path, reason: problem.reason }),
+          suggestion: t("doctor.tmpCleanup.suggestion"),
+        });
+      }
+    } catch (err) {
+      fail("directory", t("doctor.object.doctor"), err instanceof Error ? err.message : String(err), "tmp-cleanup");
+    }
+  }
   if (!dbReady) {
     // The board could not be read. Nothing was confirmed gone.
   } else if (!expired()) {

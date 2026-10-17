@@ -5,6 +5,10 @@ Seventeen release candidates are recorded here. `0.1.0-rc.17` is the current unp
 
 ## Unreleased
 
+### Changed
+
+- A finished card's work directory is deleted on the cleanup round that finds the card done or archived, with no 24-hour wait and no file-count cap. A directory that cannot be removed stays a doctor red and is retried with backoff.
+
 ## 0.1.0-rc.17 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.17`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.16 tags are never moved.

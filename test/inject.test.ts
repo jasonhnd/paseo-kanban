@@ -142,11 +142,13 @@ describe("MCP inject gate", () => {
     assert.match(worktree?.config.systemPrompt ?? "", /gh pr merge\uff0c\u4e0d\u8981 checkout head/);
     // No-CI wording: local tests and build go in verification.
     assert.match(worktree?.config.systemPrompt ?? "", /\u6ca1\u6709 CI \u7684\u4ed3\u5e93\uff0c\u4ea4\u6d3b\u524d\u5728\u672c\u673a\u8dd1\u5b8c\u6d4b\u8bd5\u548c\u6784\u5efa\u5e76\u628a\u547d\u4ee4\u548c\u7ed3\u679c\u5199\u8fdb verification/);
+    // Immediate deletion replaces the 24-hour wait in the executor temporary-directory rule (12).
+    assert.match(worktree?.config.systemPrompt ?? "", /\u5361\u8fdb\u5165 done \u6216 archived \u540e\u770b\u677f\u4f1a\u9a6c\u4e0a\u5220\u9664\u672c\u5361\u7684 KANBAN_TMP \u76ee\u5f55/);
     // TEST_0211 adds the per-card TMPDIR and production-database rules (260-character budget).
     // Executor rules grew by 167 and the no-wait rule shrank by 3 (CI dropped from the poll list).
     // Keep the original budget for the rules; a card checkout's CLI path may be longer than the installation's.
     const budgetedPrompt = (worktree?.config.systemPrompt ?? "").replace(displayCliPath(), "$PLUGIN_ROOT/bin/paseo-kanban.mjs");
-    assert.ok(budgetedPrompt.length <= 226 * 2 + 49 + 107 + 39 + 110 + 220 + 100 + 260 + 260 + 164 + 108);
+    assert.ok(budgetedPrompt.length <= 226 * 2 + 49 + 107 + 39 + 110 + 220 + 100 + 260 + 260 + 164 + 108 + 12);
     // TEST_0256 adds the no-wait rule and the sub-agent wait sentence (260-character budget).
     const reader = guardCreateHook(req({ env: { [BOARD_AGENT_ENV]: "1", KANBAN_ROLE: "reader" } }), "http://127.0.0.1:9");
     assert.match(reader?.config.systemPrompt ?? "", /\u4e0d\u6539\u6587\u4ef6\uff0c\u4e0d commit/);
@@ -231,7 +233,9 @@ describe("MCP inject gate", () => {
       const noCiBudget = role === "executor" ? 164 : role === "supervisor" ? 6 : 0;
       // GitHub issue 3 adds 108 characters to the executor merge rule.
       const checkoutHeadBudget = role === "executor" ? 108 : 0;
-      assert.ok(text.length <= previous[role] * 2 + policyBudget + mergeCardBudget + tmpRuleBudget + noWaitBudget + noCiBudget + checkoutHeadBudget, `${role} \u5de5\u4f5c\u5b88\u5219\u8d85\u8fc7\u6587\u6848\u9884\u7b97`);
+      // Immediate deletion replaces the 24-hour wait in the executor temporary-directory rule (12).
+      const immediateCleanupBudget = role === "executor" ? 12 : 0;
+      assert.ok(text.length <= previous[role] * 2 + policyBudget + mergeCardBudget + tmpRuleBudget + noWaitBudget + noCiBudget + checkoutHeadBudget + immediateCleanupBudget, `${role} \u5de5\u4f5c\u5b88\u5219\u8d85\u8fc7\u6587\u6848\u9884\u7b97`);
       if (role === "supervisor") assert.match(text, /\u5148\u7528 kanban_comment \u5199\u4e00\u53e5\u8fdb\u5ea6\uff0c\u518d\u7ed3\u675f\u8fd9\u4e00\u8f6e/);
       else {
         assert.match(text, /\u56de\u5408\u7ed3\u675f = \u4f60\u505c\u4e0b\u6765\u4e86\uff0c\u4e0d\u4f1a\u6709\u4eba\u518d\u53eb\u4f60/);
