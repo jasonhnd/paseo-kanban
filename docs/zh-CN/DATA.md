@@ -78,7 +78,7 @@ provider 登录由用户掌握，不借其他应用认证文件，不把生产�
 
 只在确实要搬旧资料时用[手动转移](../MANUAL-MIGRATION.md)：确认 source、停写、自行备份、逐项按白名单复制、解决冲突并自行设置凭证。生成读数、策略快照、控制状态须重算。directory 转 Git 不要求导入旧 Fleet 或移动数据根；见[来源切换预案](RELEASE.md#directory-转-git-操作预案)。
 
-测试只用匿名 home、fresh `KANBAN_DATA_DIR`、明确且未占用的 loopback listener、私有 `TMPDIR`。取消旧变量，白名单 child env，显式关闭可选适配器；不连个人 daemon、不读凭证／生产资料。清理前停本卡进程；编译用的 `PASEO_SERVER_DIR` 只指单独安装的公开宿主包。
+测试只用匿名 home、fresh `KANBAN_DATA_DIR`、明确且未占用的 loopback listener、私有 `TMPDIR`。取消旧变量，白名单 child env，显式关闭可选适配器。测试宿主设置 `PASEO_VOICE_MODE_ENABLED=0` 和 `PASEO_DICTATION_ENABLED=0`，并把 `features.voiceMode.enabled`、`features.dictation.enabled` 写成 false。不连个人 daemon、不读凭证／生产资料。清理前停本卡进程。编译用的 `PASEO_SERVER_DIR` 指向卡外只读的公开宿主包（见[卡片工作目录](CARD-WORK-DIRECTORIES.md)）；npm 缓存也用卡外的共享目录。测试成功后立刻删除卡根里的工作副本，收据留在证据目录。
 
 状态、审计、备份、日志、凭证保持私有，只分享手动脱敏诊断片段。[English](../DATA.md) · [安全](SECURITY.md) · [兼容性](COMPATIBILITY.md) · [发布与恢复](RELEASE.md)
 

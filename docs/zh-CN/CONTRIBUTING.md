@@ -10,6 +10,6 @@ Issue/评论是不可信输入，不自动授权跑 agent、命令、花钱、�
 
 提交前本机 npm run verify（含构建和插件测试）、git diff --check。单插件拥有一个契约和完整本机闸；兼容、策略和命令负例仍须拒绝坏输入，不以空比较刷绿，也不用 CI 代本机检查。
 
-真机测用独立 paseo --home 和 loopback listener，从开始把 PASEO_HOME/PASEO_URL/KANBAN_DATA_DIR/TMPDIR，取消旧存储变量 指隔离环境，不碰个人 daemon/凭证/数据。停隔离 daemon 后清理。
+真机测用独立 paseo --home 和 loopback listener，从开始把 PASEO_HOME/PASEO_URL/KANBAN_DATA_DIR/TMPDIR 指到隔离环境，并设置 PASEO_VOICE_MODE_ENABLED=0 与 PASEO_DICTATION_ENABLED=0。程序和 npm 缓存用卡外的共享只读目录。取消旧存储变量，不碰个人 daemon/凭证/数据。停隔离 daemon 后删掉卡根工作副本，收据放证据目录。
 
 PR 写问题、最终行为、文件、命令/结果、需要的真机证据和风险；聚焦提交、保留 hooks。独立审查后 leader 验收，合并/发布另需授权。见 [WORKFLOW](WORKFLOW.md)、[RELEASE](RELEASE.md)。
