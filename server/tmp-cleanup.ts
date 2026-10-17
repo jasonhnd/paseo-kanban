@@ -1,15 +1,16 @@
 /// <reference types="node" />
 import { execFile, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { accessSync, constants, lstatSync, renameSync, statSync, type BigIntStats } from "node:fs";
+import { accessSync, constants, existsSync, lstatSync, realpathSync, renameSync, statSync, type BigIntStats } from "node:fs";
 import { lstat, readdir, realpath, rm } from "node:fs/promises";
 import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
 import { formatCardCode } from "../shared/card-code";
 import { agentsOpenedBy } from "./archive-book";
 import { cardMarkOf } from "./card-ref";
-import { cardTmpGeneration, cardTmpRoots } from "./card-tmp";
+import { CARD_WORK_DIR, cardTmpGeneration, cardTmpRoots } from "./card-tmp";
 import { cardTmpTaskContext, preparedCardTmpDir } from "./card-tmp-record";
 import { getDb } from "./db";
+import { removeReadOnlyWorktree, runGit, type GitResult } from "./git";
 import { upsertSummaryEvent } from "./event-summary";
 import { pathWithin, readCwdAgentList, type CwdAgent } from "./missing-cwd";
 import { countIo, round } from "./perf";
@@ -101,6 +102,10 @@ interface Retirement {
 }
 
 let running: Promise<TmpCleaned[]> | null = null;
+/** Repos already pruned in this round. `git worktree prune` is repo-wide and does not remove live checkouts or branches. */
+let prunedRepos = new Set<string>();
+/** Successful `worktree list` output for this round. Dropped after remove or prune so the next card sees the new registration. */
+let porcelainCache = new Map<string, string>();
 /** A schedule that arrived while a round was running. One follow-up starts when that round ends. */
 let pending: TmpCleanOptions | null = null;
 let hooks: TmpCleanupHooks = {};
@@ -115,6 +120,8 @@ export function resetTmpCleanupForTests(): void {
   pending = null;
   hooks = {};
   roundCwds = undefined;
+  prunedRepos = new Set();
+  porcelainCache = new Map();
 }
 
 /** The directory names that belong to one card and no other: DEMO_0001, demo_0001, demo-0001, demo0001. */
@@ -370,6 +377,139 @@ function errorText(err: unknown): string {
   return message.slice(0, 300);
 }
 
+function gitDetail(result: GitResult): string {
+  return (result.stderr || result.stdout || `exit ${result.code}`).trim().slice(0, 240);
+}
+
+function worktreePaths(porcelain: string): string[] {
+  const paths: string[] = [];
+  for (const line of porcelain.split(/\r?\n/)) {
+    if (line.startsWith("worktree ")) paths.push(line.slice("worktree ".length).trim());
+  }
+  return paths;
+}
+
+function checkoutAt(dir: string): boolean {
+  try {
+    const info = lstatSync(join(dir, ".git"));
+    return info.isDirectory() || info.isFile();
+  } catch {
+    return false;
+  }
+}
+
+function repoKey(dir: string): string {
+  try { return realpathSync(dir); } catch { return resolve(dir); }
+}
+
+/** The checkout that owns `<repo>/.kanban-work/<card>`, when that parent is a checkout. */
+function repoAboveKanbanWork(cardDir: string): string | null {
+  const parent = dirname(resolve(cardDir));
+  if (basename(parent) !== CARD_WORK_DIR) return null;
+  const repo = dirname(parent);
+  return checkoutAt(repo) ? repo : null;
+}
+
+function owningRepos(workspacePath: string | null, cardDir: string): string[] {
+  const found: string[] = [];
+  const seen = new Set<string>();
+  const add = (dir: string | null) => {
+    if (!dir) return;
+    const key = repoKey(dir);
+    if (seen.has(key)) return;
+    seen.add(key);
+    found.push(dir);
+  };
+  add(repoAboveKanbanWork(cardDir));
+  const workspace = workspacePath?.trim();
+  if (workspace && checkoutAt(workspace)) add(resolve(workspace));
+  return found;
+}
+
+async function listedPorcelain(repo: string): Promise<GitResult> {
+  const key = repoKey(repo);
+  const hit = porcelainCache.get(key);
+  if (hit != null) return { code: 0, stdout: hit, stderr: "" };
+  const result = await runGit(repo, ["worktree", "list", "--porcelain"]);
+  if (result.code === 0) porcelainCache.set(key, result.stdout);
+  return result;
+}
+
+function forgetPorcelain(repo: string): void {
+  porcelainCache.delete(repoKey(repo));
+}
+
+async function pruneRepo(repo: string): Promise<GitResult> {
+  const key = repoKey(repo);
+  if (prunedRepos.has(key)) return { code: 0, stdout: "", stderr: "" };
+  const result = await runGit(repo, ["worktree", "prune"]);
+  if (result.code === 0) {
+    prunedRepos.add(key);
+    forgetPorcelain(repo);
+  }
+  return result;
+}
+
+/**
+ * Unregister git worktrees nested in a card directory before that directory is deleted.
+ * A missing directory is pruned instead: remove would fail once the checkout is already gone.
+ * A non-zero git status is logged and kept as a cleanup failure with backoff.
+ */
+async function releaseCardWorktrees(taskId: number, workspacePath: string | null, cardDir: string, now: number): Promise<boolean> {
+  let repos: string[];
+  try {
+    repos = owningRepos(workspacePath, cardDir);
+  } catch (err) {
+    recordProblem(taskId, cardDir, `git worktree lookup failed: ${errorText(err)}`, now, true);
+    return false;
+  }
+  for (const repo of repos) {
+    let listed: GitResult;
+    try {
+      listed = await listedPorcelain(repo);
+    } catch (err) {
+      recordProblem(taskId, cardDir, `git worktree list failed: ${errorText(err)}`, now, true);
+      return false;
+    }
+    if (listed.code !== 0) {
+      recordProblem(taskId, cardDir, `git worktree list failed: ${gitDetail(listed)}`, now, true);
+      return false;
+    }
+    const card = resolve(cardDir);
+    const paths = worktreePaths(listed.stdout).filter((wt) => pathWithin(cardDir, wt) && resolve(wt) !== card);
+    let stale = false;
+    for (const wt of paths) {
+      if (!existsSync(wt)) {
+        stale = true;
+        continue;
+      }
+      try {
+        const removed = await removeReadOnlyWorktree(repo, wt);
+        if (removed.code !== 0) {
+          recordProblem(taskId, cardDir, `git worktree remove --force failed: ${gitDetail(removed)}`, now, true);
+          return false;
+        }
+        forgetPorcelain(repo);
+      } catch (err) {
+        recordProblem(taskId, cardDir, `git worktree remove --force failed: ${errorText(err)}`, now, true);
+        return false;
+      }
+    }
+    if (!stale) continue;
+    try {
+      const pruned = await pruneRepo(repo);
+      if (pruned.code !== 0) {
+        recordProblem(taskId, cardDir, `git worktree prune failed: ${gitDetail(pruned)}`, now, true);
+        return false;
+      }
+    } catch (err) {
+      recordProblem(taskId, cardDir, `git worktree prune failed: ${errorText(err)}`, now, true);
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Outside the card root, or an evidence directory, is never a deletion target. */
 function protectedPath(root: string, path: string): boolean {
   if (!pathWithin(root, path)) return true;
@@ -446,6 +586,8 @@ async function retryRetired(root: string, budget: number, done: TmpCleaned[], ui
         throw err;
       });
       if (!info) {
+        const workspace = getDb().prepare("SELECT workspace_path FROM tasks WHERE id = ?").get(row.task_id) as { workspace_path: string | null } | undefined;
+        if (!(await releaseCardWorktrees(row.task_id, workspace?.workspace_path ?? null, record.path, now))) continue;
         await removeRetired(row.task_id, row.id, record, done, now, true);
         continue;
       }
@@ -468,6 +610,8 @@ async function retryRetired(root: string, budget: number, done: TmpCleaned[], ui
         keepProblem(row.task_id, record.path, "kept: the retired directory generation marker changed", now);
         continue;
       }
+      const workspace = getDb().prepare("SELECT workspace_path FROM tasks WHERE id = ?").get(row.task_id) as { workspace_path: string | null } | undefined;
+      if (!(await releaseCardWorktrees(row.task_id, workspace?.workspace_path ?? null, record.path, now))) continue;
       await removeRetired(row.task_id, row.id, record, done, now);
     } catch (err) {
       if (record) recordProblem(row.task_id, record.path, `cannot remove directory: ${errorText(err)}`, now, true);
@@ -490,7 +634,12 @@ async function cleanRoot(root: string, names: Map<string, TerminalTask>, budget:
   }
   const present = new Set(entries);
   for (const [entry, task] of names) {
-    if (!present.has(entry)) clearIfGone(task.id, join(root, entry), now);
+    if (!present.has(entry)) {
+      const path = join(root, entry);
+      if (waiting(task.id, path, now)) continue;
+      if (!(await releaseCardWorktrees(task.id, task.workspace_path, path, now))) continue;
+      clearIfGone(task.id, path, now);
+    }
   }
   for (const entry of entries) {
     if (done.length >= budget) return;
@@ -525,6 +674,7 @@ async function cleanRoot(root: string, names: Map<string, TerminalTask>, budget:
       }
       const after = await rootMark(path);
       if (!sameRoot(before, after)) continue;
+      if (!(await releaseCardWorktrees(task.id, task.workspace_path, path, now))) continue;
       const record: Retirement = {
         path, retiredPath: join(root, `.kanban-tmp-retired-${cardMarkOf(task)}-${randomUUID()}`), bytes,
         dev: String(before.dev), ino: String(before.ino), card: cardMarkOf(task), generation: before.generation,
@@ -571,6 +721,8 @@ function openedAgentLive(task: TerminalTask, agents: CwdAgent[]): boolean {
 export async function cleanTmpDirs(options: TmpCleanOptions = {}): Promise<TmpCleaned[]> {
   const now = (options.now ?? new Date()).getTime();
   const done: TmpCleaned[] = [];
+  prunedRepos = new Set();
+  porcelainCache = new Map();
   const found = await roots(options.roots ?? defaultRoots(), !options.roots);
   await new Promise((resolvePromise) => setImmediate(resolvePromise));
   const budget = options.limit ?? Number.POSITIVE_INFINITY;

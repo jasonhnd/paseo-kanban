@@ -3,7 +3,7 @@ import { paseoProjectsReadAt, removedProjects } from "./paseo-projects";
 import { LANGUAGES, t, translate, type MessageKey } from "../shared/i18n";
 import { leaderActionNote } from "./protocol";
 import { tightenFile } from "./data-perms";
-import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "./perf-fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "./perf-fs";
 import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { blockedKindLabel, isBlockedKind, isQuotaWaitReason } from "../shared/blocked";
 import { cardDecisions, type DecisionView } from "../shared/decisions";
@@ -94,6 +94,8 @@ export interface DoctorAgentSource {
 export interface DoctorWorktree {
   path: string;
   branch: string | null;
+  /** Set when `git worktree list --porcelain` marks the entry prunable. */
+  prunable?: boolean;
 }
 
 export type DoctorPr = "merged" | "open" | "closed" | "none" | "unknown";
@@ -292,10 +294,12 @@ export function parseWorktreePorcelain(text: string): DoctorWorktree[] {
   const out: DoctorWorktree[] = [];
   let path: string | null = null;
   let branch: string | null = null;
+  let prunable = false;
   const flush = () => {
-    if (path) out.push({ path, branch });
+    if (path) out.push(prunable ? { path, branch, prunable: true } : { path, branch });
     path = null;
     branch = null;
+    prunable = false;
   };
   for (const line of text.split(/\r?\n/)) {
     if (line.startsWith("worktree ")) {
@@ -305,6 +309,7 @@ export function parseWorktreePorcelain(text: string): DoctorWorktree[] {
       const ref = line.slice("branch ".length).trim();
       branch = ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : ref;
     } else if (line === "detached") branch = null;
+    else if (line.startsWith("prunable")) prunable = true;
   }
   flush();
   return out;
@@ -1110,6 +1115,9 @@ async function checkGit(
       const failed = nearest.filter((task) => finished(task.status) && tmpCleanupFailed(scan, task.id));
       const quiet = nearest.filter((task) => finished(task.status) && !tmpCleanupFailed(scan, task.id));
       if (nearest.length > 0 && failed.length === 0 && quiet.length === nearest.length) {
+        // The checkout is already gone. `git worktree prune` drops this registration.
+        // Reporting the card-temp info would keep a finding for a directory cleanup has removed.
+        if (tree.prunable && !existsSync(tree.path)) continue;
         const card = quiet[0] ?? null;
         add({
           id: `git:worktree:${key}`,
