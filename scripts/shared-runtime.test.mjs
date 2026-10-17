@@ -22,8 +22,9 @@ function manifest(dir) {
 
 function fakeNpm(dir) {
   mkdirSync(dir, { recursive: true });
-  const bin = join(dir, "npm");
-  writeFileSync(bin, "#!/bin/sh\nprintf '%s\\n' \"$PWD\" >> \"$SHARED_RUNTIME_INSTALL_LOG\"\nsleep 0.6\nmkdir -p node_modules/@getpaseo/server\nprintf 'installed\\n' > node_modules/@getpaseo/server/marker\nexit 0\n");
+  const bin = join(dir, "npm.cjs");
+  // The release lab PATH has node and not sleep or mkdir. .cjs stays CommonJS even when a parent package is a module.
+  writeFileSync(bin, `#!${process.execPath}\nconst { appendFileSync, mkdirSync, writeFileSync } = require("node:fs");\nappendFileSync(process.env.SHARED_RUNTIME_INSTALL_LOG, process.cwd() + "\\n");\nAtomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 600);\nmkdirSync("node_modules/@getpaseo/server", { recursive: true });\nwriteFileSync("node_modules/@getpaseo/server/marker", "installed\\n");\n`);
   chmodSync(bin, 0o700);
   return bin;
 }
