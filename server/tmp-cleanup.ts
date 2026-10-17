@@ -401,8 +401,10 @@ async function retryRetired(root: string, budget: number, done: TmpCleaned[], ui
       if (!info.isDirectory() || info.isSymbolicLink() || String(info.dev) !== record.dev || String(info.ino) !== record.ino) continue;
       if (uid != null && Number(info.uid) !== uid) continue;
       const fresh = lstatSync(record.retiredPath, { bigint: true });
-      if (!fresh.isDirectory() || fresh.isSymbolicLink() || fresh.dev !== info.dev || fresh.ino !== info.ino ||
-        cardTmpGeneration(record.retiredPath) !== record.generation) continue;
+      if (!fresh.isDirectory() || fresh.isSymbolicLink() || fresh.dev !== info.dev || fresh.ino !== info.ino) continue;
+      // A missing marker is a partial removal. Only a marker that is still present and different is another directory.
+      const generation = cardTmpGeneration(record.retiredPath);
+      if (record.generation != null && generation != null && generation !== record.generation) continue;
       await removeRetired(row.task_id, row.id, record, done, now);
     } catch (err) {
       if (record) recordProblem(row.task_id, record.path, `cannot remove directory: ${errorText(err)}`, now, true);

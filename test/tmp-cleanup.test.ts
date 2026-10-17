@@ -436,6 +436,26 @@ describe("tmp cleanup", () => {
     assert.equal(cleared.findings.some((item) => item.taskId === c.id && item.id.startsWith("tmp-cleanup:")), false);
   });
 
+  it("does not retry a retired directory whose generation marker changed", async (t) => {
+    const c = card("done", T0);
+    const p = mk(c.code);
+    writeFileSync(join(p, ".kanban-tmp-generation"), "gen-1");
+    const mocked = mock.method(fsPromises, "rm", async () => { throw new Error("simulated rm failure"); });
+    syncBuiltinESMExports();
+    t.after(() => { mocked.mock.restore(); syncBuiltinESMExports(); });
+    const now = new Date(T0.getTime() + 48 * HOUR);
+    assert.equal((await cleanTmpDirs({ now, roots: [root] })).length, 0);
+    const record = getDb().prepare("SELECT data_json FROM events WHERE task_id = ? AND kind = 'tmp_retirement_prepared' ORDER BY id DESC LIMIT 1").get(c.id) as { data_json: string };
+    const retired = JSON.parse(record.data_json).retiredPath as string;
+    writeFileSync(join(retired, ".kanban-tmp-generation"), "gen-2");
+    mocked.mock.restore();
+    syncBuiltinESMExports();
+    const later = new Date(now.getTime() + 60_000);
+    assert.equal((await cleanTmpDirs({ now: later, roots: [root] })).length, 0);
+    assert.equal(fs.readFileSync(join(retired, ".kanban-tmp-generation"), "utf8"), "gen-2");
+    assert.ok(openProblems().some((item) => item.path === p));
+  });
+
   it("does not retry a retirement path that has been replaced by a different inode", async (t) => {
     const c = card("done", T0);
     mk(c.code);
