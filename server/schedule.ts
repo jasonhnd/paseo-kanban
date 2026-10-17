@@ -51,6 +51,7 @@ import { alarmConfigProblem } from "./config-alarm";
 import { roleLabel, type Status } from "../shared/labels";
 import { stage } from "./perf";
 import { guardCard, guardStage, withTimeout } from "./guard";
+import { capacityHoldReason, refreshCapacityGuard } from "./capacity-guard";
 
 export interface TickOptions {
   now?: Date;
@@ -248,6 +249,12 @@ async function tryStart(
   held: TickResult["held"],
   started: number[],
 ): Promise<void> {
+  const capacity = capacityHoldReason();
+  if (capacity) {
+    if (task.hold_reason !== capacity) setHold(task.id, capacity);
+    held.push({ id: task.id, reason: capacity });
+    return;
+  }
   const now = (options.now ?? new Date()).getTime();
   const role = plannedRole(task);
   let checkedExecutor: { id: string; state: AgentLiveness } | null = null;
@@ -748,6 +755,7 @@ export async function runTick(options: TickOptions): Promise<TickResult> {
   await phase("tick.downstream", () => {
     downstream = downstreamCounts();
   });
+  await phase("tick.capacity", () => refreshCapacityGuard({ now, config, send: options.send }));
   await phase("tick.startLoop", async () => {
     for (const status of ["ready", "in_review", "rework"] as const) {
       for (const task of orderByDownstream(listStatus(status), downstream)) {

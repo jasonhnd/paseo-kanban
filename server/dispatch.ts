@@ -26,6 +26,7 @@ import { appendRejectBrief, conflictReviewNote, latestChangeNote, latestReworkKi
 import { awaitingLeaderHold } from "./review-hold";
 import { agentCwdMissing } from "./missing-cwd";
 import { DEFAULT_ARCHIVE_TIMEOUT_MS, loadConfig, projectAlwaysTemp, projectParallel } from "./config";
+import { capacityHoldReason } from "./capacity-guard";
 import { assertProjectInPaseo } from "./paseo-projects";
 import { quotaWaitLabel } from "../shared/blocked";
 import { noteQueueHold } from "./queue-hold";
@@ -882,6 +883,8 @@ export async function startTask(
   if (task.status === "waiting") throw new KanbanError("not_ready", t("dispatch.parentsNotDoneStart"));
   if (task.wait_decision) throw new KanbanError(WAITING_USER, t("dispatch.waitingUser", { decision: task.wait_decision }));
   if (task.status === "rework" && awaitingLeaderHold(id)) throw new KanbanError("not_ready", t("dispatch.awaitingLeader"));
+  const capacity = capacityHoldReason();
+  if (capacity) throw new KanbanError("not_ready", capacity);
   const allowMain = options?.force === true || !projectAlwaysTemp(task.project);
   const reviewedEarly = task.role === "reviewer" ? reviewedPlacement(task, allowMain) : null;
   const missingWorkspace = reviewedEarly ? null : missingCardWorkspace(task);

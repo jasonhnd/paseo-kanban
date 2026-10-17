@@ -108,6 +108,8 @@ export interface BoardCard {
   leaderUnresponsive: boolean;
   /** Rework card parked after the round-2 rejection until the leader rules. */
   leaderHold: boolean;
+  /** Allocated temp-directory size recorded once at completion. Null until then. */
+  workBytes: number | null;
 }
 
 export function stallNoteFor(task: Pick<TaskRow, "id" | "status" | "agent_id">): string | null {
@@ -353,6 +355,7 @@ function cardFace(facts: CardFacts) {
     tierLabel: resolveTier(task.tier, parseTags(task.tags), defaultTier),
     leaderUnresponsive: !context.reviewWaits.has(task.id) && parseTags(task.tags).includes(LEADER_UNRESPONSIVE_TAG),
     leaderHold: task.status === "rework" && awaitingLeaderHold(task.id),
+    workBytes: task.tmp_work_bytes ?? null,
   };
 }
 

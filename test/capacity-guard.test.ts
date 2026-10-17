@@ -118,6 +118,8 @@ beforeEach(() => {
   setWakeSender((id, text) => { sent.push({ id, text }); });
   writePools();
   saveConfig(baseConfig());
+  // Earlier cases leave ready and running cards. Those fill the executor limit and hide the capacity result.
+  getDb().prepare("UPDATE tasks SET status = 'archived', agent_id = NULL WHERE status NOT IN ('done', 'archived')").run();
 });
 
 after(() => {
@@ -358,7 +360,7 @@ describe("capacity guard", () => {
 
   it("records a card temp directory size once at completion and shows it on the board", async () => {
     const root = process.env.KANBAN_TMP_ROOT ?? workRoot;
-    const task = createTask({ project: "gauge", title: "finish", role: "executor", workspacePath: null });
+    const task = createTask({ project: "gauge", title: "finish", role: "executor" });
     const code = cardMark(task.id);
     const cardDir = join(root, code);
     mkdirSync(cardDir, { recursive: true });
@@ -374,7 +376,7 @@ describe("capacity guard", () => {
     assert.equal(listBoard().tasks.find((item) => item.id === task.id)?.workBytes, recorded);
     assert.equal(getDetail(task.id).task.workBytes, recorded);
 
-    const missing = createTask({ project: "gauge", title: "no dir", role: "batch", workspacePath: null });
+    const missing = createTask({ project: "gauge", title: "no dir", role: "batch" });
     claimStatus(missing.id, "ready", "running", "test");
     await completeTask(missing.id, "batch", "done", { files: [], verification: "ok", risks: [] });
     assert.equal(getTask(missing.id).tmp_work_bytes, null);

@@ -1,5 +1,6 @@
 import { View } from "react-native";
 import { blockedKindLabel, cardQueueAlert, scheduledWaitLabel } from "../shared/blocked";
+import { formatBytes } from "../shared/capacity-format";
 import { summaryCount } from "../shared/event-summary";
 import { t, type MessageKey } from "../shared/i18n";
 import { isConflictBadge, isLandPendingBadge, LEADER_LABEL } from "../shared/labels";
@@ -105,7 +106,7 @@ export function taskAlerts(task: AlertTask): Array<{ tone: "warning" | "danger";
   return alerts;
 }
 
-type FactTask = Pick<BoardCardView, "assigner" | "related" | "assignee" | "goal" | "acceptance" | "acceptanceMissing">;
+type FactTask = Pick<BoardCardView, "assigner" | "related" | "assignee" | "goal" | "acceptance" | "acceptanceMissing" | "workBytes">;
 
 export function FiveFacts({ s, task }: { s: Styles; task: FactTask }) {
   return (
@@ -115,6 +116,7 @@ export function FiveFacts({ s, task }: { s: Styles; task: FactTask }) {
       <Fact s={s} label={t("cardParts.fact.assignee")} value={task.assignee} />
       <Fact s={s} label={t("cardParts.fact.goal")} value={task.goal} />
       <Fact s={s} label={t("cardParts.fact.acceptance")} value={task.acceptance} tone={task.acceptanceMissing ? "warning" : "text"} />
+      {task.workBytes != null ? <Fact s={s} label={t("cardParts.fact.work")} value={formatBytes(task.workBytes)} /> : null}
     </View>
   );
 }
