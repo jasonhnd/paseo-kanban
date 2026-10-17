@@ -187,9 +187,9 @@ export interface KanbanConfig {
   capacity?: { maxWorkGiB: number; minFreeGiB: number };
 }
 
-/** Card-work total above this many GiB pauses new starts. */
+/** Card-work total above this many GiB pauses a new card's first work start. */
 export const DEFAULT_MAX_WORK_GIB = 10;
-/** Disk free below this many GiB pauses new starts. */
+/** Disk free below this many GiB pauses a new card's first work start. */
 export const DEFAULT_MIN_FREE_GIB = 50;
 
 /** A config file without a `language` field predates the setting: that board has always been in Chinese. */

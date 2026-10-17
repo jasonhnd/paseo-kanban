@@ -352,6 +352,23 @@ function missingCardWorkspace(task: TaskRow): string | null {
   return null;
 }
 
+const FRESH_WORK_ROLES = new Set(["executor", "batch", "reader", "decision"]);
+
+/**
+ * Low capacity queues only a brand-new card's first ready→running work start.
+ * Review cards, rework (including a reopened ready card), resume of the original
+ * agent, and in_review / reviewing progress still start. Holding those too would
+ * keep finished work from being reviewed, accepted, and cleaned up.
+ */
+export function freshStartCapacityReason(task: { id: number; status: string; role: string; executor_agent_id: string | null }): string | null {
+  const reason = capacityHoldReason();
+  if (!reason || task.status !== "ready" || !FRESH_WORK_ROLES.has(task.role) || task.executor_agent_id) return null;
+  if (pendingReworkReplacement(task.id) || latestReworkKind(task.id)) return null;
+  const prior = getDb().prepare("SELECT 1 AS ok FROM runs WHERE task_id = ? AND role != 'reviewer' LIMIT 1").get(task.id);
+  if (prior) return null;
+  return reason;
+}
+
 function phaseOf(task: TaskRow): "resume" | "review" | "work" {
   if (task.status === "rework" && task.executor_agent_id) return "resume";
   if (task.status === "rework") return "work";
@@ -883,7 +900,7 @@ export async function startTask(
   if (task.status === "waiting") throw new KanbanError("not_ready", t("dispatch.parentsNotDoneStart"));
   if (task.wait_decision) throw new KanbanError(WAITING_USER, t("dispatch.waitingUser", { decision: task.wait_decision }));
   if (task.status === "rework" && awaitingLeaderHold(id)) throw new KanbanError("not_ready", t("dispatch.awaitingLeader"));
-  const capacity = capacityHoldReason();
+  const capacity = freshStartCapacityReason(task);
   if (capacity) throw new KanbanError("not_ready", capacity);
   const allowMain = options?.force === true || !projectAlwaysTemp(task.project);
   const reviewedEarly = task.role === "reviewer" ? reviewedPlacement(task, allowMain) : null;

@@ -16,7 +16,7 @@ import { downstreamCounts, orderByDownstream } from "./downstream";
 import { scanPrerequisiteAttention } from "./dependency-attention";
 import { effortForOwnRole } from "./effort";
 import { loadDispatchMatrix, matrixFailMessage, type MatrixLoad } from "./matrix";
-import { startTask, WAITING_USER, type AgentLauncher } from "./dispatch";
+import { freshStartCapacityReason, startTask, WAITING_USER, type AgentLauncher } from "./dispatch";
 import { pendingReworkReplacement, pollAwaitingPr, quietHandoffEligible, recoverStandaloneReview, reopenDepartedRework } from "./flow";
 import { resumePendingLands } from "./temp-land";
 import { KanbanError } from "./errors";
@@ -51,7 +51,7 @@ import { alarmConfigProblem } from "./config-alarm";
 import { roleLabel, type Status } from "../shared/labels";
 import { stage } from "./perf";
 import { guardCard, guardStage, withTimeout } from "./guard";
-import { capacityHoldReason, refreshCapacityGuard } from "./capacity-guard";
+import { refreshCapacityGuard } from "./capacity-guard";
 
 export interface TickOptions {
   now?: Date;
@@ -249,7 +249,7 @@ async function tryStart(
   held: TickResult["held"],
   started: number[],
 ): Promise<void> {
-  const capacity = capacityHoldReason();
+  const capacity = freshStartCapacityReason(task);
   if (capacity) {
     if (task.hold_reason !== capacity) setHold(task.id, capacity);
     held.push({ id: task.id, reason: capacity });
