@@ -1,18 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { unregisteredQuestion } from "../../../shared/fleet/leader-panel";
+import * as leaderPanel from "../../../shared/fleet/leader-panel";
+
+const { unregisteredQuestion } = leaderPanel;
+const RECENT_OPEN_DECISION_WINDOW_MS = 60 * 60_000;
 
 const at = "2026-01-01T12:30:00Z";
 const detail = "A: Deploy the staging build\nB: Keep the current release\nRecommend A: validate the rollout gradually";
+// 61 minutes before the reply: outside the recent-decision window, so these cases exercise the two match paths.
 const decision = {
   id: "d0101-120000-1", project: "demo", status: "open", title: "Choose the rollout strategy",
-  detail, createdAt: "2026-01-01T12:00:00Z",
+  detail, createdAt: "2026-01-01T11:29:00.000Z",
 };
 const reply = (text = `${decision.title}\n${detail}`) => ({ text, at });
 
 test("an open decision retold without an id after 30 minutes is registered", () => {
-  assert.equal(unregisteredQuestion("DEMO", reply(), [decision]), null);
+  assert.equal(unregisteredQuestion("DEMO", reply(), [{ ...decision, createdAt: "2026-01-01T12:00:00Z" }]), null);
 });
 
 test("the registered subject survives a heading prefix, markdown and full-width punctuation", () => {
@@ -34,10 +38,12 @@ test("done, shelved, supervisor and another project's decisions never suppress a
   assert.ok(unregisteredQuestion("demo", reply(), [{ ...decision, project: "other" }]));
 });
 
-test("an unrelated newly registered decision does not hide a genuinely new question", () => {
-  assert.ok(unregisteredQuestion("demo", reply(
-    "Choose the backup location\nA: Store encrypted backups locally\nB: Upload backups to remote storage\nRecommend B",
-  ), [{ ...decision, createdAt: at }]));
+test("an unrelated open decision inside the recent window suppresses a new question, and one outside it does not", () => {
+  const text = "Choose the backup location\nA: Store encrypted backups locally\nB: Upload backups to remote storage\nRecommend B";
+  const inside = new Date(Date.parse(at) - 60_000).toISOString();
+  const outside = new Date(Date.parse(at) - RECENT_OPEN_DECISION_WINDOW_MS - 60_000).toISOString();
+  assert.equal(unregisteredQuestion("demo", reply(text), [{ ...decision, createdAt: inside }]), null);
+  assert.match(unregisteredQuestion("demo", reply(text), [{ ...decision, createdAt: outside }])?.text ?? "", /backup location/);
 });
 
 test("generic option/recommendation wording alone is insufficient", () => {
@@ -125,6 +131,48 @@ test("an id alone is not a third matching route under the leader ruling", () => 
   const text = `Unusual question ${decision.id}\nA: Yes\nB: No\nRecommend A`;
   assert.ok(unregisteredQuestion("demo", reply(text), [decision]));
   assert.ok(unregisteredQuestion("demo", reply(text), [{ ...decision, status: "done" }]));
+});
+
+test("a paraphrased question title stays quiet for one minute and is reminded after the recent window", () => {
+  const paraphrase = [
+    "Should we move the billing books?",
+    "A: Copy invoice rows into the replacement book once both copies have been checked",
+    "B: Leave invoice rows on the present book while checking finishes",
+    "Recommend A: staging already checked both copies",
+  ].join("\n");
+  const stored = {
+    ...decision,
+    title: "Choose billing ledger migration",
+    detail: "A: Migrate billing invoices to the new ledger after a dual-write audit\nB: Keep billing invoices on the existing ledger until the audit is complete\nRecommend A: the dual-write audit has passed on staging",
+  };
+  const ask = (createdAt: string, windowMs?: number) => unregisteredQuestion("demo", reply(paraphrase), [{ ...stored, createdAt }], windowMs);
+  assert.equal(leaderPanel.RECENT_OPEN_DECISION_WINDOW_MS, RECENT_OPEN_DECISION_WINDOW_MS);
+  assert.equal(ask(new Date(Date.parse(at) - 60_000).toISOString()), null);
+  assert.equal(ask(new Date(Date.parse(at) - RECENT_OPEN_DECISION_WINDOW_MS).toISOString()), null);
+  assert.ok(ask(new Date(Date.parse(at) - RECENT_OPEN_DECISION_WINDOW_MS - 1).toISOString()));
+  assert.ok(ask(new Date(Date.parse(at) - 61 * 60_000).toISOString()));
+  assert.ok(ask(new Date(Date.parse(at) - 45 * 60_000).toISOString(), 30 * 60_000));
+  assert.equal(ask(new Date(Date.parse(at) - 45 * 60_000).toISOString()), null);
+  assert.ok(ask(new Date(Date.parse(at) - 60_000).toISOString(), 0));
+});
+
+test("a new question with no recent open decision for this project is still reminded", () => {
+  const text = "Choose the backup location\nA: Store encrypted backups locally\nB: Upload backups to remote storage\nRecommend B";
+  const minuteAgo = new Date(Date.parse(at) - 60_000).toISOString();
+  assert.match(unregisteredQuestion("demo", reply(text), [])?.text ?? "", /backup location/);
+  assert.match(unregisteredQuestion("demo", reply(text), [{ ...decision, status: "done", createdAt: minuteAgo }])?.text ?? "", /backup location/);
+  assert.match(unregisteredQuestion("demo", reply(text), [{ ...decision, status: "shelved", createdAt: minuteAgo }])?.text ?? "", /backup location/);
+  assert.match(unregisteredQuestion("demo", reply(text), [{ ...decision, status: "supervisor", createdAt: minuteAgo }])?.text ?? "", /backup location/);
+  assert.match(unregisteredQuestion("demo", reply(text), [{ ...decision, project: "other", createdAt: minuteAgo }])?.text ?? "", /backup location/);
+  assert.match(unregisteredQuestion("demo", reply(text), [{ ...decision, createdAt: new Date(Date.parse(at) + 60_000).toISOString() }])?.text ?? "", /backup location/);
+});
+
+test("a recent open decision also quiets a second unmatched question until the window ends", () => {
+  const text = `${decision.title}\n${detail}\n\nChoose the backup location\nA: Keep backups locally\nB: Store backups remotely\nRecommend B`;
+  const recent = { ...decision, createdAt: new Date(Date.parse(at) - 60_000).toISOString() };
+  assert.equal(unregisteredQuestion("demo", reply(text), [recent]), null);
+  const older = { ...decision, createdAt: new Date(Date.parse(at) - RECENT_OPEN_DECISION_WINDOW_MS - 60_000).toISOString() };
+  assert.match(unregisteredQuestion("demo", reply(text), [older])?.text ?? "", /backup location/);
 });
 
 test("English and Chinese reminder text identifies the board as the automatic source", () => {

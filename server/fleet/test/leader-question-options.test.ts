@@ -4,7 +4,7 @@ import { unregisteredQuestion } from "../../../shared/fleet/leader-panel";
 
 const at = "2026-01-01T12:30:00Z";
 const english = {
-  id: "d0101-120000-1", project: "demo", status: "open", createdAt: "2026-01-01T12:00:00Z",
+  id: "d0101-120000-1", project: "demo", status: "open", createdAt: "2026-01-01T11:29:00.000Z",
   title: "Choose billing ledger migration",
   detail: "A: Migrate billing invoices to the new ledger after a dual-write audit\nB: Keep billing invoices on the existing ledger until the audit is complete\nRecommend A: the dual-write audit has passed on staging",
 };
