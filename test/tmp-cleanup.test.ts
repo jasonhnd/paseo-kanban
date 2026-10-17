@@ -600,7 +600,7 @@ describe("tmp cleanup", () => {
     t.after(() => rmSync(base, { recursive: true, force: true }));
     const c = card("done", T0);
     const p = join(base, c.code);
-    mkdirSync(p);
+    mkdirSync(p, { recursive: true });
     writeFileSync(join(p, "kanban.db"), "x");
     const filesPerDir = 1000;
     const dirCount = 1000;
