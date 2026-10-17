@@ -4,7 +4,7 @@ import { LANGUAGES, t, translate, type MessageKey } from "../shared/i18n";
 import { leaderActionNote } from "./protocol";
 import { tightenFile } from "./data-perms";
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "./perf-fs";
-import { basename, isAbsolute, relative, resolve } from "node:path";
+import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { blockedKindLabel, isBlockedKind, isQuotaWaitReason } from "../shared/blocked";
 import { cardDecisions, type DecisionView } from "../shared/decisions";
 import { formatTickTime } from "../shared/scheduler";
@@ -12,6 +12,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { isAgentAlive } from "./alive";
 import { deliverWake, hasWakeSender } from "./bus";
 import { cardMarkOf } from "./card-ref";
+import { CARD_WORK_DIR } from "./card-tmp";
 import { DEFAULT_ARCHIVE_DEADLINE_MS, doctorSettings, kanbanLeaderForAlarm, loadConfigForReport, type DoctorSettings } from "./config";
 import { checkConfigFile, checkDataDir, checkProjectCodes } from "./doctor-config";
 import { checkMigration } from "./doctor-migration";
@@ -21,7 +22,7 @@ import type { CockpitHealth, ContractHealth } from "./afc-sources";
 import { STALE_FACTOR } from "./contract";
 import { isLaneDirectory, isLaneWorkspace } from "./lane-mark";
 import { agentCwdMissing } from "./missing-cwd";
-import { tmpCleanupProblems } from "./tmp-cleanup";
+import { tmpCleanupProblems, tmpNamesFor } from "./tmp-cleanup";
 import { realDispatchMatrixPath } from "./matrix";
 import { dataDir } from "./paths";
 import { samePath } from "./placement";
@@ -390,7 +391,8 @@ function loadEvents(db: DatabaseSync): DocEvent[] {
      WHERE (kind IN (
        'worktree_created', 'temp_workspace', 'workspace_bound', 'cleanup_finished',
        'temp_workspace_cleaned', 'land_pending', 'landed', 'lane_bound',
-       'agent_creating', 'agent_recover_ambiguous'
+       'agent_creating', 'agent_recover_ambiguous',
+       'card_tmp_prepared', 'tmp_cleanup_failed', 'tmp_cleaned'
      ) OR to_status IN ('acceptance', 'done', 'archived'))
      AND (kind NOT IN ('cleanup_finished', 'temp_workspace_cleaned') OR ${currentCleanupSql("events", "events.task_id")})
      ORDER BY id`,
@@ -561,6 +563,93 @@ function taskOwnsPath(scan: DoctorScan, task: DocTask, events: DocEvent[], path:
   if (task.workspace_path && samePath(task.workspace_path, path)) return true;
   if (boundPlaces(scan, task.id).some((place) => place.directory && samePath(place.directory, path))) return true;
   if (branch && ownsBranch(task, branch)) return true;
+  return false;
+}
+
+/** Directory names that mean this card, including the lower-case, hyphenated and compact aliases. */
+function cardDirNames(task: DocTask): string[] {
+  const mark = cardMarkOf(task);
+  if (mark.startsWith("#")) return [];
+  return tmpNamesFor(mark);
+}
+
+function insideDir(parent: string, child: string): boolean {
+  return samePath(parent, child) || ancestor(parent, child);
+}
+
+/** Latest recorded card temp root whose directory name is this card. A root of `/` is ignored. */
+function preparedTmpPath(scan: DoctorScan, task: DocTask): string | null {
+  const names = new Set(cardDirNames(task));
+  if (names.size === 0) return null;
+  const rows = taskEvents(scan, task.id).filter((event) => event.kind === "card_tmp_prepared");
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const value = parseData(rows[i].data_json).path;
+    if (typeof value !== "string" || !isAbsolute(value)) continue;
+    const root = resolve(value);
+    if (root === resolve(sep) || !names.has(basename(root))) continue;
+    return root;
+  }
+  return null;
+}
+
+/** Deepest `.kanban-work/<card>/` prefix of `path` for this card, in any project. */
+function conventionalTmpRoot(task: DocTask, path: string): string | null {
+  const names = new Set(cardDirNames(task));
+  if (names.size === 0) return null;
+  const parts = resolve(path).split(sep);
+  let best: string | null = null;
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    if (parts[i] !== CARD_WORK_DIR || !names.has(parts[i + 1] ?? "")) continue;
+    const root = parts.slice(0, i + 2).join(sep) || sep;
+    if (root === resolve(sep)) continue;
+    if (!best || root.length > best.length) best = root;
+  }
+  return best;
+}
+
+/** Longest board-owned temp root of this card that contains `path`. */
+function cardTmpRootFor(scan: DoctorScan, task: DocTask, path: string): string | null {
+  const found: string[] = [];
+  const conventional = conventionalTmpRoot(task, path);
+  if (conventional && insideDir(conventional, path)) found.push(conventional);
+  const prepared = preparedTmpPath(scan, task);
+  if (prepared && insideDir(prepared, path)) found.push(prepared);
+  if (found.length === 0) return null;
+  return found.reduce((best, root) => (root.length > best.length ? root : best));
+}
+
+/** Cards whose temp root contains `path`. Only the deepest matching roots are returned. */
+function nearestCardTmpOwners(scan: DoctorScan, tasks: DocTask[], path: string): DocTask[] {
+  const hits: { task: DocTask; root: string }[] = [];
+  for (const task of tasks) {
+    const root = cardTmpRootFor(scan, task, path);
+    if (root) hits.push({ task, root });
+  }
+  if (hits.length === 0) return [];
+  const longest = hits.reduce((max, hit) => Math.max(max, hit.root.length), 0);
+  return hits.filter((hit) => hit.root.length === longest).map((hit) => hit.task);
+}
+
+function eventPath(event: DocEvent): string {
+  const data = parseData(event.data_json);
+  if (typeof data.path === "string" && data.path) return data.path;
+  if (typeof data.summaryKey === "string" && data.summaryKey) return data.summaryKey;
+  return "";
+}
+
+/** An open temp-cleanup failure. A later `tmp_cleaned` for the same path closes it. */
+function tmpCleanupFailed(scan: DoctorScan, taskId: number): boolean {
+  const latest = new Map<string, DocEvent>();
+  for (const event of taskEvents(scan, taskId)) {
+    if (event.kind !== "tmp_cleanup_failed" && event.kind !== "tmp_cleaned") continue;
+    const path = eventPath(event);
+    if (!path) continue;
+    const prev = latest.get(path);
+    if (!prev || event.id > prev.id) latest.set(path, event);
+  }
+  for (const event of latest.values()) {
+    if (event.kind === "tmp_cleanup_failed") return true;
+  }
   return false;
 }
 
@@ -1007,12 +1096,36 @@ async function checkGit(
       seenPaths.add(key);
       if (lane(scan, null, tree.path)) continue;
       const owners = tasks.filter((task) => taskOwnsPath(scan, task, events, tree.path, tree.branch));
-      if (owners.some((task) => unfinished(task.status))) continue;
+      // A nested checkout inside a board card temp root belongs to that card.
+      const nearest = nearestCardTmpOwners(scan, tasks, tree.path);
+      const held = [...owners];
+      for (const task of nearest) {
+        if (!held.some((item) => item.id === task.id)) held.push(task);
+      }
+      if (held.some((task) => unfinished(task.status))) continue;
       // An unfinished card (an independent review, for example) can hold the same Paseo workspace by id.
       const trunk = (sources.workspaces ?? []).filter((workspace) => workspace.directory && samePath(workspace.directory, tree.path));
       if (tasks.some((task) => unfinished(task.status) && trunk.some((workspace) => taskOwnsWorkspace(scan, task, events, workspace)))) continue;
-      if (owners.some((task) => graceActive(scan, task, now, graceMs))) continue;
-      const card = owners[0] ?? null;
+      if (held.some((task) => graceActive(scan, task, now, graceMs))) continue;
+      const failed = nearest.filter((task) => finished(task.status) && tmpCleanupFailed(scan, task.id));
+      const quiet = nearest.filter((task) => finished(task.status) && !tmpCleanupFailed(scan, task.id));
+      if (nearest.length > 0 && failed.length === 0 && quiet.length === nearest.length) {
+        const card = quiet[0] ?? null;
+        add({
+          id: `git:worktree:${key}`,
+          severity: "info",
+          check: "worktree",
+          project: card?.project ?? null,
+          card: card ? markOf(card) : null,
+          taskId: card?.id ?? null,
+          object: tree.path,
+          symptom: t("doctor.git.worktree.cardTmp"),
+          evidence: `${tree.branch ?? "detached"} @ ${repo}`,
+          suggestion: t("doctor.git.worktree.cardTmpSuggestion"),
+        });
+        continue;
+      }
+      const card = failed[0] ?? owners[0] ?? nearest[0] ?? null;
       const safety = await safetyOf(git, repo, tree, sources, budget, expired, now);
       add({
         id: `git:worktree:${key}`,

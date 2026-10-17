@@ -236,7 +236,6 @@ describe("doctor", () => {
   });
 
   it("keeps a worktree inside a board card temp root quiet unless cleanup has failed", async () => {
-    setLanguage("zh-CN");
     const done = open("Finished batch");
     const archived = open("Archived batch");
     const live = open("Still working");
