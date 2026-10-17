@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,7 +20,8 @@ function manifest(dir) {
   return lock;
 }
 
-function fakeNpm(dir, log) {
+function fakeNpm(dir) {
+  mkdirSync(dir, { recursive: true });
   const bin = join(dir, "npm");
   writeFileSync(bin, "#!/bin/sh\nprintf '%s\\n' \"$PWD\" >> \"$SHARED_RUNTIME_INSTALL_LOG\"\nsleep 0.6\nmkdir -p node_modules/@getpaseo/server\nprintf 'installed\\n' > node_modules/@getpaseo/server/marker\nexit 0\n");
   chmodSync(bin, 0o700);
@@ -92,5 +93,8 @@ test("one lock hash is installed once, stays read-only, and host state stays sep
     assert.equal(readFileSync(join(hostA, "state.txt"), "utf8"), "A");
     assert.equal(readFileSync(join(hostB, "state.txt"), "utf8"), "B");
     assert.equal(existsSync(join(hostA, "local-note.txt")), false);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    spawnSync("chmod", ["-R", "u+w", root]);
+    rmSync(root, { recursive: true, force: true });
+  }
 });
