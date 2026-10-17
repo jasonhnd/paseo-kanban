@@ -89,9 +89,10 @@ function launch(cli, env, logPath) {
   return child.pid;
 }
 
-function stop(cli, env, pid) {
-  spawnSync(process.execPath, [cli, "--home", env.PASEO_HOME, "stop"], { env, stdio: "ignore", timeout: 20_000 });
-  if (pid) { try { process.kill(-pid, "SIGTERM"); } catch { /* already gone */ } }
+function stop(cli, env) {
+  // `paseo stop` interrupts an agent. The daemon is `paseo daemon stop`.
+  spawnSync(process.execPath, [cli, "--home", env.PASEO_HOME, "daemon", "stop"], { env, stdio: "ignore", timeout: 20_000 });
+  sleep(500);
 }
 
 function sleep(ms) {
@@ -122,7 +123,7 @@ async function main() {
   mkdirSync(offRoot, { recursive: true });
   const off = await prepareHost(offRoot, runtime.serverDir, false);
   const offLog = join(work, "speech-off.log");
-  const offPid = launch(cli, off.env, offLog);
+  launch(cli, off.env, offLog);
   let offReady = false;
   for (let i = 0; i < 40; i += 1) {
     const status = spawnSync(process.execPath, [cli, "--home", off.env.PASEO_HOME, "status", "--json"], { env: off.env, encoding: "utf8", timeout: 10_000 });
@@ -133,7 +134,7 @@ async function main() {
   const offText = combined(off.env.PASEO_HOME) + "\n" + combined(offRoot) + "\n" + (existsSync(offLog) ? readFileSync(offLog, "utf8") : "");
   const offModels = existsSync(modelsDir(off.env));
   const offDownload = offText.includes(DOWNLOAD);
-  stop(cli, off.env, offPid);
+  stop(cli, off.env);
   if (!offReady || offDownload || offModels) {
     throw new Error(`speech-off host failed (ready=${offReady}, download=${offDownload}, models=${offModels})`);
   }
@@ -141,7 +142,7 @@ async function main() {
   mkdirSync(onRoot, { recursive: true });
   const on = await prepareHost(onRoot, runtime.serverDir, true);
   const onLog = join(work, "speech-on.log");
-  const onPid = launch(cli, on.env, onLog);
+  launch(cli, on.env, onLog);
   let onDownload = false;
   for (let i = 0; i < 90; i += 1) {
     const sawModels = existsSync(modelsDir(on.env));
@@ -150,11 +151,11 @@ async function main() {
     if (sawModels || sawText) { onDownload = true; break; }
     sleep(1000);
   }
-  stop(cli, on.env, onPid);
+  stop(cli, on.env);
   spawnSync("chmod", ["-R", "u+w", onRoot]);
-  spawnSync("rm", ["-rf", onRoot]);
-  if (existsSync(onLog)) spawnSync("rm", ["-f", onLog]);
+  spawnSync("rm", ["-rf", onRoot, onLog]);
   if (!onDownload) throw new Error("speech-on host did not start a model download");
+  if (existsSync(onRoot) || existsSync(modelsDir(on.env))) throw new Error("speech-on host was not removed");
   const compilerAfter = sha256(compiler);
   if (compilerBefore !== compilerAfter) throw new Error("shared runtime compiler changed");
   const summary = {
