@@ -17,6 +17,7 @@ test("test environments reject inherited identities, provider routes, Python and
     for (const key of ["PASEO_URL", "PASEO_AGENT_ID", "GH_TOKEN", "NODE_OPTIONS", "ROLES_STATE_DIR", "AFC_DATA_DIR", "AFC_LEGACY_DATA_DIR"]) assert.equal(env[key], undefined, key);
     for (const name of ["python", "python3", "paseo", "claude", "codex", "grok", "gh"]) assert.throws(() => executable(name, env.PATH), /unavailable/);
     assert.equal(executable("node", env.PATH), join(root, "tools/node"));
+    assert.equal(executable("lsof", env.PATH), join(root, "tools/lsof"));
     assert.equal(env.PASEO_VOICE_MODE_ENABLED, "0");
     assert.equal(env.PASEO_DICTATION_ENABLED, "0");
     assert.equal(env.npm_config_cache, join(homedir(), ".kanban-cache", "npm"));
