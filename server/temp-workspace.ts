@@ -9,7 +9,7 @@ import { cardMark } from "./card-ref";
 import { DEFAULT_ARCHIVE_DEADLINE_MS, loadConfig } from "./config";
 import { getDb } from "./db";
 import { headRef, isProtectedBranch, refOk, removeReadOnlyWorktree, runGit, runGitSync, type GitRunner } from "./git";
-import { agentOutsideCardScope, agentsTouching, directoryState, pathWithin, PLACEHOLDER_NAME, placeholderBlocksRemoval, purgeCardAgents, purgeDecision, readCwdAgentList, retainAgentsBeforeDirectoryRemoval, agentListUnreadReason, type CwdAgent } from "./missing-cwd";
+import { agentOccupiesDirectory, agentOutsideCardScope, agentsTouching, directoryHeldByProcess, directoryState, pathWithin, PLACEHOLDER_NAME, placeholderBlocksRemoval, purgeCardAgents, purgeDecision, readCwdAgentList, retainAgentsBeforeDirectoryRemoval, agentListUnreadReason, type CwdAgent } from "./missing-cwd";
 import { samePath } from "./placement";
 import { readContract } from "./pr";
 import { statusLabel } from "../shared/labels";
@@ -590,7 +590,9 @@ function missingGitUsers(taskId: number, directory: string): string | null {
   const agents = readCwdAgentList();
   if (agents == null) return agentListUnreadReason();
   const touching = agentsTouching(directory, agents);
-  if (touching.length) return t("tempWorkspace.agents.stillPointing", { agents: touching.map(agent => agent.id).join(t("common.listSep")) });
+  const occupying = touching.filter((agent) => agentOccupiesDirectory(agent));
+  if (occupying.length) return t("tempWorkspace.agents.stillPointing", { agents: occupying.map(agent => agent.id).join(t("common.listSep")) });
+  if (touching.length > occupying.length && directoryHeldByProcess(directory)) return t("tempWorkspace.agents.foreignDirectory");
   return null;
 }
 

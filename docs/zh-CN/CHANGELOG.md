@@ -7,6 +7,7 @@
 ### 修复（Fixed）
 
 - 体检不再把位于看板卡片临时目录里的 git worktree 报成红：路径在任一项目的 `.kanban-work/<卡号>/` 下，或在 `card_tmp_prepared` 记录的根目录里时，归到那张卡。卡未完成，或已 done／archived 且临时目录清理尚未失败时，至多一条 info，目录清掉后这条也消失。已有未关闭的 `tmp_cleanup_failed`，或无法归到任何卡时，仍按原规则报红。修复 [issue #10](https://github.com/jasonhnd/paseo-kanban/issues/10)。
+- 审查卡借了别的卡的临时 workspace、自己完成后会放开占用：只删自己的 agent，并立刻重试拥有者还在退避中的清理；已完成卡上已归档或已清掉的 agent 不再挡住别的已完成卡，未完成的卡、仍存活的 agent，以及工作目录还在这个目录里的进程，仍然挡住。修复 [issue #11](https://github.com/jasonhnd/paseo-kanban/issues/11)。
 
 ## 0.1.0-rc.18 — 待审查与发布
 

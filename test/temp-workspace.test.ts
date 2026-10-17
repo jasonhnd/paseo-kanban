@@ -886,11 +886,12 @@ describe("temporary workspace pre-WIP safety", () => {
 describe("temporary workspace cleanup", () => {
   let blockDelete = false;
   const failOnce = new Set<string>();
+  const holdAgents = new Set<string>();
 
   before(() => {
     setMissingCwdHooks({
       async deleteAgent(agentId) {
-        if (blockDelete || failOnce.delete(agentId)) throw new Error(zhCNPart("tempWorkspace.branch.notDeleted", 0, 3));
+        if (blockDelete || holdAgents.has(agentId) || failOnce.delete(agentId)) throw new Error(zhCNPart("tempWorkspace.branch.notDeleted", 0, 3));
         rmSync(join(agents, "bucket", `${agentId}.json`), { force: true });
       },
     });
@@ -2867,7 +2868,7 @@ describe("temporary workspace cleanup", () => {
     assert.equal((JSON.parse(cleaned?.data_json ?? "{}") as { keptBranch?: boolean }).keptBranch, true);
   });
 
-  it("waits without backoff while a review agent still uses the temporary directory, then keeps that other card's agent", async () => {
+  it("waits without backoff while a review card is open, then drops the directory once that card finishes", async () => {
     const card = await landedTemp("review-hold", "review");
     const sibling = createTask({ project: "review-hold", title: "Independent review", role: "reviewer", workspacePath: card.directory, reviewOf: card.id });
     const reviewAgent = `review-${sibling.id}`;
@@ -2897,17 +2898,14 @@ describe("temporary workspace cleanup", () => {
       assert.equal(shared().length, 1);
       getDb().prepare("UPDATE tasks SET status = 'done' WHERE id = ?").run(sibling.id);
       await drainCleanups(new Date(start.getTime() + 2_000));
-      assert.equal(box.archives(), 0);
-      assert.equal(existsSync(card.directory), true);
-      assert.equal(existsSync(agentFile(reviewAgent)), true);
+      assert.equal(box.archives(), 1);
+      assert.equal(existsSync(card.directory), false);
+      assert.equal(existsSync(agentFile(reviewAgent)), false);
       assert.equal(existsSync(agentFile(card.agentId)), false);
-      assert.equal(eventRows(card.id).some((row) => row.kind === "temp_workspace_cleaned"), false);
-      assert.equal(eventRows(card.id).some((row) => row.kind === "agent_purged" && row.data_json.includes(reviewAgent)), false);
-      const held = cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false);
-      assert.equal(held.length, 1);
-      assert.equal(held[0]?.error, zhCN("tempWorkspace.agents.foreignDirectory"));
-      assert.equal(String(held[0]?.error).includes(reviewAgent), false);
-      assert.equal((await git(card.root, ["branch", "--list", card.branch])).includes(card.branch), true);
+      assert.equal(eventRows(card.id).some((row) => row.kind === "temp_workspace_cleaned"), true);
+      assert.equal(eventRows(card.id).some((row) => row.data_json.includes(reviewAgent)), false);
+      assert.equal(eventRows(sibling.id).some((row) => row.kind === "cleanup_finished"), true);
+      assert.equal((await git(card.root, ["branch", "--list", card.branch])).includes(card.branch), false);
     } finally {
       rmSync(agentFile(reviewAgent), { force: true });
       release();
@@ -3176,7 +3174,7 @@ describe("temporary workspace cleanup", () => {
     rmSync(agentFile("inspect-file-agent"), { force: true });
   });
 
-  it("does not delete a finished review card's agent that shares the directory", async () => {
+  it("does not delete a finished review card's agent while its turn is busy, then releases once the turn is idle", async () => {
     const card = await landedTemp("review-busy-share", "share");
     const sibling = createTask({
       project: "review-busy-share",
@@ -3212,19 +3210,22 @@ describe("temporary workspace cleanup", () => {
       assert.equal(waits().length, 0);
       reviewBusy = false;
       await drainCleanups(new Date(start.getTime() + 2_000));
-      assert.equal(box.archives(), 0);
-      assert.equal(existsSync(card.directory), true);
-      assert.equal(existsSync(agentFile(reviewAgent)), true);
-      assert.equal(eventRows(card.id).some((row) => row.kind === "agent_purged" && row.data_json.includes(reviewAgent)), false);
+      assert.equal(existsSync(agentFile(reviewAgent)), false);
+      assert.equal(existsSync(card.directory), false);
+      assert.equal(box.archives(), 1);
+      assert.equal(eventRows(card.id).some((row) => row.data_json.includes(reviewAgent)), false);
+      assert.equal(eventRows(card.id).some((row) => row.kind === "temp_workspace_cleaned"), true);
       const reviewWaits = cleanupRows(sibling.id).filter((row) => row.action === "wait_turn" && row.agentId === reviewAgent);
       assert.equal(reviewWaits.length >= 1, true);
-      const retryAt = Date.parse(String(reviewWaits[0]?.retryAt));
-      assert.equal(Number.isFinite(retryAt), true);
-      await drainCleanups(new Date(retryAt + 1_000));
       const archived = cleanupRows(sibling.id).find((row) => row.action === "archive_agent" && row.agentId === reviewAgent && row.ok === true);
       assert.ok(archived);
       assert.equal(eventRows(sibling.id).some((row) => row.kind === "cleanup_finished"), true);
       assert.equal(cleanupRows(sibling.id).some((row) => String(row.error ?? "").includes(zhCNPart("cleanup.error.unreadable", 0, 9))), false);
+      const retryAt = Date.parse(String(reviewWaits[0]?.retryAt));
+      assert.equal(Number.isFinite(retryAt), true);
+      await drainCleanups(new Date(retryAt + 1_000));
+      assert.equal(existsSync(card.directory), false);
+      assert.equal(box.archives(), 1);
     } finally {
       release();
     }
@@ -3268,10 +3269,12 @@ describe("temporary workspace cleanup", () => {
       assert.equal(cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false).length, 1);
       broken = false;
       await drainCleanups(new Date(start.getTime() + 61_000));
-      assert.equal(box.archives(), 0);
-      assert.equal(existsSync(card.directory), true);
-      assert.equal(existsSync(agentFile(reviewAgent)), true);
-      assert.equal(eventRows(card.id).some((row) => row.kind === "agent_purged" && row.data_json.includes(reviewAgent)), false);
+      assert.equal(box.archives(), 1);
+      assert.equal(existsSync(card.directory), false);
+      assert.equal(existsSync(agentFile(reviewAgent)), false);
+      assert.equal(eventRows(card.id).some((row) => row.data_json.includes(reviewAgent)), false);
+      assert.equal(eventRows(card.id).some((row) => row.kind === "temp_workspace_cleaned"), true);
+      assert.equal(eventRows(sibling.id).some((row) => row.kind === "cleanup_finished"), true);
     } finally {
       rmSync(agentFile(reviewAgent), { force: true });
       release();
@@ -3313,10 +3316,12 @@ describe("temporary workspace cleanup", () => {
       assert.equal(cleanupRows(card.id).filter((row) => row.action === "purge_agents" && row.ok === false).length, 1);
       broken = false;
       await drainCleanups(new Date(start.getTime() + 61_000));
-      assert.equal(box.archives(), 0);
-      assert.equal(existsSync(card.directory), true);
-      assert.equal(existsSync(agentFile(reviewAgent)), true);
-      assert.equal(eventRows(card.id).some((row) => row.kind === "agent_purged" && row.data_json.includes(reviewAgent)), false);
+      assert.equal(box.archives(), 1);
+      assert.equal(existsSync(card.directory), false);
+      assert.equal(existsSync(agentFile(reviewAgent)), false);
+      assert.equal(eventRows(card.id).some((row) => row.data_json.includes(reviewAgent)), false);
+      assert.equal(eventRows(card.id).some((row) => row.kind === "temp_workspace_cleaned"), true);
+      assert.equal(eventRows(sibling.id).some((row) => row.kind === "cleanup_finished"), true);
     } finally {
       rmSync(agentFile(reviewAgent), { force: true });
       release();
@@ -3333,6 +3338,7 @@ describe("temporary workspace cleanup", () => {
       reviewOf: card.id,
     });
     const reviewAgent = `review-gap-${sibling.id}`;
+    holdAgents.add(reviewAgent);
     getDb().prepare("UPDATE tasks SET status = 'done', paseo_workspace_id = ?, agent_id = ? WHERE id = ?").run(`ws-${card.id}`, reviewAgent, sibling.id);
     appendEvent(sibling.id, "accept", "reviewing", "done", "test", {});
     getDb().prepare("INSERT INTO runs (task_id, agent_id, role, started_at) VALUES (?, ?, 'reviewer', ?)").run(sibling.id, reviewAgent, new Date().toISOString());
@@ -3365,6 +3371,7 @@ describe("temporary workspace cleanup", () => {
       assert.equal(existsSync(agentFile(reviewAgent)), true);
       assert.equal(eventRows(card.id).some((row) => row.kind === "temp_workspace_cleaned"), false);
     } finally {
+      holdAgents.delete(reviewAgent);
       saveConfig(previous);
       rmSync(agentFile(reviewAgent), { force: true });
       release();

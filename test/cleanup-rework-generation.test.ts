@@ -242,22 +242,27 @@ it("actual independent CLI identity refuses foreign leaders, workers and guests 
 
 function loadTestConfig() { return { autoStart: {}, supervisors: {}, supervisorAgentId: null, concurrency: DEFAULT_CONCURRENCY }; }
 
-it("a durable request leaves old stops and current backoff intact until a legally due tick", async () => {
+it("resume-cleanup brings the current backoff forward and leaves an older stop mark", async () => {
   const f = await fixture(); f.finish(); await f.sweep(true);
   appendEvent(f.id, "cleanup", null, null, "synthetic", { action: "error", ok: false, stopped: true, attempts: 12, retryAt: "2099-01-01T00:00:00.000Z", error: "old stopped row" });
   const oldRows = rows(f.id, "cleanup");
   const copy = await f.recreate(); f.finish();
   installCleanup({ ...f.ops, archiveWorkspace: async () => { throw new Error("synthetic retryable failure"); } });
   await drainCleanups(); installCleanup(null);
-  const failure = readCleanupEvents(f.id).find(row => row.action === "archive_workspace" && !row.ok)!;
-  const failures = rows(f.id, "cleanup");
+  const before = readCleanupEvents(f.id).find(row => row.action === "archive_workspace" && !row.ok)!;
+  const beforeAt = Date.parse(before.retryAt!);
   assert.equal(cliChild(f.id).status, 0);
-  assert.deepEqual(rows(f.id, "cleanup"), failures, "CLI request cannot clear backoff or old stops");
-  const early = tickChild(f.id, new Date(Date.parse(failure.retryAt!) - 1000));
+  assert.deepEqual(rows(f.id, "cleanup").filter(row => oldRows.some(old => old.id === row.id)), oldRows, "an older stop mark stays");
+  const after = readCleanupEvents(f.id).find(row => row.action === "archive_workspace" && !row.ok)!;
+  assert.equal(after.stopped, undefined);
+  assert.equal(after.attempts, before.attempts);
+  const resumedAt = Date.parse(after.retryAt!);
+  assert.ok(resumedAt < beforeAt, "the waiting backoff is retried now");
+  const early = tickChild(f.id, new Date(resumedAt - 1000));
   assert.equal(early.finished, false); assert.deepEqual(early.archived, []);
   assert.equal(rows(f.id, "cleanup_resume_acknowledged").length, 0);
   assert.equal(existsSync(copy.directory!), true);
-  const later = tickChild(f.id, new Date(Date.parse(failure.retryAt!) + 1000));
+  const later = tickChild(f.id, new Date(resumedAt + 1000));
   assert.equal(later.finished, true); assert.deepEqual(later.archived, [copy.workspaceId]);
   assert.deepEqual(rows(f.id, "cleanup").filter(row => oldRows.some(old => old.id === row.id)), oldRows);
 });

@@ -759,18 +759,40 @@ export function cleanupIssues(taskId: number): CleanupIssues {
 
 
 
+/** Steps whose backoff is the owner's wait for a borrowed directory. A release brings only these forward. */
+const BORROWED_BACKOFF_ACTIONS = new Set(["purge_agents", "drop_directory", "archive_workspace", "remove_worktree", "skip_workspace", "skip_worktree"]);
+
+function retryStillAhead(row: CleanupRecord, now: Date): boolean {
+  return row.ok === false && !row.stopped && !!row.retryAt && Date.parse(row.retryAt) > now.getTime();
+}
+
+function writeRetryNow(row: CleanupRecord, now: Date, resetAttempts: boolean): void {
+  const { stopped: _stopped, at: _at, rowId, ...rest } = row;
+  const next = resetAttempts ? { ...rest, attempts: 1, retryAt: now.toISOString() } : { ...rest, retryAt: now.toISOString() };
+  getDb().prepare("UPDATE events SET data_json = ? WHERE id = ?").run(JSON.stringify(next), rowId!);
+}
+
+/**
+ * Bring forward a backoff that is waiting because another card's agent used this directory.
+ * Does not clear a stop mark and does not reset the attempt count.
+ * Returns how many rows changed.
+ */
+export function releaseCleanupBackoff(taskId: number, now = new Date()): number {
+  const rows = readCleanupEvents(taskId, { verify: false }).filter(
+    (row) => row.rowId != null && retryStillAhead(row, now) && BORROWED_BACKOFF_ACTIONS.has(row.action ?? ""),
+  );
+  for (const row of rows) writeRetryNow(row, now, false);
+  return rows.length;
+}
+
 /**
  * Clear every "stopped" mark on this card so automatic retry starts again from one attempt, now rather
- * than at the daily retry. A tick, a reconcile pass or a restart does not clear it.
+ * than at the daily retry. A failure that is only waiting out backoff is retried now as well, and that
+ * attempt count stays. A tick, a reconcile pass or a restart does not clear either.
  * Returns how many rows changed.
  */
 export function resumeCleanup(taskId: number, now = new Date()): number {
-  const db = getDb();
-  const rows = readCleanupEvents(taskId, { verify: false }).filter(row => row.stopped && row.rowId != null);
-  const update = db.prepare("UPDATE events SET data_json = ? WHERE id = ?");
-  for (const row of rows) {
-    const { stopped: _stopped, at: _at, rowId, ...rest } = row;
-    update.run(JSON.stringify({ ...rest, attempts: 1, retryAt: now.toISOString() }), rowId!);
-  }
+  const rows = readCleanupEvents(taskId, { verify: false }).filter((row) => row.rowId != null && (row.stopped || retryStillAhead(row, now)));
+  for (const row of rows) writeRetryNow(row, now, row.stopped === true);
   return rows.length;
 }

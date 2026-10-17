@@ -3,7 +3,7 @@ import { lstat, readdir } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import { agentsOpenedBy, type CleanupRecord } from "./archive-book";
 import { getDb } from "./db";
-import { agentsTouching, readCwdAgentList } from "./missing-cwd";
+import { agentOccupiesDirectory, agentsTouching, directoryHeldByProcess, readCwdAgentList } from "./missing-cwd";
 import { headRef, isProtectedBranch, refOk, runGit } from "./git";
 import { laneBinding } from "./lane";
 import { samePath } from "./placement";
@@ -124,11 +124,14 @@ export async function reconcileGone(task: TaskRow, events: CleanupRecord[], read
         if (failed.action === "drop_directory") gone = await directoryAbsent(binding.directory);
         else if (failed.action === "delete_branch" || failed.action === "delete_lane_branch") gone = await branchAbsent(binding.root, branch);
         else if (failed.action === "purge_agents") {
-          // The directory-level purge also guards the agents that are not ours, and those are what usually made it fail.
-          // It is done only when no agent of any card still points here; until then the failure row and its retryAt stay.
+          // The directory-level purge also guards agents that are not ours. It stays failed until retryAt,
+          // and after that until no occupying agent points here. An archived agent of a finished card does not.
           if (failed.retryAt && Date.parse(failed.retryAt) > (read.now ?? new Date()).getTime()) continue;
           const listed = readCwdAgentList();
-          if (!listed || agentsTouching(binding.directory, listed).length > 0) continue;
+          if (!listed) continue;
+          const touching = agentsTouching(binding.directory, listed);
+          if (touching.some((agent) => agentOccupiesDirectory(agent))) continue;
+          if (touching.length > 0 && directoryHeldByProcess(binding.directory)) continue;
           gone = ours.size > 0;
           for (const id of ours) { if (!read.current() || !await agentGone(id)) { gone = false; break; } }
         } else if (["remove_worktree", "skip_worktree", "wip_commit"].includes(failed.action!)) {

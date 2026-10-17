@@ -55,7 +55,7 @@ The single plugin combines board dispatch with Fleet roles, quota and decisions.
 
 ## Recovering temporary cleanup
 
-`resume-cleanup <card>` clears stopped cleanup retries. The global Kanban leader (`supervisorAgentId`) may run it for any project; an unrelated project leader still cannot. It does not grant that global leader other card operations. An ordinary resume does not abandon unmerged work: `not_merged` still keeps the copy and branch.
+`resume-cleanup <card>` clears a stopped cleanup retry (the count restarts at 1) or a backoff that is still waiting (that count stays). The global Kanban leader (`supervisorAgentId`) may run it for any project; an unrelated project leader still cannot. It does not grant that global leader other card operations. An ordinary resume does not abandon unmerged work: `not_merged` still keeps the copy and branch.
 
 Normal cleanup treats the card tip as merged when it is an ancestor of either the configured local base branch or `origin/<base>` after a successful fetch. Local containment is sufficient even when origin is behind or unavailable; no push, extra setting or discard authorization is required. The configured base is checked explicitly, regardless of the main checkout's current branch. A matching local tree without ancestry is insufficient. If neither base contains the tip and no existing PR/squash proof applies, `not_merged` still retains it. Ownership, clean-copy and live-agent checks still apply. Once cleanup removes the worktree and archives its workspace, their orphan findings disappear from doctor.
 
