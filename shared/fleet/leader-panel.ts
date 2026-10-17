@@ -244,12 +244,43 @@ function matchesDecision(question: string, decision: RegisteredDecision): boolea
   return matches.size >= 2;
 }
 
-/** Match each question against this project's current open decisions, with no creation-time cutoff. */
+/** An open decision created this recently counts as already registered, even when the reply paraphrases it. */
+export const RECENT_OPEN_DECISION_WINDOW_MS = 60 * 60_000;
+
+function recentWindowMs(windowMs: number | undefined): number {
+  return typeof windowMs === "number" && Number.isFinite(windowMs) && windowMs >= 0
+    ? windowMs
+    : RECENT_OPEN_DECISION_WINDOW_MS;
+}
+
+/** True when this project has an open decision created no earlier than `windowMs` before the reply. */
+function hasRecentOpenDecision(
+  project: string, replyAt: number, decisions: readonly RegisteredDecision[], windowMs: number,
+): boolean {
+  return decisions.some((decision) => {
+    if (decision.status !== "open" || decision.project.toLowerCase() !== project.toLowerCase()) return false;
+    const created = Date.parse(decision.createdAt);
+    if (!Number.isFinite(created)) return false;
+    const age = replyAt - created;
+    return age >= 0 && age <= windowMs;
+  });
+}
+
+/**
+ * Match each question against this project's current open decisions.
+ * An open decision created within the recent window suppresses the reminder, including a paraphrase.
+ * Outside that window, the full normalized title or two distinctive option bodies with the same
+ * recommendation letter still confirm a retelling. A question that matches neither, and has no open
+ * decision inside the window, is reported.
+ */
 export function unregisteredQuestion(
   project: string, latest: LeaderReply | null, decisions: readonly RegisteredDecision[],
+  windowMs?: number,
 ): LeaderReply | null {
   if (!latest?.text.trim() || !Number.isFinite(Date.parse(latest.at)) || isAgentInput(latest.prompt)) return null;
   const text = latest.text.replace(/```[\s\S]*?```/g, "").replace(/^\s*>.*$/gm, "");
+  const replyAt = Date.parse(latest.at);
+  if (hasRecentOpenDecision(project, replyAt, decisions, recentWindowMs(windowMs))) return null;
   const open = decisions.filter((d) => d.status === "open" && d.project.toLowerCase() === project.toLowerCase());
   const question = questionCandidates(text).find((q) => !open.some((d) => matchesDecision(q.text, d)));
   return question ? { text: question.excerpt, at: latest.at } : null;
