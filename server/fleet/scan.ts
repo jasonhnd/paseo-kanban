@@ -13,7 +13,7 @@ export type Buckets = Record<string, Bucket>;
 interface FileScan { mtimeMs: number; size: number; provider: string; sessionId: string; b: Buckets }
 interface ScanCache { version: number; files: Record<string, FileScan> }
 
-const VERSION = 2;
+const VERSION = 3;
 const CACHE = join(STATE_DIR, "usage-scan-cache.json");
 const MAX_AGE_MS = 40 * 24 * 60 * 60_000;
 const LONG_CONTEXT = { claude: 200_000, codex: 272_000, grok: 200_000 } as const;
@@ -129,29 +129,49 @@ function parseCodex(text: string): Buckets {
   return b;
 }
 
+function grokUsage(b: Buckets, ts: number, usage: Json): void {
+  if (usage.usageIsIncomplete) return;
+  const per: Record<string, Json> = usage.modelUsage ?? { [usage.primaryModelId || "grok"]: usage };
+  for (const [model, u] of Object.entries(per)) {
+    if (!u || u.usageIsIncomplete || typeof u.inputTokens !== "number" || typeof u.outputTokens !== "number"
+        || !Number.isFinite(u.inputTokens) || !Number.isFinite(u.outputTokens) || u.inputTokens < 0 || u.outputTokens < 0) continue;
+    const calls = Math.max(1, n(u.modelCalls));
+    const cacheRead = Math.min(u.inputTokens, Math.max(0, n(u.cachedReadTokens)));
+    const write = Math.min(u.inputTokens - cacheRead, Math.max(0, n(u.cacheCreationTokens)));
+    const input = u.inputTokens - cacheRead - write;
+    // Grok's UsageTotals includes reasoning within outputTokens; totalTokens is input + output.
+    add(b, ts, "grok", model, u.inputTokens / calls > LONG_CONTEXT.grok, [input, cacheRead, write, 0, u.outputTokens, calls]);
+  }
+}
+
+/** Grok's public SessionUsageFile stores dated turn deltas, alongside session totals. */
+function parseGrokUsage(text: string, sessionId: string): Buckets {
+  const b: Buckets = {};
+  const data = parseLine(text);
+  // A fork can initially contain its parent's usage file. Do not attribute that copied bill.
+  if (!data || (data.sessionId && data.sessionId !== sessionId) || !Array.isArray(data.turns)) return b;
+  for (const turn of data.turns) {
+    if (turn && typeof turn.endedAt === "string") grokUsage(b, Date.parse(turn.endedAt), turn);
+  }
+  return b;
+}
+
 function parseGrok(text: string): Buckets {
   const b: Buckets = {};
   let skipped = 0;
   for (const line of text.split("\n")) {
-    if (!line.includes('"stop_reason"') || !line.includes('"usage"')) continue;
+    if (!line.includes('"usage"')) continue;
     const d = parseLine(line);
     if (!d) {
       skipped += 1;
       continue;
     }
     const upd = d.params?.update;
-    if (!upd?.usage) continue;
-    const raw = n(d.timestamp);
-    const ts = raw > 1e12 ? raw : raw * 1000;
-    const per: Record<string, Json> = upd.usage.modelUsage ?? { grok: upd.usage };
-    for (const [model, u] of Object.entries(per)) {
-      const calls = Math.max(1, n(u.modelCalls));
-      const cacheRead = n(u.cachedReadTokens);
-      const write = n(u.cacheCreationTokens);
-      const input = Math.max(0, n(u.inputTokens) - cacheRead - write);
-      // totalTokens = input + output, so reasoning is reported on top of output and billed as output.
-      add(b, ts, "grok", model, n(u.inputTokens) / calls > LONG_CONTEXT.grok, [input, cacheRead, write, 0, n(u.outputTokens) + n(u.reasoningTokens), calls]);
-    }
+    if (!upd?.usage || !(upd.stop_reason || upd.stopReason || upd.sessionUpdate === "turn_completed")) continue;
+    const ts = typeof d.timestamp === "number"
+      ? d.timestamp > 1e12 ? d.timestamp : d.timestamp * 1000
+      : typeof d.timestamp === "string" ? Date.parse(d.timestamp) : NaN;
+    grokUsage(b, ts, upd.usage);
   }
   logSkipped("grok", skipped);
   return b;
@@ -166,16 +186,30 @@ async function walk(dir: string, depth: number, accept: (path: string) => boolea
   }
 }
 
-interface Source { provider: string; files: string[]; sessionId: (path: string) => string; parse: (text: string) => Buckets }
+interface Source { provider: string; files: string[]; sessionId: (path: string, text: string) => string; parse: (text: string, path: string) => Buckets }
+
+function codexSessionId(path: string, text: string): string {
+  for (const line of text.split("\n")) {
+    if (!line.includes('"session_meta"')) continue;
+    const row = parseLine(line);
+    if (row?.type === "session_meta" && typeof row.payload?.id === "string" && row.payload.id) return row.payload.id;
+  }
+  return /([0-9a-f]{8}-[0-9a-f-]{27})\.jsonl$/.exec(path)?.[1] ?? basename(path);
+}
 
 async function sources(): Promise<Source[]> {
   const transcriptHome = process.env.AFC_TRANSCRIPT_HOME ?? HOME;
   const claude: string[] = [];
   await walk(join(transcriptHome, ".claude", "projects"), 4, (p) => p.endsWith(".jsonl"), claude);
   const codex: string[] = [];
-  await walk(join(transcriptHome, ".codex", "sessions"), 4, (p) => /rollout-.*\.jsonl$/.test(p), codex);
+  const codexHome = process.env.AFC_TRANSCRIPT_HOME ? join(transcriptHome, ".codex") : process.env.CODEX_HOME || join(transcriptHome, ".codex");
+  for (const dir of ["sessions", "archived_sessions"]) {
+    await walk(join(codexHome, dir), 4, (p) => /rollout-.*\.jsonl$/.test(p), codex);
+  }
   const grok: string[] = [];
-  await walk(join(transcriptHome, ".grok", "sessions"), 2, (p) => p.endsWith("/updates.jsonl"), grok);
+  await walk(join(transcriptHome, ".grok", "sessions"), 2, (p) => p.endsWith("/updates.jsonl") || p.endsWith("/usage.json"), grok);
+  // Prefer dated usage.json turns; updates.jsonl is a fallback, never a second bill for that session.
+  grok.sort((a, b) => Number(b.endsWith("/usage.json")) - Number(a.endsWith("/usage.json")) || a.localeCompare(b));
   return [
     {
       provider: "claude",
@@ -187,10 +221,11 @@ async function sources(): Promise<Source[]> {
     {
       provider: "codex",
       files: codex,
-      sessionId: (p) => /([0-9a-f]{8}-[0-9a-f-]{27})\.jsonl$/.exec(p)?.[1] ?? basename(p),
+      sessionId: codexSessionId,
       parse: parseCodex,
     },
-    { provider: "grok", files: grok, sessionId: (p) => basename(dirname(p)), parse: parseGrok },
+    { provider: "grok", files: grok, sessionId: (p) => basename(dirname(p)),
+      parse: (text, path) => path.endsWith("/usage.json") ? parseGrokUsage(text, basename(dirname(path))) : parseGrok(text) },
   ];
 }
 
@@ -198,18 +233,20 @@ async function scanAll(): Promise<ScanResult> {
   const cache = await readJson<ScanCache>(CACHE, { version: VERSION, files: {} });
   const old = cache.version === VERSION ? cache.files : {};
   const next: Record<string, FileScan> = {};
+  const grokSessions = new Set<string>();
   const cutoff = Date.now() - MAX_AGE_MS;
   for (const src of await sources()) {
     for (const path of src.files) {
+      if (src.provider === "grok" && grokSessions.has(dirname(path))) continue;
       const st = await stat(path).catch(() => null);
       if (!st || st.mtimeMs < cutoff) continue;
       const hit = old[path];
-      if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) {
-        next[path] = hit;
-        continue;
+      if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) next[path] = hit;
+      else {
+        const text = await readFile(path, "utf8").catch(() => "");
+        next[path] = { mtimeMs: st.mtimeMs, size: st.size, provider: src.provider, sessionId: src.sessionId(path, text), b: src.parse(text, path) };
       }
-      const text = await readFile(path, "utf8").catch(() => "");
-      next[path] = { mtimeMs: st.mtimeMs, size: st.size, provider: src.provider, sessionId: src.sessionId(path), b: src.parse(text) };
+      if (src.provider === "grok" && Object.keys(next[path].b).length) grokSessions.add(dirname(path));
       // Yield between files so RPCs stay responsive during the first full scan.
       await new Promise((r) => setImmediate(r));
     }

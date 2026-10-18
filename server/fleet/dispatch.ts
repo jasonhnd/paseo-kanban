@@ -2,6 +2,7 @@
 import { capturePolicyDigest, publishPolicySnapshot } from "../application/policy-snapshot";
 import { buildPoolStatusExport, buildDispatchMatrixExport, producerVersion } from "./exports";
 import { providerBanned } from "../../shared/fleet/provider-policy";
+import { sameResetWindow } from "../../shared/fleet/reset-coupons";
 import { readBannedProviders } from "./adapters/config";
 // Rewrites dispatch-matrix.json and dispatch-stats.json after each pool-status.json write.
 // Reads profiles, kanban runs, and the usage caches. Does not write kanban.db or config.
@@ -198,19 +199,24 @@ function parseAgentFile(data: Json, names: Map<string, string>): AgentFileHit | 
 
 async function readAgentFiles(root: string, names: Map<string, string>): Promise<AgentFileHit[]> {
   const hits: AgentFileHit[] = [];
-  for (const dir of await readdir(root).catch(() => [] as string[])) {
-    for (const file of await readdir(join(root, dir)).catch(() => [] as string[])) {
-      if (!file.endsWith(".json")) continue;
-      let data: Json;
-      try {
-        data = JSON.parse(await readFile(join(root, dir, file), "utf8"));
-      } catch (error) {
-        logSwallowed(`dispatch skip agent record ${dir}/${file}`, error);
-        continue;
-      }
-      const hit = parseAgentFile(data, names);
-      if (hit) hits.push(hit);
+  const paths: string[] = [];
+  for (const entry of await readdir(root, { withFileTypes: true }).catch(() => [])) {
+    if (entry.isFile() && entry.name.endsWith(".json")) paths.push(join(root, entry.name));
+    if (!entry.isDirectory()) continue;
+    for (const file of await readdir(join(root, entry.name), { withFileTypes: true }).catch(() => [])) {
+      if (file.isFile() && file.name.endsWith(".json")) paths.push(join(root, entry.name, file.name));
     }
+  }
+  for (const path of paths) {
+    let data: Json;
+    try {
+      data = JSON.parse(await readFile(path, "utf8"));
+    } catch (error) {
+      logSwallowed("dispatch skip agent record", error);
+      continue;
+    }
+    const hit = parseAgentFile(data, names);
+    if (hit) hits.push(hit);
   }
   return hits;
 }
@@ -270,9 +276,9 @@ async function pricedHits(files: Record<string, ScanFile>, sinceMs: number): Pro
       const rates = price
         ? { input: price.input, output: price.output, cacheRead: price.cacheRead, cacheWrite: price.cacheWrite, long: price.long }
         : null;
-      const usd = publicPriceUsd(bucket, long === "1", rates) ?? 0;
+      const usd = publicPriceUsd(bucket, long === "1", rates);
       hits.push({ sessionId, hour: ms, tokens: bucketTokens(bucket), usd });
-      if (path && provider === "claude") hours.push({ hour: ms, usd });
+      if (path && provider === "claude" && usd !== null) hours.push({ hour: ms, usd });
     }
     if (path) claude.push({ sessionId, path, hours });
   };
@@ -285,24 +291,36 @@ async function pricedHits(files: Record<string, ScanFile>, sinceMs: number): Pro
   return { hits, claude };
 }
 
-function poolDeltas(pools: Record<string, PoolFlags>, samples: HistorySample[], runs: Array<{ profile: string; at: string }>, profiles: DispatchProfile[], catalog: readonly PoolEntry[]): Array<{ pool: string; deltaPct: number | null; runs: number }> {
+function poolDeltas(pools: Record<string, PoolFlags>, samples: HistorySample[], runs: Array<{ profile: string; at: string }>, profiles: DispatchProfile[], catalog: readonly PoolEntry[], now: number): Array<{ pool: string; deltaPct: number | null; runs: number }> {
   const linked = profiles.flatMap((profile) => (profile.pool ? [{ name: profile.name, pool: profile.pool }] : []));
   const out: Array<{ pool: string; deltaPct: number | null; runs: number }> = [];
   for (const [key, pool] of Object.entries(pools)) {
     // A pool the plans no longer define keeps the 7-days-before-reset period.
-    const bounds = periodBounds(poolEntry(catalog, key)?.period ?? "window", pool.resetsAt ?? null, null);
+    const bounds = periodBounds(poolEntry(catalog, key)?.period ?? "window", pool.resetsAt ?? null, null)
+      ?? (!pool.resetsAt ? { start: now - STATS_WINDOW_DAYS * DAY_MS, end: now } : null);
     if (!bounds) {
       out.push({ pool: key, deltaPct: null, runs: 0 });
       continue;
     }
-    const mine = samplesInPeriod(samples, key, pool.resetsAt ?? null, bounds.start, bounds.end);
-    const span = spanOf(mine);
+    const mine = samplesInPeriod(samples, key, pool.resetsAt ?? null, bounds.start, Math.min(bounds.end, now));
+    const sorted = [...mine].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    const resets = new Map(samples.map((sample) => {
+      const row = sample.pools?.[key];
+      return [row && "observedAt" in row ? row.observedAt : sample.at, row?.resetsAt ?? null];
+    }));
+    let first = 0;
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = resets.get(sorted[i - 1].at) ?? null;
+      const next = resets.get(sorted[i].at) ?? null;
+      if (sorted[i].usedPct < sorted[i - 1].usedPct || (prev !== next && !(prev && next && sameResetWindow(prev, next)))) first = i;
+    }
+    const stable = sorted.slice(first);
+    const span = spanOf(stable);
     if (!span) {
       out.push({ pool: key, deltaPct: null, runs: 0 });
       continue;
     }
-    const sorted = [...mine].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
-    const delta = sorted.length >= 2 ? sorted[sorted.length - 1].usedPct - sorted[0].usedPct : null;
+    const delta = stable[stable.length - 1].usedPct - stable[0].usedPct;
     const runsN = runsInSpan(runs, linked, key, Date.parse(span.from), Date.parse(span.to));
     out.push({ pool: key, deltaPct: delta, runs: runsN });
   }
@@ -371,8 +389,8 @@ export async function publishDispatch(pools: Record<string, PoolStatus>, now = D
   const effortRuns = attributable.map((run) => ({
     profile: run.profile,
     effort: run.effort,
-    tokens: usage.get(run.id)?.tokens ?? 0,
-    usd: usage.get(run.id)?.usd ?? 0,
+    tokens: usage.get(run.id)?.tokens ?? null,
+    usd: usage.get(run.id)?.usd ?? null,
   }));
   const runPoints = runRows.flatMap((run) => (run.profile && run.startedAt ? [{ profile: run.profile, at: run.startedAt }] : []));
   const claudePace = claudeId ? flags[claudeId] : undefined;
@@ -394,7 +412,7 @@ export async function publishDispatch(pools: Record<string, PoolStatus>, now = D
     generatedAt: new Date(now).toISOString(),
     priority: priorityView(priority),
     effortRuns,
-    poolDeltas: poolDeltas(flags, samples, runPoints, profiles ?? [], catalog),
+    poolDeltas: poolDeltas(flags, samples, runPoints, profiles ?? [], catalog, now),
     claude: claudeSpend,
   });
   const policy = { profiles: profiles ?? [], bannedProviders: readBannedProviders() };

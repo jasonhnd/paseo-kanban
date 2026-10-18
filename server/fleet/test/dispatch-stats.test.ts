@@ -83,7 +83,7 @@ before(async () => {
         const usage = { inputTokens: 900, cachedReadTokens: 100, outputTokens: 100, reasoningTokens: 20, totalTokens: 1000, modelCalls: 1 };
         const sessionDir = join(fixtureRoot, ".grok/sessions/demo", sessionId);
         if (i < 2) {
-          put(join(sessionDir, "usage.json"), { sessionId, updatedAt: at(runStart + hourMs), session: usage,
+          put(join(sessionDir, "usage.json"), { sessionId, updatedAt: at(runStart + hourMs), session: { ...usage, inputTokens: 90_000, outputTokens: 10_000 },
             turns: [{ turnNumber: 1, endedAt: at(runStart + 1000), ...usage, modelUsage: { [profile.model!]: usage } }] });
         }
         // Legacy update files can coexist with usage.json; never add both sources for one session.
@@ -171,4 +171,24 @@ for (const profile of profiles) test(`${profile.provider} usage matches its sess
   assert.equal(row.avgTokens, 1000);
   assert.equal(row.avgUsd, 0.001);
   assert.equal(row.usageSamples, 3);
+});
+
+test("missing quota history and reset boundaries leave per-run cost unknown without dropping run totals", async () => {
+  const samples = [
+    { at: at(runStart - hourMs), pools: Object.fromEntries(profiles.map((p) => [p.pool, { usedPct: 10, resetsAt: null }])) },
+    { at: at(runStart + 2 * hourMs), pools: Object.fromEntries(profiles.map((p) => [p.pool, { usedPct: 18, resetsAt: null }])) },
+  ];
+  try {
+    for (const history of [[], [samples[0]], [samples[0], {
+      at: at(runStart + 1.5 * hourMs), pools: Object.fromEntries(profiles.map((p) => [p.pool, { usedPct: 2, resetsAt: null }])) }, samples[1]],
+    [samples[0], { ...samples[1], pools: Object.fromEntries(profiles.map((p) => [p.pool, { usedPct: 18, resetsAt: at(now + 24 * hourMs) }])) }]]) {
+      put(join(fleetDir, "quota-history.json"), { samples: history });
+      for (const row of (await published()).byPool) {
+        assert.equal(row.runs, 4);
+        assert.equal(row.perRunPct, null);
+      }
+    }
+  } finally {
+    put(join(fleetDir, "quota-history.json"), { samples });
+  }
 });

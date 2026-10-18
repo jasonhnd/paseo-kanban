@@ -68,11 +68,15 @@ export function tierDispatchLine(row: { tier: string; profile: string | null; po
 }
 
 export function effortCostLine(
-  row: { profile: string; effort: string; runs: number; avgTokens: number | null; avgUsd: number | null },
+  row: { profile: string; effort: string; runs: number; usageSamples?: number; avgTokens: number | null; avgUsd: number | null },
   fmt: (n: number) => string,
 ): string {
-  const avg = row.avgTokens === null ? t("quota.plans.notEnoughData") : t("quota.page.avgCost", { tokens: fmt(row.avgTokens), usd: fmtUsd(row.avgUsd) });
-  return t("quota.page.effortCost", { profile: displayProfileName(row.profile), effort: row.effort, runs: row.runs, avg });
+  const avg = row.usageSamples === 0 ? t("quota.page.noUsageData")
+    : row.avgTokens === null ? t("quota.plans.notEnoughData")
+      : t("quota.page.avgCost", { tokens: fmt(row.avgTokens), usd: fmtUsd(row.avgUsd) });
+  const missing = row.usageSamples !== undefined && row.usageSamples > 0 && row.usageSamples < row.runs
+    ? ` · ${t("quota.page.missingUsage", { runs: row.runs - row.usageSamples })}` : "";
+  return t("quota.page.effortCost", { profile: displayProfileName(row.profile), effort: row.effort, runs: row.runs, avg }) + missing;
 }
 
 export function modelMeta(plan: string, tokens: string, unpriced: boolean): string {

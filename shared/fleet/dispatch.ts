@@ -565,7 +565,7 @@ export interface UsageHit {
   sessionId: string;
   hour: number;
   tokens: number;
-  usd: number;
+  usd: number | null;
 }
 
 export interface AttributableRun {
@@ -578,9 +578,9 @@ export interface AttributableRun {
 }
 
 /** Give each hourly bucket to the run of that session with the greatest overlap. */
-export function assignUsage(runs: AttributableRun[], hits: UsageHit[]): Map<string, { tokens: number; usd: number }> {
-  const out = new Map<string, { tokens: number; usd: number }>();
-  for (const run of runs) out.set(run.id, { tokens: 0, usd: 0 });
+export function assignUsage(runs: AttributableRun[], hits: UsageHit[]): Map<string, { tokens: number; usd: number | null }> {
+  // An absent entry means no matching usage, not an observed zero.
+  const out = new Map<string, { tokens: number; usd: number | null }>();
   const bySession = new Map<string, AttributableRun[]>();
   for (const run of runs) {
     for (const id of run.sessionIds) {
@@ -602,10 +602,10 @@ export function assignUsage(runs: AttributableRun[], hits: UsageHit[]): Map<stri
       }
     }
     if (!best) continue;
-    const row = out.get(best.id);
-    if (!row) continue;
+    const row = out.get(best.id) ?? { tokens: 0, usd: 0 };
     row.tokens += hit.tokens;
-    row.usd += hit.usd;
+    row.usd = row.usd === null || hit.usd === null ? null : row.usd + hit.usd;
+    out.set(best.id, row);
   }
   return out;
 }
@@ -614,33 +614,49 @@ export interface EffortStat {
   profile: string;
   effort: string;
   runs: number;
+  usageSamples: number;
+  pricedSamples: number;
   avgTokens: number | null;
   avgUsd: number | null;
 }
 
+export interface EffortRun {
+  profile: string;
+  effort: string;
+  tokens: number | null;
+  usd: number | null;
+}
+
 export function summarizeEfforts(
-  runs: Array<{ profile: string; effort: string; tokens: number; usd: number }>,
+  runs: EffortRun[],
   minSamples = MIN_SAMPLES,
 ): EffortStat[] {
-  const groups = new Map<string, { profile: string; effort: string; runs: number; tokens: number; usd: number }>();
+  const groups = new Map<string, { profile: string; effort: string; runs: number; tokens: number; usd: number; usageSamples: number; pricedSamples: number }>();
   for (const run of runs) {
     const key = `${run.profile}\0${run.effort}`;
-    const group = groups.get(key) ?? { profile: run.profile, effort: run.effort, runs: 0, tokens: 0, usd: 0 };
+    const group = groups.get(key) ?? { profile: run.profile, effort: run.effort, runs: 0, tokens: 0, usd: 0, usageSamples: 0, pricedSamples: 0 };
     group.runs += 1;
-    group.tokens += run.tokens;
-    group.usd += run.usd;
+    if (run.tokens !== null && Number.isFinite(run.tokens) && run.tokens >= 0) {
+      group.tokens += run.tokens;
+      group.usageSamples += 1;
+      if (run.usd !== null && Number.isFinite(run.usd) && run.usd >= 0) {
+        group.usd += run.usd;
+        group.pricedSamples += 1;
+      }
+    }
     groups.set(key, group);
   }
   return [...groups.values()]
     .sort((a, b) => b.runs - a.runs || a.profile.localeCompare(b.profile) || a.effort.localeCompare(b.effort))
     .map((group) => {
-      const enough = group.runs >= minSamples;
       return {
         profile: group.profile,
         effort: group.effort,
         runs: group.runs,
-        avgTokens: enough ? Math.round(group.tokens / group.runs) : null,
-        avgUsd: enough ? Math.round((group.usd / group.runs) * 10_000) / 10_000 : null,
+        usageSamples: group.usageSamples,
+        pricedSamples: group.pricedSamples,
+        avgTokens: group.usageSamples >= minSamples ? Math.round(group.tokens / group.usageSamples) : null,
+        avgUsd: group.pricedSamples >= minSamples ? Math.round((group.usd / group.pricedSamples) * 10_000) / 10_000 : null,
       };
     });
 }
@@ -649,6 +665,8 @@ export interface PoolCost {
   pool: string;
   runs: number;
   perRunPct: number | null;
+  /** Runs between the quota readings, used only as the perRunPct denominator. */
+  sampleRuns?: number;
 }
 
 /** Reading delta ÷ runs in that same span. Under MIN_SAMPLES the percent stays unknown. */
@@ -865,7 +883,7 @@ export function buildDispatchBundle(input: {
   pools: Record<string, PoolFlags>;
   generatedAt: string;
   priority?: DispatchMatrix["priority"];
-  effortRuns: Array<{ profile: string; effort: string; tokens: number; usd: number }>;
+  effortRuns: EffortRun[];
   poolDeltas: Array<{ pool: string; deltaPct: number | null; runs: number }>;
   claude: ClaudeSpend | null;
 }): { matrix: DispatchMatrix; stats: DispatchStats; unresolvedSlots: string[] } {
@@ -889,13 +907,24 @@ export function buildDispatchBundle(input: {
     thinkingCatalog: input.thinkingCatalog,
     onOverrideWarning: input.onOverrideWarning,
   });
-  const byPool = input.poolDeltas.filter((row) => poolAllowed(row.pool)).map((row) => poolRunCost(row.pool, row.deltaPct, row.runs));
+  const effortRuns = input.effortRuns.filter((run) => !providerBanned(input.profiles?.find((profile) => profile.name === run.profile) ?? run.profile, input.bannedProviders));
+  const profilePools = new Map(profiles.map((profile) => [profile.name, profile.pool]));
+  const runsByPool = new Map<string, number>();
+  for (const run of effortRuns) {
+    const pool = profilePools.get(run.profile);
+    if (pool) runsByPool.set(pool, (runsByPool.get(pool) ?? 0) + 1);
+  }
+  const byPool = input.poolDeltas.filter((row) => poolAllowed(row.pool)).map((row) => ({
+    ...poolRunCost(row.pool, row.deltaPct, row.runs),
+    runs: runsByPool.get(row.pool) ?? 0,
+    sampleRuns: row.runs,
+  }));
   const tiers = EXECUTOR_TIERS.map((tier) => tierCards(tier, executorTier(matrix, tier), profiles, input.pools, byPool));
   const stats: DispatchStats = {
     generatedAt: input.generatedAt,
     windowDays: STATS_WINDOW_DAYS,
     minSamples: MIN_SAMPLES,
-    byProfileEffort: summarizeEfforts(input.effortRuns.filter((run) => !providerBanned(input.profiles?.find((profile) => profile.name === run.profile) ?? run.profile, input.bannedProviders))),
+    byProfileEffort: summarizeEfforts(effortRuns),
     byPool,
     tiers,
     claude: input.claude,

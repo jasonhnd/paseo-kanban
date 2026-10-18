@@ -156,6 +156,9 @@ const effortStatSchema = z.object({
   profile: z.string(),
   effort: z.string(),
   runs: z.number(),
+  // Optional while reading snapshots from installations that predate usage coverage counts.
+  usageSamples: z.number().optional(),
+  pricedSamples: z.number().optional(),
   avgTokens: z.number().nullable(),
   avgUsd: z.number().nullable(),
 });

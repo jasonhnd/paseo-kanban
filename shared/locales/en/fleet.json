@@ -1285,6 +1285,8 @@
   "quota.line.weekUsed": "{pct}% used this week",
   "quota.page.aboutCards": "about {cards} cards",
   "quota.page.avgCost": "avg {tokens} tokens · {usd}",
+  "quota.page.noUsageData": "No usage data",
+  "quota.page.missingUsage": "No usage data for {runs} runs",
   "quota.page.effortCost": "{profile} · {effort} · {runs} runs · {avg}",
   "quota.page.period.30d": "Last 30 days",
   "quota.page.period.7d": "Last 7 days",

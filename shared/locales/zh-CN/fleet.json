@@ -1285,6 +1285,8 @@
   "quota.line.weekUsed": "本周用了 {pct}%",
   "quota.page.aboutCards": "约 {cards} 张",
   "quota.page.avgCost": "平均 {tokens} token · {usd}",
+  "quota.page.noUsageData": "无用量数据",
+  "quota.page.missingUsage": "{runs} 次运行无用量数据",
   "quota.page.effortCost": "{profile} · {effort} · {runs} 次 · {avg}",
   "quota.page.period.30d": "近 30 天",
   "quota.page.period.7d": "近 7 天",
