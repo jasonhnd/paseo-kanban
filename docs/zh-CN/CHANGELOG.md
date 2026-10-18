@@ -1,8 +1,34 @@
 # 变更记录
 
-单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.19` 是当前未公开、待独立审查的候选。已公开预发布 rc.18 于 2026-10-17 发布，GitHub Release 存在，冻结在 `d4ca860e01fb3256c2cc787d383b5de25bd396e5`（annotated object `9943de9e2b538a60368de7ab12641357a959d084`）。已公开预发布 rc.17 于 2026-10-16 发布，GitHub Release 存在，冻结在 `d7eec4188a108eb660c77f806b6ce91f85e5c26f`（annotated object `077ca0f5a83d2f827b1169c82ccfb0ece9307c8c`）。已公开预发布 rc.16 于 2026-10-16 发布，GitHub Release 存在，冻结在 `6ed3be48e5e002351668a2d2d8765c2cca67413a`（annotated object `9747d649314d270b581d95ba5aebb37c0e4276b7`）。已公开预发布 rc.12 于 2026-10-16 发布，GitHub Release 存在，冻结在 `4162cbca1acb2aa70ad1d5fb77c0c78f25c68ab2`（annotated object `a5d68644e9d02206e2cf07ee7d32005f59801ee9`）。已公开预发布 rc.11 于 2026-10-15 发布，GitHub Release 存在，冻结在 `09963b85e0d7c9c5d881aa39e3c65ebbb719b7a0`（annotated object `042413d64aeee4f41c34120b4b3af4003c685741`）。已公开预发布 rc.10 于 2026-10-15 发布，GitHub Release 存在，冻结在 `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129`（annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`）。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
+单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.20` 是当前未公开、待独立审查的候选。已公开预发布 rc.19 于 2026-10-17 发布，GitHub Release 存在，冻结在 `d63cdc419f6f99300342bda5716d68e37a3e4c97`（annotated object `65df87c70bb68bb5630f7cb5705ad33dc3b3a916`）。已公开预发布 rc.18 于 2026-10-17 发布，GitHub Release 存在，冻结在 `d4ca860e01fb3256c2cc787d383b5de25bd396e5`（annotated object `9943de9e2b538a60368de7ab12641357a959d084`）。已公开预发布 rc.17 于 2026-10-16 发布，GitHub Release 存在，冻结在 `d7eec4188a108eb660c77f806b6ce91f85e5c26f`（annotated object `077ca0f5a83d2f827b1169c82ccfb0ece9307c8c`）。已公开预发布 rc.16 于 2026-10-16 发布，GitHub Release 存在，冻结在 `6ed3be48e5e002351668a2d2d8765c2cca67413a`（annotated object `9747d649314d270b581d95ba5aebb37c0e4276b7`）。已公开预发布 rc.12 于 2026-10-16 发布，GitHub Release 存在，冻结在 `4162cbca1acb2aa70ad1d5fb77c0c78f25c68ab2`（annotated object `a5d68644e9d02206e2cf07ee7d32005f59801ee9`）。已公开预发布 rc.11 于 2026-10-15 发布，GitHub Release 存在，冻结在 `09963b85e0d7c9c5d881aa39e3c65ebbb719b7a0`（annotated object `042413d64aeee4f41c34120b4b3af4003c685741`）。已公开预发布 rc.10 于 2026-10-15 发布，GitHub Release 存在，冻结在 `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129`（annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`）。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
 
 ## 未发布
+
+## 0.1.0-rc.20 — 待审查与发布
+
+本地候选 tag 为 `v0.1.0-rc.20`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.19 tag 绝不挪动。
+
+### 新增（Added）
+
+- 可选的 Hermes leader 集成。使用现有 `hermes` ACP provider（或名为 `hermes-leader` 的启动别名）的 Paseo leader 档案，可在项目的 Leader 创建面板里建出。它把完整看板规矩作为可见的第一条消息收到，看板另行核对它的自我登记。这类 provider 的 leader 换班沿用原 provider、model 和工作区，绑定只限新会话的 guest 身份，请当前 leader 执行项目登记转交，并在归档旧会话前核对登记表已指向新会话。它不绕过 leader 所有权检查；创建和消息投递在重试时幂等。其他 provider 无需安装 Hermes 或 Python，加载插件也不会启动 Python。以下改动适用于所有 provider：会话按钮使用当前客户端内的导航（更新后请刷新页面；旧的桌面打开调用现在会返回错误），leader 换班在出现工具审批提示时也会继续等待。
+- `integrations/hermes/memory_bridge.py`：可选的、只用标准库的 ACP 包装，在 Hermes 档案的 `MEMORY.md` 和 `USER.md` 变化时，把它们重新发给该档案的会话。其范围是整个 Hermes 档案，不是单个项目：同一桥后面的每个会话都收到同样的两个文件，这也是 Hermes 在每个会话开始时的做法。需要项目隔离时，为每个项目配置不同的 Hermes 档案和 `--memory-dir`。桥的 Python 测试用文档里的 `python3 -m unittest` 命令运行；`npm run verify` 不需要 Python。
+
+### 变更（Changed）
+
+- 换班交接和登记转交的等待在工具权限请求期间保持打开，每步一个 15 分钟的截止时间，不自动批准、不重发提示。回合仍在进行时返回的空闲回执不算该步完成，确认必须是新的时间线消息。
+- 看板和 Fleet 的会话按钮使用当前客户端带主机标识的导航。旧的桌面打开 RPC 现在返回错误，不再在桌面 app 里打开另一台主机，旧缓存客户端也一样；更新插件后请重新打开页面。
+- 与 `hermes` provider 名字重合、经审查的公开出现位置，只按确切的路径、行、匹配位置和字面词放行；另一道检查会让过期的放行失败，并同时计算工作树和 HEAD 可达历史。密钥扫描、私有词表扫描和所有通用隐私规则不变。
+
+### 修复（Fixed）
+
+- 某项目在最近 60 分钟内新建了仍为 open 的决策时（`RECENT_OPEN_DECISION_WINDOW_MS`，可配置），leader 提醒保持安静，包括用自己的话转述选项并把标题说成问句的回复。时间窗外仍只按完整规范化标题，或至少两条有辨识度的选项正文且推荐字母一致来确认。该项目在这 60 分钟内没有新建 open 决策、且两条路径都不匹配的新问题仍会提醒。修复 [issue #6](https://github.com/jasonhnd/paseo-kanban/issues/6)。
+- 清理已完成卡的目录前，对嵌在里面的 git worktree 执行 `git worktree remove --force`；目录已经不在时，只对所属仓库执行 `git worktree prune`。列表里标成 prunable 且路径已不存在的登记，不再报成卡片临时目录那条 info。git 命令失败仍走原有的清理红和退避。修复 [issue #10](https://github.com/jasonhnd/paseo-kanban/issues/10)。
+
+### 说明（Notes）
+
+- package 与根 lock 版本统一为 `0.1.0-rc.20`。Node 仍要求 `>=24.21.0`，Paseo daemon/app 仍要求 `>=0.11.0 <0.12.0`。相对 rc.19，依赖选择、schema 和契约版本不变，不新增存储文件，也不引入自动数据或凭证导入。保留 20 个开发／构建依赖告警。
+- 产品变化是：近期决策的提醒窗口（[issue #6](https://github.com/jasonhnd/paseo-kanban/issues/6)）、已完成卡之后的 worktree 清理（[issue #10](https://github.com/jasonhnd/paseo-kanban/issues/10)），以及可选的 Hermes leader 集成。发布文档把 rc.19 记为已公开预发布。
+- 精确 rc.20 验证只计 rc.20 回执；此前 rc.19 成绩以及三个输入各自的结果都不认证本候选。真实的 Hermes leader 会话与审批往返、GitHub 冷安装、本候选的真实浏览器挂载、已安装宿主生命周期、含待恢复定时卡的升级／回退、原生 app、手机、已认证 provider 闭环、其他平台与生产恢复仍未验证。本次准备不执行生产切换。
 
 ## 0.1.0-rc.19 — 待审查与发布
 
@@ -18,11 +44,6 @@
 - package 与根 lock 版本统一为 `0.1.0-rc.19`。Node 仍要求 `>=24.21.0`，Paseo daemon/app 仍要求 `>=0.11.0 <0.12.0`。相对 rc.18，依赖选择、schema 和契约版本不变，不新增存储文件，也不引入自动数据或凭证导入。保留 20 个开发／构建依赖告警。
 - 产品变化是：体检如何看待卡片临时目录里的 git worktree，以及审查卡借走的临时 workspace 如何放开清理。发布文档把 rc.18 记为已公开预发布。rc.18 的共享 runtime、语音和听写默认值，以及 lsof 查找方式不变。
 - 精确 rc.19 验证只计 rc.19 回执；此前 rc.18 成绩不认证本候选。GitHub 冷安装、本候选的真实浏览器挂载、已安装宿主生命周期、含待恢复定时卡的升级／回退、原生 app、手机、已认证 provider 闭环、其他平台与生产恢复仍未验证。本次准备不执行生产切换。
-
-### 修复（Fixed）
-
-- 某项目在最近 60 分钟内新建了仍为 open 的决策时（`RECENT_OPEN_DECISION_WINDOW_MS`，可配置），leader 提醒保持安静，包括用自己的话转述选项并把标题说成问句的回复。时间窗外仍只按完整规范化标题，或至少两条有辨识度的选项正文且推荐字母一致来确认。该项目在这 60 分钟内没有新建 open 决策、且两条路径都不匹配的新问题仍会提醒。修复 [issue #6](https://github.com/jasonhnd/paseo-kanban/issues/6)。
-- 清理已完成卡的目录前，对嵌在里面的 git worktree 执行 `git worktree remove --force`；目录已经不在时，只对所属仓库执行 `git worktree prune`。列表里标成 prunable 且路径已不存在的登记，不再报成卡片临时目录那条 info。git 命令失败仍走原有的清理红和退避。修复 [issue #10](https://github.com/jasonhnd/paseo-kanban/issues/10)。
 
 ## 0.1.0-rc.18 — 待审查与发布
 
