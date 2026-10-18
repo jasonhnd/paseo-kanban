@@ -5,7 +5,7 @@ Twenty release candidates are recorded here. `0.1.0-rc.20` is the current unpubl
 
 ## Unreleased
 
-- Fix [issue #13](https://github.com/jasonhnd/paseo-kanban/issues/13): reconcile dispatch pool run totals with profile totals, estimate per-run quota costs from matching observation spans, and read Codex custom/archived sessions and Grok turn usage. Missing usage or prices remain unknown and do not dilute averages; the usage panel shows missing usage explicitly.
+- Fix [issue #13](https://github.com/jasonhnd/paseo-kanban/issues/13): reconcile dispatch pool run totals with profile totals, estimate per-run quota costs from matching observation spans, and read Codex custom/archived sessions and Grok turn usage (including custom `GROK_HOME` directories). Missing usage or prices remain unknown and do not dilute averages; the usage panel shows missing usage explicitly.
 
 ### Fixed
 
