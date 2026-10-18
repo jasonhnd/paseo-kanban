@@ -60,8 +60,9 @@ describe("stable bin", { concurrency: 1 }, () => {
     assert.equal(mode(launcher), 0o755);
     assert.equal(mode(bridge), 0o755);
     const script = readFileSync(launcher, "utf8");
-    assert.match(script, /^#!\/bin\/sh\nexec /);
     assert.match(script, /"\$@"\n$/);
+    // The daemon's execPath can be an Electron binary; agent shells do not carry this variable.
+    assert.match(script, /^#!\/bin\/sh\nELECTRON_RUN_AS_NODE=1 exec /);
     assert.equal(readFileSync(bridge, "utf8"), "bridge marker-a\n");
     const ran = runLauncher(["supervise", "--project", "demo"]);
     assert.equal(ran.status, 0, ran.stderr);
@@ -78,6 +79,16 @@ describe("stable bin", { concurrency: 1 }, () => {
     const next = runLauncher(["handover"]);
     assert.equal(next.status, 0, next.stderr);
     assert.equal(next.stdout, `marker-b\n${JSON.stringify(["handover"])}\n`);
+    refreshStableBin(pluginRoot());
+  });
+
+  it("runs from a clean environment that has only PATH and HOME", () => {
+    writeInstall(installA, "marker-a");
+    const refreshed = refreshStableBin(installA);
+    assert.equal(refreshed.ok, true, refreshed.error);
+    const clean = spawnSync("env", ["-i", `PATH=${process.env.PATH ?? "/usr/bin:/bin"}`, `HOME=${process.env.HOME ?? scratch}`, stableLauncherPath(), "--help"], { encoding: "utf8" });
+    assert.equal(clean.status, 0, clean.stderr);
+    assert.equal(clean.stdout, `marker-a\n${JSON.stringify(["--help"])}\n`);
     refreshStableBin(pluginRoot());
   });
 

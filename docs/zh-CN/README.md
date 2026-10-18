@@ -155,7 +155,7 @@ Git preparation 通过 manifest 的 `build` 运行 `server/prepare.mjs`。本地
 个人状态不能进入仓库或分发产物。这些检查适用于 Git 源码和本地打包产物；本批不走 npm 发布。
 
 1. `.githooks/pre-commit` 扫描暂存文件的通用规则及仓外私人 denylist；身份检查只接受占位或 GitHub noreply；有 gitleaks 时同时运行。规则禁止私人 home 路径、邮箱、id、卡号、密钥、真实数据和中文对应目录以外的中文内容。
-2. `npm run verify` 及 `.githooks/pre-push` 的十三闸包含类型、脚本／插件测试、CLI／真实 Paseo 编译、源码／完整可达历史／身份／泄漏、单源码契约及实质负例、真实包字节。出站 ref 与 annotated tag 单独扫描，并导出精确提交用锁定依赖重验。任何失败均拒绝发布；无需启用 GitHub Actions。
+2. `npm run verify` 及 `.githooks/pre-push` 的十四闸包含类型、脚本／插件测试、CLI／真实 Paseo 编译、源码／完整可达历史／身份／泄漏、单源码契约及实质负例、真实包字节。出站 ref 与 annotated tag 单独扫描，并导出精确提交用锁定依赖重验。任何失败均拒绝发布；无需启用 GitHub Actions。
 3. `package.json` 的 `files` 白名单由真实 `npm pack` 解包字节检查；它不是 npm 已发布证明。
 
 ```sh

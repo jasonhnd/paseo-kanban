@@ -46,7 +46,8 @@ function shellQuote(value: string): string {
 }
 
 function launcherScript(installRoot: string): string {
-  return `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(kanbanCliPath(installRoot))} "$@"\n`;
+  // Agent shells do not carry ELECTRON_RUN_AS_NODE, and the daemon's execPath can be Electron.
+  return `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec ${shellQuote(process.execPath)} ${shellQuote(kanbanCliPath(installRoot))} "$@"\n`;
 }
 
 // The bridge file name is unique under integrations. The directory name stays out of this
@@ -107,15 +108,22 @@ function clearError(path: string): void {
 
 /**
  * Rewrite the stable bin from `installRoot`. A failure is logged and recorded for doctor.
- * The test-data guard still throws before any write. Other failures return `{ ok: false }`.
+ * Failures, including the test-data guard, return `{ ok: false }`; the guard refuses before any write.
  */
 export function refreshStableBin(installRoot = pluginRoot(), log: (message: string) => void = logStableBin): StableBinRefresh {
-  const root = dataDir();
-  const bin = join(root, BIN_DIR);
-  const launcher = join(bin, LAUNCHER_NAME);
-  const bridge = join(bin, BRIDGE_NAME);
-  const errorPath = join(root, ERROR_NAME);
+  let root = requestedDataDir();
+  let bin = join(root, BIN_DIR);
+  let launcher = join(bin, LAUNCHER_NAME);
+  let bridge = join(bin, BRIDGE_NAME);
+  let errorPath = join(root, ERROR_NAME);
+  let guarded = false;
   try {
+    root = dataDir();
+    guarded = true;
+    bin = join(root, BIN_DIR);
+    launcher = join(bin, LAUNCHER_NAME);
+    bridge = join(bin, BRIDGE_NAME);
+    errorPath = join(root, ERROR_NAME);
     const script = Buffer.from(launcherScript(installRoot), "utf8");
     const bridgeBytes = readFileSync(bridgeSource(installRoot));
     mkdirSync(root, { recursive: true, mode: DIR_MODE });
@@ -129,6 +137,7 @@ export function refreshStableBin(installRoot = pluginRoot(), log: (message: stri
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     try { log(`[paseo-kanban] stable bin: ${message}`); } catch { /* a broken logger must not hide the failure */ }
+    if (!guarded) return { ok: false, error: message, launcher, bridge };
     try {
       mkdirSync(root, { recursive: true, mode: DIR_MODE });
       placeFile(errorPath, Buffer.from(`${message}\n`, "utf8"), ERROR_MODE, false);
