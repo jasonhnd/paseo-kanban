@@ -129,12 +129,14 @@ function parseCodex(text: string): Buckets {
   return b;
 }
 
-function grokUsage(b: Buckets, ts: number, usage: Json): void {
-  if (usage.usageIsIncomplete) return;
+function grokUsage(b: Buckets, ts: number, usage: Json): boolean {
+  if (!Number.isFinite(ts) || usage.usageIsIncomplete) return false;
   const per: Record<string, Json> = usage.modelUsage ?? { [usage.primaryModelId || "grok"]: usage };
-  for (const [model, u] of Object.entries(per)) {
-    if (!u || u.usageIsIncomplete || typeof u.inputTokens !== "number" || typeof u.outputTokens !== "number"
-        || !Number.isFinite(u.inputTokens) || !Number.isFinite(u.outputTokens) || u.inputTokens < 0 || u.outputTokens < 0) continue;
+  const entries = Object.entries(per);
+  if (!entries.length || entries.some(([, u]) => !u || u.usageIsIncomplete
+      || typeof u.inputTokens !== "number" || typeof u.outputTokens !== "number"
+      || !Number.isFinite(u.inputTokens) || !Number.isFinite(u.outputTokens) || u.inputTokens < 0 || u.outputTokens < 0)) return false;
+  for (const [model, u] of entries) {
     const calls = Math.max(1, n(u.modelCalls));
     const cacheRead = Math.min(u.inputTokens, Math.max(0, n(u.cachedReadTokens)));
     const write = Math.min(u.inputTokens - cacheRead, Math.max(0, n(u.cacheCreationTokens)));
@@ -142,6 +144,7 @@ function grokUsage(b: Buckets, ts: number, usage: Json): void {
     // Grok's UsageTotals includes reasoning within outputTokens; totalTokens is input + output.
     add(b, ts, "grok", model, u.inputTokens / calls > LONG_CONTEXT.grok, [input, cacheRead, write, 0, u.outputTokens, calls]);
   }
+  return true;
 }
 
 /** Grok's public SessionUsageFile stores dated turn deltas, alongside session totals. */
@@ -149,9 +152,9 @@ function parseGrokUsage(text: string, sessionId: string): Buckets {
   const b: Buckets = {};
   const data = parseLine(text);
   // A fork can initially contain its parent's usage file. Do not attribute that copied bill.
-  if (!data || (data.sessionId && data.sessionId !== sessionId) || !Array.isArray(data.turns)) return b;
+  if (!data || (data.sessionId && data.sessionId !== sessionId) || data.session?.usageIsIncomplete || !Array.isArray(data.turns)) return b;
   for (const turn of data.turns) {
-    if (turn && typeof turn.endedAt === "string") grokUsage(b, Date.parse(turn.endedAt), turn);
+    if (!turn || typeof turn.endedAt !== "string" || !grokUsage(b, Date.parse(turn.endedAt), turn)) return {};
   }
   return b;
 }
@@ -171,7 +174,7 @@ function parseGrok(text: string): Buckets {
     const ts = typeof d.timestamp === "number"
       ? d.timestamp > 1e12 ? d.timestamp : d.timestamp * 1000
       : typeof d.timestamp === "string" ? Date.parse(d.timestamp) : NaN;
-    grokUsage(b, ts, upd.usage);
+    if (!grokUsage(b, ts, upd.usage)) return {};
   }
   logSkipped("grok", skipped);
   return b;
@@ -208,7 +211,8 @@ async function sources(): Promise<Source[]> {
   }
   const grok: string[] = [];
   await walk(join(transcriptHome, ".grok", "sessions"), 2, (p) => p.endsWith("/updates.jsonl") || p.endsWith("/usage.json"), grok);
-  // Prefer dated usage.json turns; updates.jsonl is a fallback, never a second bill for that session.
+  // usage.json is authoritative when present, including an explicit incomplete/unknown bill.
+  // Older sessions without it fall back to updates.jsonl, never a second bill for that session.
   grok.sort((a, b) => Number(b.endsWith("/usage.json")) - Number(a.endsWith("/usage.json")) || a.localeCompare(b));
   return [
     {
@@ -246,7 +250,7 @@ async function scanAll(): Promise<ScanResult> {
         const text = await readFile(path, "utf8").catch(() => "");
         next[path] = { mtimeMs: st.mtimeMs, size: st.size, provider: src.provider, sessionId: src.sessionId(path, text), b: src.parse(text, path) };
       }
-      if (src.provider === "grok" && Object.keys(next[path].b).length) grokSessions.add(dirname(path));
+      if (src.provider === "grok" && (path.endsWith("/usage.json") || Object.keys(next[path].b).length)) grokSessions.add(dirname(path));
       // Yield between files so RPCs stay responsive during the first full scan.
       await new Promise((r) => setImmediate(r));
     }
