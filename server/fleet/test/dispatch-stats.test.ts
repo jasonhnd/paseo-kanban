@@ -1,7 +1,7 @@
 // Synthetic fixtures only. Provider formats: openai/codex protocol.rs (TokenUsage),
 // xai-org/grok-build usage_file.rs (SessionUsageFile), and Paseo 0.11 agent-storage.
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -190,5 +190,29 @@ test("missing quota history and reset boundaries leave per-run cost unknown with
     }
   } finally {
     put(join(fleetDir, "quota-history.json"), { samples });
+  }
+});
+
+test("incomplete Grok bills and undated session totals stay unavailable, even alongside legacy updates", async () => {
+  const files = Array.from({ length: 3 }, (_, i) => join(fixtureRoot, ".grok/sessions/demo", `grok-session-${i}`, "usage.json"));
+  const previous = files.map((path) => existsSync(path) ? readFileSync(path, "utf8") : null);
+  const usage = { inputTokens: 900, outputTokens: 100, modelCalls: 1 };
+  const turn = { ...usage, turnNumber: 1, endedAt: at(runStart + 1000), modelUsage: { "grok-demo": usage } };
+  try {
+    put(files[0], { sessionId: "grok-session-0", session: { usageIsIncomplete: true }, turns: [turn] });
+    put(files[1], { sessionId: "grok-session-1", turns: [turn, { ...turn, turnNumber: 2, usageIsIncomplete: true }] });
+    put(files[2], { sessionId: "grok-session-2", session: usage });
+    await (await import("../scan")).ensureScan(0);
+    const row = (await published()).byProfileEffort.find((r) => r.profile === "Demo Grok")!;
+    assert.equal(row.runs, 4);
+    assert.equal(row.usageSamples, 0);
+    assert.equal(row.avgTokens, null);
+    assert.equal(row.avgUsd, null);
+    assert.ok(effortCostLine(row, String).includes(t("quota.page.noUsageData")));
+  } finally {
+    files.forEach((path, i) => {
+      if (previous[i] === null) rmSync(path); else writeFileSync(path, previous[i]!);
+    });
+    await (await import("../scan")).ensureScan(0);
   }
 });
