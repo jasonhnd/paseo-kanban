@@ -35,6 +35,7 @@ import { createTask } from "../server/store";
 import { setLanguage } from "../shared/i18n";
 import { handleTool } from "../server/tools";
 import { publishAnonymousPolicy } from "./helpers/anonymous-policy";
+import { refreshStableBin } from "../server/stable-bin";
 import { policySnapshotPath } from "../server/application/policy-snapshot";
 
 const tmp = realpathSync(tmpdir());
@@ -763,6 +764,7 @@ describe("doctor", () => {
   });
 
   it("prints a summary and serves --last without scanning again", async () => {
+    assert.equal(refreshStableBin().ok, true);
     const sources: DoctorSources = { board: board({ tickAt: new Date().toISOString() }) };
     const text = await runKanban(["doctor"], {}, { doctorSources: sources });
     assert.match(String(text), new RegExp(zhCN("doctor.format.none")));

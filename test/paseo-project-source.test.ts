@@ -33,6 +33,7 @@ import { projectRows } from "../server/project-rows";
 import { createTask } from "../server/store";
 import { handleTool } from "../server/tools";
 import { quietProjects, shownPaused } from "../shared/fleet/paused";
+import { refreshStableBin } from "../server/stable-bin";
 
 // Everything lives in a disposable data directory; the real Paseo daemon and board data are never read.
 const dir = realpathSync(mkdtempSync(join(realpathSync(tmpdir()), "paseo-project-source-")));
@@ -397,6 +398,7 @@ describe("doctor", () => {
   }
 
   it("leaves out a directory leftover shared by two cards of the same removed project", async () => {
+    assert.equal(refreshStableBin().ok, true);
     recordPaseoProjects([entry("b", BETA)]);
     const report = await sharedPlaceholder("alpha", "alpha");
     assert.equal(report.findings.some((item) => item.severity !== "info"), false);

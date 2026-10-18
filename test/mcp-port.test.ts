@@ -53,7 +53,8 @@ describe("stable mcp port", () => {
     assert.equal(markRunningMcpStale(), 0);
     const card = listBoard("mcp").tasks.find((item) => item.id === task.id);
     assert.match(card?.mcpNote ?? "", new RegExp("MCP " + localePattern(zhCNPart("reclaimActions.tool.http", 14, 16)) + localePattern(zhCNPart("cleanup.wake.stepStopped", 14, 16)) + localePattern(zhCNPart("identity.tokenInvalid", 10, 11))));
-    assert.match(card?.mcpNote ?? "", /bin\/paseo-kanban\.mjs complete/);
+    assert.match(card?.mcpNote ?? "", /bin\/paseo-kanban complete/);
+    assert.doesNotMatch(card?.mcpNote ?? "", /paseo-kanban\.mjs/);
     assert.match(card?.mcpNote ?? "", /PASEO_AGENT_ID/);
     assert.doesNotMatch(card?.mcpNote ?? "", new RegExp(localePattern(zhCNPart("stall.nudge.quiet", 44, 46)) + localePattern(zhCNPart("compat.skip.kanbanEnv", 14, 16)) + localePattern(zhCNPart("tempWorkspace.drop.placeholderAgentsDeleted", 2, 5)) + "KANBAN_TOKEN"));
   });

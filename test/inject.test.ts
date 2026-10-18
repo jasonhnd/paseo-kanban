@@ -244,7 +244,8 @@ describe("MCP inject gate", () => {
         assert.doesNotMatch(text, /\u518d\u7ed3\u675f\u8fd9\u4e00\u8f6e/);
       }
       assert.doesNotMatch(text, /Paseo \u5b98\u65b9|\u56de A \u6211\u5c31\u5f00\u59cb/);
-      assert.match(text, /bin\/paseo-kanban\.mjs complete/);
+      assert.match(text, /bin\/paseo-kanban complete/);
+      assert.doesNotMatch(text, /paseo-kanban\.mjs/);
       assert.match(text, /PASEO_AGENT_ID/);
       assert.doesNotMatch(text, /\u7528\u4f60\u73af\u5883\u91cc\u7684 KANBAN_TOKEN/);
       assert.equal(text.includes(cliFallback()), true);
