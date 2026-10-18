@@ -210,7 +210,8 @@ async function sources(): Promise<Source[]> {
     await walk(join(codexHome, dir), 4, (p) => /rollout-.*\.jsonl$/.test(p), codex);
   }
   const grok: string[] = [];
-  await walk(join(transcriptHome, ".grok", "sessions"), 2, (p) => p.endsWith("/updates.jsonl") || p.endsWith("/usage.json"), grok);
+  const grokHome = process.env.AFC_TRANSCRIPT_HOME ? join(transcriptHome, ".grok") : process.env.GROK_HOME || join(transcriptHome, ".grok");
+  await walk(join(grokHome, "sessions"), 2, (p) => p.endsWith("/updates.jsonl") || p.endsWith("/usage.json"), grok);
   // usage.json is authoritative when present, including an explicit incomplete/unknown bill.
   // Older sessions without it fall back to updates.jsonl, never a second bill for that session.
   grok.sort((a, b) => Number(b.endsWith("/usage.json")) - Number(a.endsWith("/usage.json")) || a.localeCompare(b));
