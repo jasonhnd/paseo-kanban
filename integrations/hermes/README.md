@@ -25,6 +25,16 @@ cancelled or failed turns retry it. Slash commands are unchanged. Missing files
 are deletion snapshots; a missing root, unreadable file or oversized file stops
 the prompt with an error instead of silently using stale memory.
 
+**Memory scope is the whole Hermes profile, not a single project.** Every session
+that runs through a bridge pointed at a profile's `memories/` directory receives the
+same `MEMORY.md` and `USER.md` contents, whichever project the session works on.
+This matches Hermes' own behavior, which injects those two files into the system
+prompt of every session at session start; the bridge only re-sends changed
+contents between turns. Nothing filters memory by project, and the sentence in the
+appended note about project-specific facts is guidance to the model, not a boundary.
+To keep projects apart, configure a separate Hermes profile for each project and
+give each provider command its own `--memory-dir`.
+
 Example provider command argv (replace each placeholder with an absolute path):
 
 ```json
@@ -39,7 +49,8 @@ existing Hermes profile's; board registration is a separate project authority.
 This bridge updates the two built-in curated-memory files between user turns. It
 does not merge conflicting semantic edits, refresh arbitrary skill files, or
 replace authoritative project documents. Hermes retains its own atomic memory
-writes and durable session leases. Project-specific entries must name their scope.
+writes and durable session leases. Do not store anything in a profile's memory
+that a session working on another project must not see.
 A production rollout needs separate approval and must not replace existing leaders
 as part of a pilot.
 
