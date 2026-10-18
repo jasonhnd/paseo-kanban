@@ -15,7 +15,7 @@ import { getDb } from "./db";
 import { KanbanError } from "./errors";
 import { takeProtocolReceipt } from "./inject";
 import { leaderPresence } from "./leader-registry";
-import { kanbanCliPath } from "./paths";
+import { stableLauncherPath } from "./stable-bin";
 import { buildAgentConfig, readProfiles, type Profile } from "./profiles";
 import { PROTOCOL_VERSION, protocolFor } from "./protocol";
 import { bindTokenAgent, issueToken } from "./tokens";
@@ -94,7 +94,7 @@ export async function leaderOptions(projectArg: string, host: LeaderStartHost) {
   return {
     project,
     version: PROTOCOL_VERSION,
-    cli: kanbanCliPath(),
+    cli: stableLauncherPath(),
     profiles: leaderProfiles().map(({ id, name, provider, model }) => ({ id, name, provider, model: model ?? null })),
     workspaces: await host.workspaces(project),
     existingAgentId: supervisorId && leaderPresence(supervisorId) !== "gone" ? supervisorId : null,
@@ -117,7 +117,7 @@ function introduction(value: LeaderStartState): string {
   const intro = translate(value.language, "leaderStart.intro", {
     project: JSON.stringify(value.project),
     version: value.version,
-    cli: JSON.stringify(kanbanCliPath()),
+    cli: JSON.stringify(stableLauncherPath()),
   });
   // ACP does not transport Paseo's creation-only systemPrompt. A visible first
   // message is the portable delivery path, including after a failed send.
@@ -176,7 +176,7 @@ export async function startLeader(input: Selection & { requestId: string }, host
         KANBAN_LANGUAGE: input.language,
         KANBAN_LEADER_START: input.requestId,
         KANBAN_TOKEN: token,
-        KANBAN_CLI: kanbanCliPath(),
+        KANBAN_CLI: stableLauncherPath(),
         TMPDIR: temporaryDirectory,
         KANBAN_TMP: temporaryDirectory,
       },

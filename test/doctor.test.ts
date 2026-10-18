@@ -724,7 +724,7 @@ describe("doctor", () => {
     assert.equal(has(hit, "board:matrix")?.severity, "yellow");
     assert.match(has(hit, "board:cwd")?.symptom ?? "", /2/);
     const quiet = await check({ board: board() });
-    assert.equal(quiet.findings.filter((item) => item.check === "board").length, 0);
+    assert.equal(quiet.findings.filter((item) => item.check === "board" && item.id !== "stable-bin").length, 0);
   });
 
   it("does not treat an unknown plugin or a failed gh as healthy, and does not write the database", async () => {

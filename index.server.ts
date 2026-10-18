@@ -37,6 +37,7 @@ import { assertProjectInPaseo, refreshPaseoProjects } from "./server/paseo-proje
 import { describeDataDir } from "./server/paths";
 import { startExports } from "./server/exports";
 import { primeCliEnv } from "./server/inject";
+import { refreshStableBin } from "./server/stable-bin";
 import { decidePermission } from "./server/permissions";
 import { permissionContext } from "./server/permission-context";
 import { readProfiles } from "./server/profiles";
@@ -80,6 +81,7 @@ export default function contribute(server: PluginServerContext) {
   console.log(`[paseo-kanban] ${describeDataDir()}; cwd ${process.cwd()}`);
   console.log(`[paseo-kanban] language ${applyServerLanguage()}`);
   logRetiredDefaultWorktrees();
+  refreshStableBin();
   primeCliEnv();
   let supervisorToken: string | null = null;
   try {

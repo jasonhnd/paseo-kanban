@@ -2,7 +2,7 @@
 import { BOARD_AGENT_ENV } from "./agent-env";
 import type { AgentSessionConfig, McpHttpServerConfig, McpServerConfig } from "@getpaseo/protocol/agent-types";
 import { cockpitCli } from "./afc-sources";
-import { kanbanCliPath } from "./paths";
+import { stableLauncherPath } from "./stable-bin";
 import { isLanguage } from "../shared/i18n";
 import { PROTOCOL_VERSION, protocolFor } from "./protocol";
 import { readSupervisorTokenFile } from "./tokens";
@@ -13,7 +13,7 @@ let cliEnvAtStartup: Record<string, string> = {};
 /** KANBAN_CLI, and AFC_CLI when the cockpit exports its command line. Call once when the plugin loads. */
 export function primeCliEnv(): Record<string, string> {
   const afc = cockpitCli();
-  cliEnvAtStartup = { KANBAN_CLI: kanbanCliPath(), ...(afc ? { AFC_CLI: afc } : {}) };
+  cliEnvAtStartup = { KANBAN_CLI: stableLauncherPath(), ...(afc ? { AFC_CLI: afc } : {}) };
   return { ...cliEnvAtStartup };
 }
 

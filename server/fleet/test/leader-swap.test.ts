@@ -311,6 +311,7 @@ for (const provider of ["hermes", "hermes-leader"]) test(`${provider} handover b
   const { supervisorShiftPorts } = await import("../supervisor-shift");
   const { identityFromToken } = await import("../../tokens");
   const { protocolFor } = await import("../../protocol");
+  const { stableLauncherPath } = await import("../../stable-bin");
   let creation: any;
   let sent = false;
   let transferWaits = 0;
@@ -321,6 +322,9 @@ for (const provider of ["hermes", "hermes-leader"]) test(`${provider} handover b
     send: async (text: string, options: any) => {
       assert.equal(id, "old");
       assert.ok(text.includes('"--project","demo","--from","old","--to","hermes-new"'));
+      assert.ok(text.includes(stableLauncherPath()));
+      assert.match(text, /The first item is the stable board command/);
+      assert.doesNotMatch(text, /paseo-kanban\.mjs/);
       assert.equal(options.messageId, "hermes-transfer:hermes-test-key");
       assert.equal(options.activeTurnBehavior, "steer");
       assert.equal(identityFromToken(creation.env.KANBAN_TOKEN).agentId, "hermes-new");
@@ -355,6 +359,7 @@ for (const provider of ["hermes", "hermes-leader"]) test(`${provider} handover b
     ...f.old, oldAgentId: "old", provider, workspaceId: f.old.workspaceId!,
     prompt: "Demo takeover", idempotencyKey: "hermes-test-key",
   });
+  assert.equal(creation.env.KANBAN_CLI, stableLauncherPath());
   assert.equal(creation.config.provider, `${provider}/demo-model`);
   assert.equal(sent, true);
   assert.equal(transferWaits, 2);

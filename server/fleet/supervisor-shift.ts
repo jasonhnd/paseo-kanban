@@ -6,7 +6,7 @@ import { bindTokenAgent, identityFromToken, issueToken } from "../tokens";
 import { getDb } from "../db";
 import { withConfigLock } from "../config-lock";
 import { protocolFor, PROTOCOL_VERSION } from "../protocol";
-import { kanbanCliPath } from "../paths";
+import { stableLauncherPath } from "../stable-bin";
 import { providerBanned } from "../../shared/fleet/provider-policy";
 import { readBannedProviders, readLeaderThresholds } from "./adapters/config";
 // Manual <leader> shift. The RPC calls requestSupervisorShift after the user confirms,
@@ -494,7 +494,7 @@ export function supervisorShiftPorts(paseo: PaseoApi, project: string, hasPermit
         title: input.title,
         ...(hermes ? { env: {
           [BOARD_AGENT_ENV]: "1", KANBAN_ROLE: "supervisor", KANBAN_PROJECT: project,
-          KANBAN_TOKEN: token!, KANBAN_CLI: kanbanCliPath(),
+          KANBAN_TOKEN: token!, KANBAN_CLI: stableLauncherPath(),
         } } : { prompt: input.prompt }),
         config: {
           provider: providerModel(input.provider, input.model),
@@ -518,9 +518,9 @@ export function supervisorShiftPorts(paseo: PaseoApi, project: string, hasPermit
           await old.refresh();
           if (old.current()?.status !== "idle" || await hasPermit(input.oldAgentId!)) throw new Error("The current leader is busy or awaiting permission; resume handover when idle");
           const scope = registered.kind === "kanban" ? ["--kanban-leader"] : ["--project", project];
-          const argv = [kanbanCliPath(), "handover", ...scope, "--from", input.oldAgentId!, "--to", handle.id];
+          const argv = [stableLauncherPath(), "handover", ...scope, "--from", input.oldAgentId!, "--to", handle.id];
           const role = registered.kind === "kanban" ? "the Kanban fallback leader" : `project ${JSON.stringify(project)}`;
-          await old.send(`The user-confirmed handover has created successor ${handle.id} for ${role}. You are still the registered leader. Transfer only this registered role and its unfinished-card ownership by executing Node with argv ${JSON.stringify(argv)}. Do not change unrelated registrations, create work, send outside messages, or archive either session. Report the result, then stop.`, {
+          await old.send(`The user-confirmed handover has created successor ${handle.id} for ${role}. You are still the registered leader. Transfer only this registered role and its unfinished-card ownership by executing argv ${JSON.stringify(argv)}. The first item is the stable board command. Do not change unrelated registrations, create work, send outside messages, or archive either session. Report the result, then stop.`, {
             messageId: `hermes-transfer:${input.idempotencyKey}`,
             activeTurnBehavior: "steer",
           });

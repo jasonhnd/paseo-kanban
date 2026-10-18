@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { displayCliPath } from "../server/fallback";
 import { guardCreateHook, primeCliEnv, resetCliEnv } from "../server/inject";
-import { dataDir, pluginRoot } from "../server/paths";
+import { checkoutRoot, dataDir, pluginRoot } from "../server/paths";
 import { protocolFor } from "../server/protocol";
 import { refreshStableBin, stableLauncherPath } from "../server/stable-bin";
 import { runDoctor } from "../server/doctor";
@@ -39,6 +39,9 @@ function runLauncher(args: string[]): { status: number | null; stdout: string; s
 }
 
 describe("stable bin", { concurrency: 1 }, () => {
+  const checkout = checkoutRoot();
+  if (!checkout) throw new Error("checkout root is required");
+  process.env.KANBAN_HOME = checkout;
   const scratch = mkdtempSync(join(tmpdir(), "stable-bin-"));
   const installA = join(scratch, "install-a");
   const installB = join(scratch, "install b'c");
@@ -63,10 +66,10 @@ describe("stable bin", { concurrency: 1 }, () => {
     const ran = runLauncher(["supervise", "--project", "demo"]);
     assert.equal(ran.status, 0, ran.stderr);
     assert.equal(ran.stdout, `marker-a\n${JSON.stringify(["supervise", "--project", "demo"])}\n`);
-    const bridgeTime = statSync(bridge).mtimeNs;
+    const bridgeTime = statSync(bridge).mtimeMs;
     const again = refreshStableBin(installA);
     assert.equal(again.ok, true, again.error);
-    assert.equal(statSync(bridge).mtimeNs, bridgeTime);
+    assert.equal(statSync(bridge).mtimeMs, bridgeTime);
     assert.equal(readFileSync(bridge, "utf8"), "bridge marker-a\n");
     const moved = refreshStableBin(installB);
     assert.equal(moved.ok, true, moved.error);

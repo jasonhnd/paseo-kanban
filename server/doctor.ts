@@ -25,6 +25,7 @@ import { agentCwdMissing } from "./missing-cwd";
 import { tmpCleanupProblems, tmpNamesFor } from "./tmp-cleanup";
 import { realDispatchMatrixPath } from "./matrix";
 import { dataDir } from "./paths";
+import { stableBinFinding } from "./stable-bin";
 import { samePath } from "./placement";
 import { currentCleanupSql } from "./cleanup-state";
 import { capacityAlertSuppressId, capacityFindings, markCapacityLeaderAlerted, refreshCapacityGuard } from "./capacity-guard";
@@ -822,6 +823,12 @@ export async function runDoctor(input: DoctorRunInput = {}): Promise<DoctorRepor
     fail("board", "kanban.config.json", err instanceof Error ? err.message : String(err));
   }
   checkDataDir(add);
+  try {
+    const stableBin = stableBinFinding();
+    if (stableBin) add(stableBin);
+  } catch (err) {
+    fail("board", "stable bin", err instanceof Error ? err.message : String(err), "stable-bin");
+  }
   try {
     checkMigration(add, dataDir(), dbReady ? getReadOnlyDb() : "skip", nowDate);
   } catch (err) {

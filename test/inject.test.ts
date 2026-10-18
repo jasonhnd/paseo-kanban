@@ -9,7 +9,7 @@ import type { AgentSessionConfig } from "@getpaseo/protocol/agent-types";
 import { closeDb } from "../server/db";
 import { cliFallback, displayCliPath } from "../server/fallback";
 import { guardCreateHook, injectMcp, primeCliEnv, resetCliEnv, shouldInjectMcp, type CreateHookRequest } from "../server/inject";
-import { kanbanCliPath } from "../server/paths";
+import { stableLauncherPath } from "../server/stable-bin";
 import { protocolFor } from "../server/protocol";
 import { ensureSupervisorToken } from "../server/tokens";
 
@@ -38,7 +38,7 @@ describe("MCP inject gate", () => {
       assert.match(rules, /TMPDIR \u548c KANBAN_TMP/, role);
       assert.match(rules, /\.kanban-work\//, role);
       // An exact-commit fixture's CLI may itself live in a nested directory named tmp.
-      assert.doesNotMatch(rules.replace(displayCliPath(), "$PLUGIN_ROOT/bin/paseo-kanban.mjs"), /\/tmp\//, role);
+      assert.doesNotMatch(rules.replace(displayCliPath(), "$STABLE_BIN/paseo-kanban"), /\/tmp\//, role);
       assert.match(rules, /\u4e0d\u8981\u53e6\u8d77\u540d\u5b57/, role);
       assert.match(rules, /\u4e0d\u8981\u7528\u88ab\u5ba1\u5361/, role);
       assert.match(rules, /kbn0074-after.*xxx-review-\u968f\u673a\u4e32/, role);
@@ -76,9 +76,9 @@ describe("MCP inject gate", () => {
     assert.deepEqual(before?.env, { [BOARD_AGENT_ENV]: "1", KEEP: "1" });
     try {
       const primed = primeCliEnv();
-      assert.equal(primed.KANBAN_CLI, kanbanCliPath());
+      assert.equal(primed.KANBAN_CLI, stableLauncherPath());
       const next = injectMcp(req({ env: { [BOARD_AGENT_ENV]: "1", KEEP: "1" } }), "http://127.0.0.1:9");
-      assert.equal(next?.env?.KANBAN_CLI, kanbanCliPath());
+      assert.equal(next?.env?.KANBAN_CLI, stableLauncherPath());
       assert.equal(next?.env?.KEEP, "1");
       assert.equal(injectMcp(req(), "http://127.0.0.1:9"), undefined, "agents outside the board get nothing");
     } finally {
@@ -147,7 +147,7 @@ describe("MCP inject gate", () => {
     // TEST_0211 adds the per-card TMPDIR and production-database rules (260-character budget).
     // Executor rules grew by 167 and the no-wait rule shrank by 3 (CI dropped from the poll list).
     // Keep the original budget for the rules; a card checkout's CLI path may be longer than the installation's.
-    const budgetedPrompt = (worktree?.config.systemPrompt ?? "").replace(displayCliPath(), "$PLUGIN_ROOT/bin/paseo-kanban.mjs");
+    const budgetedPrompt = (worktree?.config.systemPrompt ?? "").replace(displayCliPath(), "$STABLE_BIN/paseo-kanban");
     assert.ok(budgetedPrompt.length <= 226 * 2 + 49 + 107 + 39 + 110 + 220 + 100 + 260 + 260 + 164 + 108 + 12);
     // TEST_0256 adds the no-wait rule and the sub-agent wait sentence (260-character budget).
     const reader = guardCreateHook(req({ env: { [BOARD_AGENT_ENV]: "1", KANBAN_ROLE: "reader" } }), "http://127.0.0.1:9");
