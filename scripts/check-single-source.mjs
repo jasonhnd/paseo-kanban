@@ -31,7 +31,7 @@ export async function checkSingleSource(root, scope) {
     for (const dir of ["client", "server", "shared"]) for (const entry of readdirSync(join(root, dir), { recursive: true, withFileTypes: true })) {
       if (entry.isFile() && ["paseo-plugin.json", "package-lock.json", "package.json", "index.server.ts", "index.client.tsx"].includes(entry.name)) failures.push(`second package/registration: ${entry.name}`);
     }
-    const required = ["typecheck", "test (scripts)", "build (CLI)", "build (Paseo)", "test (plugin)", "scan (check-private --all)", "scan (reachable history)", "identity (next commit)", "identity (history)", "gitleaks (history)", "contract (single source + compatibility)", "shared gates (single source)", "pack:check"];
+    const required = ["typecheck", "test (scripts)", "build (CLI)", "build (Paseo)", "test (plugin)", "scan (check-private --all)", "scan (public occurrence freshness)", "scan (reachable history)", "identity (next commit)", "identity (history)", "gitleaks (history)", "contract (single source + compatibility)", "shared gates (single source)", "pack:check"];
     const configured = JSON.parse(read(root, "scripts/local-gates.json"));
     const verifierPath = join(root, "scripts/verify.mjs");
     const verifier = await import(`${pathToFileURL(verifierPath).href}?content=${createHash("sha256").update(readFileSync(verifierPath)).digest("hex")}`);
@@ -45,6 +45,7 @@ export async function checkSingleSource(root, scope) {
       "build (Paseo)": ["scripts/paseo-build-check.mjs", "--strict"],
       "test (plugin)": ["scripts/test-plugin.mjs"],
       "scan (check-private --all)": ["scripts/check-private.mjs", "--all", "--quiet"],
+      "scan (public occurrence freshness)": ["scripts/check-public-occurrences.mjs"],
       "scan (reachable history)": ["scripts/check-private.mjs", "--history", "HEAD", "--quiet"],
       "identity (next commit)": ["scripts/check-identity.mjs"],
       "identity (history)": ["scripts/check-identity.mjs", "--history"],

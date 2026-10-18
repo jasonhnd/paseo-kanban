@@ -37,6 +37,8 @@
     "bin/codex-kanban-launch",
     "bin/*.bundle.mjs",
     "examples/",
+    "integrations/hermes/memory_bridge.py",
+    "integrations/hermes/README.md",
     "!**/*.test.ts",
     "!**/*.test.tsx",
     "!**/__fixtures__/",

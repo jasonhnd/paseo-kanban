@@ -234,6 +234,7 @@ async function createSession(
   const acceptanceCards = (await run.ports.readAcceptanceCards?.(run.request.project).catch(() => null)) ?? null;
   return run.ports.createAgent({
     idempotencyKey: run.request.creationKey ?? `afc-leader-swap:${run.request.project}:${agent.id}`,
+    oldAgentId: agent.id,
     labels: Object.fromEntries(Object.entries(agent.labels).filter(([key]) => key !== PARENT_LABEL)),
     workspaceId,
     cwd: agent.cwd,

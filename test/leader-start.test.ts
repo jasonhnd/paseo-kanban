@@ -10,7 +10,7 @@ process.env.KANBAN_AGENTS_DIR = join(dir, "agents");
 process.env.KANBAN_PASEO_CONFIG = join(dir, "config.json");
 mkdirSync(join(dir, "agents", "bucket"), { recursive: true });
 writeFileSync(join(dir, "config.json"), JSON.stringify({ daemon: { agentProfiles: [
-  ...["claude", "codex", "grok"].map((provider) => ({ id: provider, name: `Demo ${provider} leader`, provider, role: "supervisor", model: "demo-model" })),
+  ...["claude", "codex", "grok", "hermes", "hermes-leader"].map((provider) => ({ id: provider, name: `Demo ${provider} leader`, provider, role: "supervisor", model: "demo-model" })),
   { id: "worker", name: "Worker", provider: "codex", role: "executor" },
   { id: "incomplete", name: "Incomplete leader", provider: "codex", role: "supervisor" },
 ] } }));
@@ -58,8 +58,8 @@ function fixture(project: string, hooks: { missing?: boolean; sendFail?: boolean
   return { host, hooks, sent, creates, token: () => token, agentId };
 }
 
-it("creates all three provider configs through the actual hook and requires self-registration", async () => {
-  for (const provider of ["claude", "codex", "grok"]) {
+it("creates provider configs including Hermes through the actual hook and requires self-registration", async () => {
+  for (const provider of ["claude", "codex", "grok", "hermes", "hermes-leader"]) {
     const project = `demo-${provider}`;
     const box = fixture(project);
     const input = { project, profileId: provider, workspaceId: "demo-main", language: "en" as const };
@@ -69,12 +69,53 @@ it("creates all three provider configs through the actual hook and requires self
     assert.equal(result.state, "ready");
     assert.equal(box.creates[0]!.config.provider, `${provider}/demo-model`);
     assert.equal(box.sent.length, 1);
+    if (provider === "hermes" || provider === "hermes-leader") {
+      assert.equal(result.deliveryMode, "session-message");
+      assert.ok(box.sent[0]!.includes(preview.protocol));
+    }
     await assert.rejects(handleTool("kanban_create", { project, title: "Premature", role: "executor" }, box.token()), { code: "forbidden" });
     await handleTool("kanban_supervise", { project }, box.token());
     assert.equal((await leaderStatus(project, box.host))?.state, "registered");
     const card = await handleTool("kanban_create", { project, title: "Hello", role: "executor" }, box.token()) as { created_by_agent: string };
     assert.equal(card.created_by_agent, box.agentId);
   }
+});
+
+it("retries a lost first-message acknowledgement with the same delivery id", async () => {
+  const box = fixture("hermes-send-recovery");
+  const ids: Array<string | undefined> = [];
+  box.host.send = async (_id, _text, messageId) => {
+    ids.push(messageId);
+    if (ids.length === 1) throw new Error("message accepted but response lost");
+  };
+  const input = { project: "hermes-send-recovery", profileId: "hermes", workspaceId: "demo-main", language: "en" as const };
+  const preview = await previewLeader(input, box.host);
+  assert.equal((await startLeader({ ...input, requestId: preview.requestId }, box.host)).state, "delivery-failed");
+  assert.equal((await leaderStatus(input.project, box.host))?.state, "ready");
+  assert.deepEqual(ids, [`leader-start:${preview.requestId}`, `leader-start:${preview.requestId}`]);
+});
+
+it("recovers a lost Hermes create response with full visible protocol and bound identity", async () => {
+  const box = fixture("hermes-recovery");
+  const create = box.host.create;
+  box.host.create = async (input) => { await create(input); throw new Error("lost response after create"); };
+  box.host.find = async () => ({ id: box.agentId });
+  const input = { project: "hermes-recovery", profileId: "hermes", workspaceId: "demo-main", language: "en" as const };
+  const preview = await previewLeader(input, box.host);
+  assert.equal((await startLeader({ ...input, requestId: preview.requestId }, box.host)).state, "pending");
+  const status = await leaderStatus(input.project, box.host);
+  assert.equal(status?.deliveryMode, "session-message");
+  assert.ok(box.sent[0]!.includes(preview.protocol));
+  await handleTool("kanban_supervise", { project: input.project }, box.token());
+  assert.equal((await leaderStatus(input.project, box.host))?.state, "registered");
+});
+
+it("exposes a configured project before any card exists", async () => {
+  setProjectCode("empty-leader-project", "EMP");
+  const { listBoard } = await import("../server/board-cards");
+  const board = listBoard();
+  assert.ok(board.projects.includes("empty-leader-project"));
+  assert.equal(board.tasks.filter(task => task.project === "empty-leader-project").length, 0);
 });
 
 it("reuses pending and successful starts on duplicate clicks and refuses a live registration", async () => {
@@ -164,5 +205,5 @@ it("retains uncertain create results without duplicate creation, and validates p
   await assert.rejects(previewLeader({ ...input, profileId: "worker" }, box.host), { code: "invalid" });
   await assert.rejects(previewLeader({ ...input, profileId: "incomplete" }, box.host), { code: "invalid" });
   await assert.rejects(previewLeader({ ...input, workspaceId: "unrelated" }, box.host), { code: "invalid" });
-  assert.equal((await leaderOptions("uncertain", box.host)).profiles.length, 3);
+  assert.equal((await leaderOptions("uncertain", box.host)).profiles.length, 5);
 });

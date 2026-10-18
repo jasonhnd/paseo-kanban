@@ -4,6 +4,8 @@ import { t, tAll, type MessageKey } from "./i18n";
 
 export const HANDOVER_TIMEOUT_MS = 15 * 60 * 1000;
 export const TAKEOVER_TIMEOUT_MS = 15 * 60 * 1000;
+/** The old leader's registration transfer turn; includes time the user spends approving its tool calls. */
+export const TRANSFER_TIMEOUT_MS = 15 * 60 * 1000;
 export const TAKEOVER_POLL_MS = 2_000;
 /** While the old session is still talking, look again this often. */
 export const QUEUE_POLL_MS = 5_000;
@@ -139,6 +141,8 @@ export interface ShiftAgent {
 
 export interface ShiftCreateInput {
   idempotencyKey?: string;
+  /** The current leader authorizes a Hermes successor before its first turn. */
+  oldAgentId?: string;
   labels?: Record<string, string>;
   workspaceId: string;
   cwd: string;

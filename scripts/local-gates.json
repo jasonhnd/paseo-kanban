@@ -5,6 +5,7 @@
   "build (Paseo)",
   "test (plugin)",
   "scan (check-private --all)",
+  "scan (public occurrence freshness)",
   "scan (reachable history)",
   "identity (next commit)",
   "identity (history)",

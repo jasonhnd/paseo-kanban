@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { BOARD_AGENT_ENV } from "../../agent-env";
 import { after, test } from "node:test";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -81,7 +82,7 @@ test("fake host runs every stage, keeps settings, and archives only after reply 
   const outcome = await runSupervisorShift({ clicked: true, project: "demo", code: "DEMO", agentId: "old", resume: "start", existingNewId: null }, f.ports);
   assert.deepEqual(outcome.steps, ["handover", "open", "detach", "wait", "archive"]);
   assert.equal(outcome.archived, true);
-  assert.deepEqual(f.creates[0], { ...Object.fromEntries(["workspaceId", "cwd", "title", "provider", "model", "modeId", "thinkingOptionId", "featureValues"].map(key => [key, f.old[key as keyof ShiftAgent]])), idempotencyKey: "afc-leader-swap:demo:old", labels: { role: "supervisor" }, prompt: f.creates[0].prompt });
+  assert.deepEqual(f.creates[0], { ...Object.fromEntries(["workspaceId", "cwd", "title", "provider", "model", "modeId", "thinkingOptionId", "featureValues"].map(key => [key, f.old[key as keyof ShiftAgent]])), oldAgentId: "old", idempotencyKey: "afc-leader-swap:demo:old", labels: { role: "supervisor" }, prompt: f.creates[0].prompt });
   assert.ok(f.creates[0].prompt.includes("DEMO_0001"));
   assert.ok(f.creates[0].prompt.includes("supervise"));
 });
@@ -262,11 +263,13 @@ test("Paseo adapter opens in the existing workspace with the original config and
   const { supervisorShiftPorts } = await import("../supervisor-shift");
   const calls: string[] = [];
   let creation: any;
+  let timelineReads = 0;
   const snapshot = { status: "idle", title: f.old.title, workspaceId: f.old.workspaceId, cwd: f.old.cwd, provider: f.old.provider, model: f.old.model, currentModeId: f.old.modeId, thinkingOptionId: f.old.thinkingOptionId, labels: f.old.labels, lastUsage: { contextWindowUsedTokens: 800000 } };
   const host = {
     agents: { ref: (id: string) => ({
       refresh: async () => ({ agent: snapshot }), current: () => snapshot,
-      run: async () => { calls.push("handover"); return { status: "completed", lastMessage: handoverDoneReply() }; },
+      timeline: { refetch: async () => ({ epoch: "demo", window: { maxSeq: 0 }, error: null, entries: timelineReads++ === 0 ? [] : [{ seqStart: 1, item: { type: "assistant_message", text: handoverDoneReply() } }] }) },
+      run: async () => { calls.push("handover"); return { status: "idle", lastMessage: handoverDoneReply() }; },
       detach: async () => { calls.push(`detach:${id}`); }, archive: async () => { calls.push(`archive:${id}`); },
       waitForFinish: async () => ({ lastMessage: takenOverReply() }),
     }) },
@@ -285,6 +288,202 @@ test("Paseo adapter opens in the existing workspace with the original config and
   assert.deepEqual(creation.config, { provider: "demo-provider/demo-model", modeId: "demo-mode", thinkingOptionId: "demo-effort", featureValues: { demo: true } });
   assert.equal(creation.title, "Demo leader");
   assert.deepEqual(calls, ["handover", "open", "detach:new-host", "archive:old"]);
+});
+
+test("Paseo adapter keeps a permission receipt inside the handover wait", async () => {
+  fixture();
+  const { supervisorShiftPorts } = await import("../supervisor-shift");
+  let sends = 0;
+  let waits = 0;
+  let timelineReads = 0;
+  const host = { agents: { ref: () => ({
+    timeline: { refetch: async () => ({ epoch: "demo", window: { maxSeq: 0 }, error: null, entries: timelineReads++ === 0 ? [] : [{ seqStart: 1, item: { type: "assistant_message", text: handoverDoneReply() } }] }) },
+    run: async () => { sends++; return { status: "permission", final: null, lastMessage: "Earlier answer", error: null }; },
+    waitForFinish: async () => { waits++; return { status: "idle", final: null, lastMessage: handoverDoneReply(), error: null }; },
+  }) } };
+  const done = await supervisorShiftPorts(host as never, "demo").sendAndWait("old", "Write handover", 5_000);
+  assert.deepEqual(done, { timedOut: false, reply: handoverDoneReply(), error: null });
+  assert.equal(sends, 1);
+  assert.equal(waits, 1);
+});
+
+for (const provider of ["hermes", "hermes-leader"]) test(`${provider} handover binds its new identity before sending the full protocol`, async () => {
+  const { supervisorShiftPorts } = await import("../supervisor-shift");
+  const { identityFromToken } = await import("../../tokens");
+  const { protocolFor } = await import("../../protocol");
+  let creation: any;
+  let sent = false;
+  let transferWaits = 0;
+  const transferBudgets: number[] = [];
+  const order: string[] = [];
+  const host = { agents: { ref: (id: string) => ({
+    refresh: async () => null, current: () => ({ status: "idle" }),
+    send: async (text: string, options: any) => {
+      assert.equal(id, "old");
+      assert.ok(text.includes('"--project","demo","--from","old","--to","hermes-new"'));
+      assert.equal(options.messageId, "hermes-transfer:hermes-test-key");
+      assert.equal(options.activeTurnBehavior, "steer");
+      assert.equal(identityFromToken(creation.env.KANBAN_TOKEN).agentId, "hermes-new");
+      order.push("transfer");
+    },
+    waitForFinish: async (timeout: number) => {
+      transferBudgets.push(timeout);
+      if (++transferWaits === 1) return { status: "permission", final: null, lastMessage: "Earlier answer", error: null };
+      writeFileSync(f.config, JSON.stringify({ supervisors: { demo: "hermes-new" } }));
+      order.push("registered");
+      return { status: "idle", final: null, lastMessage: "Transferred", error: null };
+    },
+  }) }, workspaces: { ref: () => ({ agents: { create: async (input: any) => {
+    creation = input;
+    assert.equal(input.prompt, undefined);
+    assert.equal(input.env[BOARD_AGENT_ENV], "1");
+    assert.equal(input.env.KANBAN_PROJECT, "demo");
+    return { id: "hermes-new", refresh: async () => null, current: () => ({}),
+      send: async (text: string, options: any) => {
+        const identity = identityFromToken(input.env.KANBAN_TOKEN);
+        assert.equal(identity.agentId, "hermes-new");
+        assert.ok(text.includes(protocolFor("supervisor")));
+        assert.ok(text.includes("Demo takeover"));
+        assert.equal(options.messageId, "hermes-handover:hermes-test-key");
+        order.push("successor-prompt");
+        sent = true;
+      },
+    };
+  } } }) } };
+  const f = fixture();
+  await supervisorShiftPorts(host as never, "demo", async () => false).createAgent({
+    ...f.old, oldAgentId: "old", provider, workspaceId: f.old.workspaceId!,
+    prompt: "Demo takeover", idempotencyKey: "hermes-test-key",
+  });
+  assert.equal(creation.config.provider, `${provider}/demo-model`);
+  assert.equal(sent, true);
+  assert.equal(transferWaits, 2);
+  // Approving a tool call can take minutes; the transfer wait must not end at the old two-minute limit.
+  assert.ok(transferBudgets[0] > 14 * 60_000 && transferBudgets[1] < transferBudgets[0]);
+  assert.deepEqual(order, ["transfer", "registered", "successor-prompt"]);
+});
+
+test("lost Hermes create response reuses the token already held by the new session", async () => {
+  const { supervisorShiftPorts } = await import("../supervisor-shift");
+  const { identityFromToken } = await import("../../tokens");
+  let firstToken = "";
+  let attempts = 0;
+  const host = { agents: { ref: () => ({
+    refresh: async () => null, current: () => ({ status: "idle" }),
+    send: async () => { writeFileSync(f.config, JSON.stringify({ supervisors: { demo: "hermes-recovered" } })); },
+    waitForFinish: async () => ({ status: "idle", final: null, lastMessage: "Transferred", error: null }),
+  }) }, workspaces: { ref: () => ({ agents: { create: async (input: any) => {
+    if (++attempts === 1) { firstToken = input.env.KANBAN_TOKEN; throw new Error("response lost"); }
+    assert.equal(input.env.KANBAN_TOKEN, firstToken);
+    return { id: "hermes-recovered", refresh: async () => null, current: () => ({}), send: async () => {
+      assert.equal(identityFromToken(firstToken).agentId, "hermes-recovered");
+    } };
+  } } }) } };
+  const f = fixture();
+  const request = { ...f.old, oldAgentId: "old", provider: "hermes", workspaceId: f.old.workspaceId!, prompt: "takeover", idempotencyKey: "hermes-lost-create" };
+  await assert.rejects(supervisorShiftPorts(host as never, "demo", async () => false).createAgent(request), /response lost/);
+  assert.equal(identityFromToken(firstToken).agentId, null);
+  await supervisorShiftPorts(host as never, "demo", async () => false).createAgent(request);
+  assert.equal(attempts, 2);
+});
+
+test("A leader-provider transfer that registered the successor proceeds even if the old turn then ends badly", async () => {
+  const { supervisorShiftPorts } = await import("../supervisor-shift");
+  const f = fixture();
+  writeFileSync(f.config, JSON.stringify({ supervisors: { demo: "old" } }));
+  let starts = 0;
+  const host = {
+    agents: { ref: () => ({ refresh: async () => null, current: () => ({ status: "idle" }), send: async () => undefined, waitForFinish: async () => {
+      writeFileSync(f.config, JSON.stringify({ supervisors: { demo: "successor-after-error" } }));
+      return { status: "error", final: null, lastMessage: null, error: "Provider failed after the command" };
+    } }) },
+    workspaces: { ref: () => ({ agents: { create: async () => ({
+      id: "successor-after-error", refresh: async () => null, current: () => ({}), send: async () => { starts++; },
+    }) } }) },
+  };
+  const request = { ...f.old, oldAgentId: "old", provider: "hermes", workspaceId: f.old.workspaceId!, prompt: "takeover", idempotencyKey: "successor-after-error-key" };
+  await supervisorShiftPorts(host as never, "demo", async () => false).createAgent(request);
+  assert.equal(starts, 1, "the registry, not the turn status, proves the transfer");
+});
+
+test("Hermes transfer fails closed and retries a lost acknowledgement without repeating the transfer", async () => {
+  const { supervisorShiftPorts } = await import("../supervisor-shift");
+  const f = fixture();
+  let owner = "old";
+  const setOwner = (id: string) => { owner = id; writeFileSync(f.config, JSON.stringify({ supervisors: { demo: id } })); };
+  let transfers = 0;
+  let starts = 0;
+  let finishMode = "refuse";
+  let status = "idle";
+  let loseStartAck = false;
+  const startMessageIds: string[] = [];
+  const host = {
+    agents: { ref: () => ({ refresh: async () => null, current: () => ({ status }), send: async () => { transfers++; }, waitForFinish: async () => {
+      if (finishMode === "lost-ack") { setOwner("hermes-transfer-retry"); throw new Error("ack lost"); }
+      return { status: "idle", final: null, lastMessage: "Refused", error: null };
+    } }) },
+    workspaces: { ref: () => ({ agents: { create: async () => ({
+      id: "hermes-transfer-retry", refresh: async () => null, current: () => ({}),
+      send: async (_text: string, options: any) => {
+        assert.equal(owner, "hermes-transfer-retry"); starts++; startMessageIds.push(options.messageId);
+        if (loseStartAck) { loseStartAck = false; throw new Error("start ack lost"); }
+      },
+    }) } }) },
+  };
+  const request = { ...f.old, oldAgentId: "old", provider: "hermes", workspaceId: f.old.workspaceId!, prompt: "takeover", idempotencyKey: "hermes-transfer-retry-key" };
+  const ports = supervisorShiftPorts(host as never, "demo", async () => false);
+  status = "running";
+  await assert.rejects(ports.createAgent(request), /busy or awaiting permission/);
+  assert.equal(transfers, 0);
+  status = "idle";
+  await assert.rejects(supervisorShiftPorts(host as never, "demo", async () => true).createAgent(request), /busy or awaiting permission/);
+  assert.equal(transfers, 0);
+  await assert.rejects(ports.createAgent(request), /not transferred/);
+  assert.equal(starts, 0);
+  setOwner("someone-else");
+  await assert.rejects(ports.createAgent(request), /registration changed/);
+  assert.equal(transfers, 1);
+  setOwner("old"); finishMode = "lost-ack";
+  await assert.rejects(ports.createAgent(request), /ack lost/);
+  assert.equal(starts, 0);
+  loseStartAck = true;
+  await assert.rejects(ports.createAgent(request), /start ack lost/);
+  await ports.createAgent(request);
+  assert.equal(transfers, 2);
+  assert.equal(starts, 2);
+  assert.deepEqual(startMessageIds, ["hermes-handover:hermes-transfer-retry-key", "hermes-handover:hermes-transfer-retry-key"]);
+});
+
+test("Hermes fallback leader transfer uses its own registry and refuses a shared old identity", async () => {
+  const { supervisorShiftPorts } = await import("../supervisor-shift");
+  const { kanbanProjectName } = await import("../paths");
+  const f = fixture();
+  const project = kanbanProjectName();
+  writeFileSync(f.config, JSON.stringify({ supervisorAgentId: "old" }));
+  let creates = 0;
+  let starts = 0;
+  const host = {
+    agents: { ref: () => ({ refresh: async () => null, current: () => ({ status: "idle" }),
+      send: async (text: string) => { assert.ok(text.includes('"--kanban-leader"')); assert.ok(!text.includes('"--project"')); },
+      waitForFinish: async () => { writeFileSync(f.config, JSON.stringify({ supervisorAgentId: "hermes-fallback" })); return { status: "idle", final: null, lastMessage: "Transferred", error: null }; },
+    }) },
+    workspaces: { ref: () => ({ agents: { create: async () => {
+      creates++; return { id: "hermes-fallback", refresh: async () => null, current: () => ({}), send: async () => { starts++; } };
+    } } }) },
+  };
+  const request = { ...f.old, oldAgentId: "old", provider: "hermes", workspaceId: f.old.workspaceId!, prompt: "takeover", idempotencyKey: "hermes-fallback-key" };
+  await supervisorShiftPorts(host as never, project, async () => false).createAgent(request);
+  assert.equal(starts, 1);
+  for (const config of [
+    { supervisorAgentId: "old", supervisors: { [project]: "old" } },
+    { supervisors: { demo: "old", another: "old" } },
+    { supervisors: { demo: "old", another: " old " } },
+    { supervisorAgentId: "old", supervisors: { another: " old " } },
+  ]) {
+    writeFileSync(f.config, JSON.stringify(config));
+    await assert.rejects(supervisorShiftPorts(host as never, "supervisorAgentId" in config ? project : "demo", async () => false).createAgent(request), /multiple registrations/);
+  }
+  assert.equal(creates, 1);
 });
 
 test("standalone bundled CLI exchanges Paseo 0.11 RPC frames with an isolated fake socket host", async () => {

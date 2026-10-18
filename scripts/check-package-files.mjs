@@ -19,7 +19,7 @@ import { EXIT, isForbiddenPath, loadRules, loadDenylist, defaultListPath, scanFi
 import { packageEntries } from "./package-artifact.mjs";
 
 const DEFAULT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const ALLOWED = /^(paseo-plugin\.json|OVERVIEW\.md|LICENSE|README\.md|package\.json|index\.(client\.tsx|server\.ts)|(client|server|shared|locales|bin|assets|examples)\/.+)$/;
+export const ALLOWED = /^(paseo-plugin\.json|OVERVIEW\.md|LICENSE|README\.md|package\.json|integrations\/hermes\/(memory_bridge\.py|README\.md)|index\.(client\.tsx|server\.ts)|(client|server|shared|locales|bin|assets|examples)\/.+)$/;
 export const BLOCKED = /(\.test\.|(^|\/)__fixtures__\/|\.map$|^bin\/(test|coverage)\.mjs$|^server\/(?:[^/]+\/)*test\/)/;
 const JSON_ALLOWED = /^(package\.json|paseo-plugin\.json|(.+\/)?locales\/.+\.json|(.+\/)?[^/]+\.example\.json)$/;
 export const REQUIRED = ["package.json", "paseo-plugin.json", "OVERVIEW.md", "LICENSE"];

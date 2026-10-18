@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { compileRules, defaultListPath, masked, parseArgs, parseDenylist, scanFile } from "./check-private.mjs";
+import { compileRules, occurrenceFingerprint, unusedPublicOccurrences, defaultListPath, masked, parseArgs, parseDenylist, scanFile } from "./check-private.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(here, "check-private.mjs");
@@ -219,5 +219,47 @@ describe("command line", () => {
     assert.equal(out.status, 1, out.stdout);
     assert.match(out.stdout, /1 file\(s\) scanned, 1 hit/);
     assert.equal(cli(dir, ["--no-private-list", "--tree", "nope"]).status, 2);
+  });
+});
+
+
+describe("reviewed public occurrences", () => {
+  const path = "server/demo.ts";
+  const line = 'const provider = "PublicVendor";';
+  const match = [...line.matchAll(/PublicVendor/g)][0];
+  const privateRules = parseDenylist("PublicVendor\nOtherPrivate");
+  const rules = compileRules({ publicOccurrenceFingerprints: [occurrenceFingerprint(path, line, match, "PublicVendor")] });
+  test("allows only the exact reviewed match in its original context", () => {
+    assert.deepEqual(scanFile(path, line, rules, privateRules), []);
+    assert.equal(scanFile("server/other.ts", line, rules, privateRules).length, 1);
+    assert.equal(scanFile(path, line + " OtherPrivate", rules, privateRules).length, 2);
+    assert.equal(scanFile(path, "// PublicVendor", rules, privateRules).length, 1);
+    assert.equal(scanFile(path, line + "\nPublicVendor", rules, privateRules).length, 1);
+  });
+  test("never exempts generic rules or another denylist match", () => {
+    const generic = compileRules({ publicOccurrenceFingerprints: [occurrenceFingerprint(path, line, match, "PublicVendor")], rules: [{id: "generic", pattern: "PublicVendor"}] });
+    assert.equal(scanFile(path, line, generic, privateRules)[0].rule, "generic");
+    assert.equal(scanFile(path, line, rules, parseDenylist("/PublicVendor/" )).length, 1);
+    const overlapping = parseDenylist("PublicVendor\nVendor");
+    assert.equal(scanFile(path, line, rules, overlapping).length, 1);
+  });
+  test("path exceptions are exact and independent from content exceptions", () => {
+    const named = "integrations/PublicVendor/demo.py";
+    const m = [...named.matchAll(/PublicVendor/g)][0];
+    const scoped = compileRules({publicOccurrenceFingerprints: [occurrenceFingerprint(named, null, m, "PublicVendor")]});
+    assert.deepEqual(scanFile(named, "", scoped, privateRules), []);
+    assert.equal(scanFile(named, "PublicVendor", scoped, privateRules).length, 1);
+    assert.equal(scanFile(named + ".bak", "", scoped, privateRules).length, 1);
+  });
+  test("stale fingerprints stay detectable until their exact occurrence is scanned", () => {
+    const one = compileRules({publicOccurrenceFingerprints: [occurrenceFingerprint(path, line, match, "PublicVendor")]});
+    assert.equal(unusedPublicOccurrences(one).length, 1);
+    scanFile(path, line + " changed", one, privateRules);
+    assert.equal(unusedPublicOccurrences(one).length, 1);
+    scanFile(path, line, one, privateRules);
+    assert.deepEqual(unusedPublicOccurrences(one), []);
+  });
+  test("malformed fingerprints fail closed", () => {
+    assert.throws(() => compileRules({publicOccurrenceFingerprints: ["*"]}), /invalid public occurrence/);
   });
 });

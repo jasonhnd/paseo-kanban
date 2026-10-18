@@ -99,7 +99,7 @@ test("homepage, all panel tabs and settings repaint from two complete host theme
       import {createRoot} from 'react-dom/client'; import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
       import {View} from 'react-native'; import {RoleBoard} from './client/fleet/board'; import {Home} from './client/fleet/home'; import {FleetSettings} from './client/fleet/settings'; import {useStyles} from './client/fleet/ui';
       const layout={compact:false,platform:'web'};
-      function Surface({kind,theme,data}){const s=useStyles(theme,layout);const props={theme,layout,navigation:{openAgent(){}}};
+      function Surface({kind,theme,data}){const s=useStyles(theme,layout);const props={theme,layout,host:{id:'demo-host',label:'Demo'},navigation:{openAgent(){}}};
         return kind==='home'?<View style={s.screen}><Home s={s} data={data} onNavigate={()=>{}}/></View>:kind==='settings'?<FleetSettings {...props}/>:<RoleBoard {...props}/>;}
       export function mount(kind,theme,data){const container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container);
         const query=new QueryClient({defaultOptions:{queries:{retry:false,gcTime:Infinity}}});

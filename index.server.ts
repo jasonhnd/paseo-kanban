@@ -277,7 +277,7 @@ export default function contribute(server: PluginServerContext) {
         if (matches.length > 1) throw new KanbanError("conflict", t("leaderStart.error.multipleSessions"));
         return matches[0] ? { id: matches[0].id } : null;
       },
-      send: (agentId, text) => paseo.agents.ref(agentId).send(text),
+      send: (agentId, text, messageId) => paseo.agents.ref(agentId).send(text, { messageId }),
     };
   }
   server.handle(leaderOptionsRpc, (input, { paseo }) => leaderOptions(input.project, leaderHost(paseo)));

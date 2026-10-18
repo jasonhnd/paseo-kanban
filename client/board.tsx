@@ -8,7 +8,8 @@ import { attentionGroups, boardTabBadges, quietAttention, systemAlerts } from ".
 import { t } from "../shared/i18n";
 import { LEADER_LABEL } from "../shared/labels";
 import { BOARD_TABS, boardTabRpc, DEFAULT_BOARD_TAB, DEFAULT_PANEL_PREFS, type BoardTab, type PanelPrefs, panelPrefsRpc } from "../shared/panel-prefs";
-import { agentLinkRpc, agentsRpc, archiveRpc, autoStartRpc, boardRpc, decisionsRpc, fallbackSupervisorRpc, intakeRpc, openAgentRpc, resolveCardRpc, setTierRpc, startRpc, supervisorRpc, unblockRpc } from "../shared/rpc";
+import { agentLinkRpc, agentsRpc, archiveRpc, autoStartRpc, boardRpc, decisionsRpc, fallbackSupervisorRpc, intakeRpc, resolveCardRpc, setTierRpc, startRpc, supervisorRpc, unblockRpc } from "../shared/rpc";
+import { openAgentInHost } from "./agent-navigation";
 import { AttentionView, OverviewColumns, ProjectsView } from "./board-views";
 import { BoardTabs } from "./board-tabs";
 import { CardDrawer, type DrawerActions } from "./card-drawer";
@@ -43,7 +44,7 @@ export interface RefreshIntervals {
   decisionsMs: number;
 }
 
-export function KanbanBoard({ theme, layout, navigation, lockedProject, refresh: intervals = { boardMs: BOARD_REFRESH_MS, decisionsMs: DECISIONS_REFRESH_MS } }: PluginSurfaceProps & { lockedProject?: string | null; refresh?: RefreshIntervals }) {
+export function KanbanBoard({ theme, layout, host, navigation, lockedProject, refresh: intervals = { boardMs: BOARD_REFRESH_MS, decisionsMs: DECISIONS_REFRESH_MS } }: PluginSurfaceProps & { lockedProject?: string | null; refresh?: RefreshIntervals }) {
   // Reads the language setting once and re-renders the whole board when it differs from the guess.
   useI18n();
   const viewport = useWindowDimensions();
@@ -70,7 +71,6 @@ export function KanbanBoard({ theme, layout, navigation, lockedProject, refresh:
   const unblock = useRpc(unblockRpc);
   const start = useRpc(startRpc);
   const setTier = useRpc(setTierRpc);
-  const openOnDesktop = useRpc(openAgentRpc);
   const linkForPhone = useRpc(agentLinkRpc);
   const dropRequest = useRpc(intakeRpc);
   const setAuto = useRpc(autoStartRpc);
@@ -147,9 +147,9 @@ export function KanbanBoard({ theme, layout, navigation, lockedProject, refresh:
 
   function openAgent(agentId: string) {
     if (layout.platform === "web") {
-      openOnDesktop({ agentId })
-        .then((r) => setNotice(r.ok ? null : r.message))
-        .catch(() => navigation?.openAgent({ agentId }));
+      openAgentInHost(agentId, host.id, navigation, linkForPhone)
+        .then(() => setNotice(null))
+        .catch((error) => setNotice(t("board.openFailed", { error: String(error) })));
       return;
     }
     linkForPhone({ agentId })
@@ -163,7 +163,6 @@ export function KanbanBoard({ theme, layout, navigation, lockedProject, refresh:
       })
       .catch((err) => {
         setNotice(t("board.openFailed", { error: String(err) }));
-        navigation?.openAgent({ agentId });
       });
   }
 

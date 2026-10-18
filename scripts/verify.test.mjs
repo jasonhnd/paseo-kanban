@@ -5,7 +5,7 @@ import { runSteps, steps } from "./verify.mjs";
 
 test("the gate set covers required local publication checks", () => {
   const names = steps().map((step) => step.name);
-  for (const gate of ["typecheck", "test (scripts)", "test (plugin)", "build (CLI)", "build (Paseo)", "scan (check-private --all)", "identity (next commit)", "identity (history)", "gitleaks (history)", "contract (single source + compatibility)", "shared gates (single source)", "pack:check"]) {
+  for (const gate of ["typecheck", "test (scripts)", "test (plugin)", "build (CLI)", "build (Paseo)", "scan (check-private --all)", "scan (public occurrence freshness)", "identity (next commit)", "identity (history)", "gitleaks (history)", "contract (single source + compatibility)", "shared gates (single source)", "pack:check"]) {
     assert.ok(names.includes(gate), gate);
   }
   const testStep = steps().find((step) => step.name === "test (scripts)");

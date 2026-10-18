@@ -1,11 +1,19 @@
 /// <reference types="node" />
 import { randomUUID } from "node:crypto";
+import { isHermesLeaderProvider } from "../leader-provider";
+import { BOARD_AGENT_ENV } from "../agent-env";
+import { bindTokenAgent, identityFromToken, issueToken } from "../tokens";
+import { getDb } from "../db";
+import { withConfigLock } from "../config-lock";
+import { protocolFor, PROTOCOL_VERSION } from "../protocol";
+import { kanbanCliPath } from "../paths";
 import { providerBanned } from "../../shared/fleet/provider-policy";
 import { readBannedProviders, readLeaderThresholds } from "./adapters/config";
 // Manual <leader> shift. The RPC calls requestSupervisorShift after the user confirms,
 // continues, or cancels. A queue saved on disk resumes from the next homepage snapshot.
 import { markProxies } from "../../shared/fleet/leader-proxy";
 import type { PaseoApi } from "./paseo-api";
+import { waitForLeaderTurn } from "./leader-turn";
 import { appendFile, mkdir, readFile, unlink } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -34,6 +42,7 @@ import {
   shiftOpen,
   sumTodayUsd,
   supervisorSlots,
+  TRANSFER_TIMEOUT_MS,
   type HandoffLogLine,
   type ShiftAgent,
   type ShiftPorts,
@@ -418,6 +427,40 @@ async function permitPending(agentId: string): Promise<boolean> {
   }
 }
 
+/** Save identity before creation so a lost create response reuses the token held by that session. */
+function handoverIdentity(project: string, creationKey: string): string {
+  return withConfigLock(() => {
+    const db = getDb();
+    const link = db.prepare("SELECT data_json FROM supervisor_events WHERE kind = 'hermes_shift_identity' AND project = ? AND actor = ? ORDER BY id DESC LIMIT 1").get(project, creationKey) as { data_json: string } | undefined;
+    if (link) {
+      const id = (JSON.parse(link.data_json) as { tokenRowId: number }).tokenRowId;
+      const row = db.prepare("SELECT token FROM tokens WHERE rowid = ? AND role = 'guest'").get(id) as { token: string } | undefined;
+      if (!row) throw new Error("Handover identity was revoked; do not silently replace it");
+      identityFromToken(row.token);
+      return row.token;
+    }
+    const token = issueToken("guest", null, null);
+    const row = db.prepare("SELECT rowid AS id FROM tokens WHERE token = ?").get(token) as { id: number };
+    db.prepare("INSERT INTO supervisor_events (at, kind, project, actor, data_json) VALUES (?, 'hermes_shift_identity', ?, ?, ?)").run(new Date().toISOString(), project, creationKey, JSON.stringify({ tokenRowId: row.id }));
+    return token;
+  });
+}
+
+async function shiftRegistration(project: string): Promise<{ id: string | null; kind: "project" | "kanban"; shared: boolean }> {
+  const config = await readJson<Json>(configPath, {});
+  const raw = config.supervisors;
+  const supers = Object.fromEntries(Object.entries(raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Json : {}).map(([key, value]) => [key, typeof value === "string" ? value.trim() : value]));
+  const projectId = typeof supers[project] === "string" ? (supers[project] as string).trim() : "";
+  const kanbanId = typeof config.supervisorAgentId === "string" ? config.supervisorAgentId.trim() : "";
+  if (projectId) return { id: projectId, kind: "project", shared: kanbanId === projectId || Object.entries(supers).some(([key, value]) => key !== project && value === projectId) };
+  if (project === kanbanProjectName() && kanbanId) return { id: kanbanId, kind: "kanban", shared: Object.values(supers).includes(kanbanId) };
+  return { id: null, kind: "project", shared: false };
+}
+
+async function registeredShiftLeader(project: string): Promise<string | null> {
+  return (await shiftRegistration(project)).id;
+}
+
 export function supervisorShiftPorts(paseo: PaseoApi, project: string, hasPermit = permitPending): ShiftPorts {
   return {
     now: () => Date.now(),
@@ -429,7 +472,7 @@ export function supervisorShiftPorts(paseo: PaseoApi, project: string, hasPermit
       return pending ? { ...agent, pendingApproval: true } : agent;
     },
     sendAndWait: async (id, prompt, timeoutMs) => {
-      const result = await paseo.agents.ref(id).run(prompt, { timeoutMs });
+      const result = await waitForLeaderTurn(paseo.agents.ref(id), timeoutMs, prompt);
       return {
         timedOut: result.status === "timeout",
         reply: result.lastMessage,
@@ -439,12 +482,20 @@ export function supervisorShiftPorts(paseo: PaseoApi, project: string, hasPermit
     readHandover: (cwd) => readHandoverFile(cwd),
     readAcceptanceCards: async (project) => readAcceptanceCards(project),
     createAgent: async (input) => {
+      const hermes = isHermesLeaderProvider(input.provider);
+      if (hermes && !input.idempotencyKey) throw new Error("Hermes handover requires a stable creation key");
+      if (hermes && !input.oldAgentId) throw new Error("Hermes handover requires the current leader identity");
+      if (hermes && (await shiftRegistration(project)).shared) throw new Error("This leader owns multiple registrations; split them before a single-project handover");
+      const token = hermes ? handoverIdentity(project, input.idempotencyKey!) : null;
       // Same workspace only. This path does not call workspaces.create.
       const handle = await paseo.workspaces.ref(input.workspaceId).agents.create({
         idempotencyKey: input.idempotencyKey,
         labels: input.labels,
         title: input.title,
-        prompt: input.prompt,
+        ...(hermes ? { env: {
+          [BOARD_AGENT_ENV]: "1", KANBAN_ROLE: "supervisor", KANBAN_PROJECT: project,
+          KANBAN_TOKEN: token!, KANBAN_CLI: kanbanCliPath(),
+        } } : { prompt: input.prompt }),
         config: {
           provider: providerModel(input.provider, input.model),
           ...(input.modeId ? { modeId: input.modeId } : {}),
@@ -452,6 +503,40 @@ export function supervisorShiftPorts(paseo: PaseoApi, project: string, hasPermit
           featureValues: input.featureValues,
         },
       });
+      if (token) {
+        // Bind before sending the first turn; registration must never race identity setup.
+        const identity = identityFromToken(token);
+        if (identity.agentId && identity.agentId !== handle.id) throw new Error("Handover identity belongs to another session");
+        bindTokenAgent(token, handle.id);
+        // The live old leader must authorize the transfer. A successor cannot
+        // self-register while that leader is still present; never bypass that guard.
+        const registered = await shiftRegistration(project);
+        if (registered.shared) throw new Error("Leader registration became shared during handover");
+        if (registered.id !== handle.id) {
+          if (registered.id !== input.oldAgentId) throw new Error("Leader registration changed during handover");
+          const old = paseo.agents.ref(input.oldAgentId!);
+          await old.refresh();
+          if (old.current()?.status !== "idle" || await hasPermit(input.oldAgentId!)) throw new Error("The current leader is busy or awaiting permission; resume handover when idle");
+          const scope = registered.kind === "kanban" ? ["--kanban-leader"] : ["--project", project];
+          const argv = [kanbanCliPath(), "handover", ...scope, "--from", input.oldAgentId!, "--to", handle.id];
+          const role = registered.kind === "kanban" ? "the Kanban fallback leader" : `project ${JSON.stringify(project)}`;
+          await old.send(`The user-confirmed handover has created successor ${handle.id} for ${role}. You are still the registered leader. Transfer only this registered role and its unfinished-card ownership by executing Node with argv ${JSON.stringify(argv)}. Do not change unrelated registrations, create work, send outside messages, or archive either session. Report the result, then stop.`, {
+            messageId: `hermes-transfer:${input.idempotencyKey}`,
+            activeTurnBehavior: "steer",
+          });
+          const finished = await waitForLeaderTurn(old, TRANSFER_TIMEOUT_MS);
+          // The registry is the proof; a turn that ends badly after transferring still transferred.
+          const after = await shiftRegistration(project);
+          if (after.id !== handle.id || after.kind !== registered.kind || after.shared) {
+            throw new Error(finished.status === "idle"
+              ? "The current leader has not transferred registration to the successor"
+              : "The current leader's transfer turn has not finished; resume handover when idle");
+          }
+        }
+        await handle.send(`${protocolFor("supervisor")}\n\nProtocol ${PROTOCOL_VERSION}\n\n${input.prompt}`, {
+          messageId: `hermes-handover:${input.idempotencyKey}`,
+        });
+      }
       await handle.refresh().catch(() => null);
       const current = handle.current();
       return {
@@ -468,16 +553,7 @@ export function supervisorShiftPorts(paseo: PaseoApi, project: string, hasPermit
       await handle.refresh();
       if (!handle.archivedAt) await handle.archive();
     },
-    registeredSupervisor: async (project) => {
-      const config = await readJson<Json>(configPath, {});
-      const supers = config.supervisors;
-      if (supers && typeof supers === "object" && !Array.isArray(supers)) {
-        const id = (supers as Json)[project];
-        if (typeof id === "string" && id.trim()) return id.trim();
-      }
-      if (project === kanbanProjectName() && typeof config.supervisorAgentId === "string") return config.supervisorAgentId.trim();
-      return null;
-    },
+    registeredSupervisor: registeredShiftLeader,
     latestReply: async (id) => {
       const handle = paseo.agents.ref(id);
       const result = await handle.waitForFinish(1_500);

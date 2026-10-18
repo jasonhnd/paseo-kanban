@@ -372,7 +372,11 @@ export function listBoard(project?: string, options: { archived?: boolean; inclu
   const db = getDb();
   // Projects that left Paseo stay in the database but not on the board, unless asked for.
   const removed = options.includeRemoved ? new Set<string>() : removedProjects();
-  const projects = asRows<{ project: string }>(db.prepare(`SELECT DISTINCT project FROM tasks ORDER BY project`).all()).map((r) => r.project).filter((name) => !removed.has(name));
+  // A newly configured project must expose its Leader entry before its first card.
+  const projects = [...new Set([
+    ...Object.keys(loadConfig().projects ?? {}),
+    ...asRows<{ project: string }>(db.prepare(`SELECT DISTINCT project FROM tasks ORDER BY project`).all()).map((r) => r.project),
+  ])].filter((name) => !removed.has(name)).sort();
   const where: string[] = [];
   const params: string[] = [];
   if (project) {

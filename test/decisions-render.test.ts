@@ -160,8 +160,9 @@ describe("decision UI", () => {
 });
 
 describe("board RPC navigation integration", () => {
-  it("calls kanban.open-agent with { agentId } from the decisions tab, the drawer badge and the held card", async () => {
+  it("opens decisions and cards in the owning client without invoking the desktop opener", async () => {
     const calls: Array<{ method: string; input: unknown }> = [];
+    const opened: unknown[] = [];
     const blocked = boardCard({ id: 17, status: "blocked", blockedReason: "Wait for release scope", blockedKind: "needs_human", column: "todo", badge: zhCN("labels.status.blocked"), related: ("demo_tasks · " + zhCNPart("boardView.drag", 0, 3) + "3 " + zhCNPart("missingCwd.purge.notThisCard", 4, 5)) });
     const running = boardCard({ id: 18, code: "XYZ_0018", related: ("demo_tasks · " + zhCNPart("boardView.drag", 0, 3) + "3 " + zhCNPart("missingCwd.purge.notThisCard", 4, 5)) });
     const board = boardSnapshot([blocked, running], [item]);
@@ -175,11 +176,11 @@ describe("board RPC navigation integration", () => {
       if (method === "kanban.panel-prefs") return { ...DEFAULT_PANEL_PREFS, notice: null };
       if (method === "kanban.board-tab") return { tab: "overview" };
       if (method === "kanban.task") return taskDetail(blocked);
-      if (method === "kanban.open-agent") return { ok: true, message: zhCNPart("server.autoStartOn", 0, 3) };
+      if (method === "kanban.agent-link") return { url: "paseo://h/test/workspace/demo", message: "" };
       throw new Error(`unexpected RPC ${method}`);
     };
     const renderer = await act(async () => TestRenderer.create(React.createElement(QueryClientProvider, { client },
-      React.createElement(PluginRpcProvider, { invoke, children: React.createElement(KanbanBoard, { theme, layout, host: { id: "test", label: "Test" }, navigation: { openAgent() { throw new Error("desktop fallback unexpected"); }, openWorkspace() {} } }) })))) as unknown as { toJSON(): Node | null; unmount(): void };
+      React.createElement(PluginRpcProvider, { invoke, children: React.createElement(KanbanBoard, { theme, layout, host: { id: "test", label: "Test" }, navigation: { openAgent(input) { opened.push(input); }, openWorkspace() {} } }) })))) as unknown as { toJSON(): Node | null; unmount(): void };
     const cardNodes = nodes(renderer.toJSON(), n => n.props?.testID === "kanban-card");
     assert.equal(cardNodes.length, 2);
     const hintOf = (card: Node) => String(nodes(card, (n) => n.props?.testID === "card-status")[0]!.props!.accessibilityLabel);
@@ -195,10 +196,12 @@ describe("board RPC navigation integration", () => {
     const badge = nodes(renderer.toJSON(), (n) => n.props?.accessibilityLabel === zhCN("decisions.card.goLeader", {"code":"XYZ_0017"}))[0];
     await act(async () => (badge.props!.onPress as () => void)());
     await press(renderer, (zhCN("decisions.card.findLeader") + " · XYZ_0017"));
-    assert.deepEqual(calls.filter((call) => call.method === "kanban.open-agent"), [
-      { method: "kanban.open-agent", input: { agentId: "specific-leader" } },
-      { method: "kanban.open-agent", input: { agentId: "specific-leader" } },
-      { method: "kanban.open-agent", input: { agentId: "project-leader" } },
+    await settle();
+    assert.equal(calls.filter((call) => call.method === "kanban.open-agent").length, 0);
+    assert.deepEqual(opened, [
+      { agentId: "specific-leader", serverId: "test" },
+      { agentId: "specific-leader", serverId: "test" },
+      { agentId: "project-leader", serverId: "test" },
     ]);
     await act(async () => renderer.unmount());
     client.clear();

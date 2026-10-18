@@ -1,7 +1,7 @@
 // Tests for check-package-files.mjs: the whitelist rules, and a real npm pack on a throwaway plugin repository.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
@@ -25,6 +25,17 @@ describe("rules", () => {
     const files = [...BASE, "README.md", "index.client.tsx", "index.server.ts", "client/board.tsx", "server/rpc.ts", "shared/i18n.ts",
       "locales/en.json", "locales/zh-CN.json", "shared/locales/en.json", "shared/locales/zh-CN.json", "bin/tool.mjs", "assets/icon.png", "examples/plans.example.json"];
     assert.deepEqual(checkFiles(files, { icon: "assets/icon.png" }), []);
+  });
+
+  test("only the shipped ACP bridge and its guide are allowed", () => {
+    const pkg = JSON.parse(readFileSync(join(dirname(SCRIPT), "..", "package.json"), "utf8"));
+    const entries = pkg.files.filter(file => file.startsWith("integrations/"));
+    assert.equal(entries.length, 2);
+    assert.deepEqual(checkFiles([...BASE, ...entries], {}), []);
+    const folder = entries[0].slice(0, entries[0].lastIndexOf("/"));
+    for (const file of ["test_memory_bridge.py", "state.db", "auth.json", "other.py"]) {
+      assert.ok(checkFiles([...BASE, `${folder}/${file}`], {}).length > 0);
+    }
   });
 
   test("anything else is refused", () => {

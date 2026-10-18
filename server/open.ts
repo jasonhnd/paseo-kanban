@@ -1,7 +1,5 @@
 /// <reference types="node" />
-import { execFile } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "./perf-fs";
-import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { getDb } from "./db";
 import { isProjectMain, projectMain, samePath, type ListedWorkspace } from "./placement";
@@ -9,12 +7,11 @@ import { projectRoot } from "./paths";
 import { isLeaderSessionTitle } from "./supervisor";
 import { bucketsHolding, listAgentRecords } from "./agent-index";
 import { t } from "../shared/i18n";
+import { paseoHome } from "./contract";
 
-const PASEO_DIR = join(homedir(), ".paseo");
-const PASEO_BIN = join(homedir(), ".local", "bin", "paseo");
 
 export function agentsDir(): string {
-  return process.env.KANBAN_AGENTS_DIR ?? join(PASEO_DIR, "agents");
+  return process.env.KANBAN_AGENTS_DIR ?? join(paseoHome(), "agents");
 }
 
 export interface AgentFile {
@@ -38,14 +35,6 @@ export interface AgentFile {
   model: string | null;
 }
 
-function run(cmd: string, args: string[], timeoutMs: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) reject(new Error(String(stderr || err.message).slice(0, 300)));
-      else resolve(stdout);
-    });
-  });
-}
 
 export type AgentRecordRead = { state: "ok"; file: AgentFile } | { state: "missing" } | { state: "unreadable" };
 
@@ -155,17 +144,9 @@ export function agentCreatedAt(agentId: string): string | null {
   return findAgentFile(agentId)?.createdAt ?? null;
 }
 
-export async function openAgent(agentId: string): Promise<{ ok: boolean; message: string }> {
-  const rec = findAgentFile(agentId);
-  if (rec && rec.cwd && !existsSync(rec.cwd)) {
-    return { ok: false, message: t("open.cwdMissing", { cwd: rec.cwd }) };
-  }
-  try {
-    const out = await run(PASEO_BIN, ["agent", "open", agentId, "--json"], 15_000);
-    return { ok: /"opened"/.test(out), message: out.trim().slice(0, 200) };
-  } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : String(err) };
-  }
+/** Compatibility response for older clients: never launch a different desktop process. */
+export async function openAgent(_agentId: string): Promise<{ ok: boolean; message: string }> {
+  return { ok: false, message: t("open.useClientNavigation") };
 }
 
 export type AgentLiveness = "alive" | "closed" | "error" | "archived" | "missing";
@@ -267,7 +248,7 @@ export function agentLink(agentId: string): { url: string | null; message: strin
   }
   let serverId = "";
   try {
-    serverId = readFileSync(join(PASEO_DIR, "server-id"), "utf8").trim();
+    serverId = readFileSync(join(paseoHome(), "server-id"), "utf8").trim();
   } catch {
     return { url: null, message: t("open.noServerId") };
   }

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { t, translate } from "../shared/i18n";
 import { LEADER_LABEL } from "../shared/labels";
 import type { LeaderStartState } from "../shared/leader-start";
+import { isHermesLeaderProvider } from "./leader-provider";
 import { BOARD_AGENT_ENV } from "./agent-env";
 import { projectSupervisor, resolveConfiguredProject } from "./config";
 import { assertProjectInPaseo } from "./paseo-projects";
@@ -33,7 +34,7 @@ export interface LeaderStartHost {
     config: ReturnType<typeof buildAgentConfig>;
   }): Promise<{ id: string }>;
   find?(requestId: string): Promise<{ id: string } | null>;
-  send(agentId: string, text: string): Promise<void>;
+  send(agentId: string, text: string, messageId?: string): Promise<void>;
 }
 
 const inFlight = new Set<string>();
@@ -113,11 +114,16 @@ export async function previewLeader(input: Selection, host: LeaderStartHost) {
 }
 
 function introduction(value: LeaderStartState): string {
-  return translate(value.language, "leaderStart.intro", {
+  const intro = translate(value.language, "leaderStart.intro", {
     project: JSON.stringify(value.project),
     version: value.version,
     cli: JSON.stringify(kanbanCliPath()),
   });
+  // ACP does not transport Paseo's creation-only systemPrompt. A visible first
+  // message is the portable delivery path, including after a failed send.
+  return value.deliveryMode === "session-message"
+    ? `${protocolFor("supervisor", { language: value.language })}\n\nProtocol ${value.version}\n\n${intro}`
+    : intro;
 }
 
 function rememberToken(project: string, requestId: string, token: string): void {
@@ -182,11 +188,11 @@ export async function startLeader(input: Selection & { requestId: string }, host
       ...claimed.value,
       agentId: agent.id,
       state: verified ? "ready" : "protocol-missing",
-      deliveryMode: verified ? "systemPrompt" : null,
+      deliveryMode: verified ? (isHermesLeaderProvider(picked.profile.provider) ? "session-message" : "systemPrompt") : null,
     });
     if (!verified) return value;
     try {
-      await host.send(agent.id, introduction(value));
+      await host.send(agent.id, introduction(value), `leader-start:${value.requestId}`);
     } catch {
       return save(claimed.id, { ...value, state: "delivery-failed" });
     }
@@ -221,7 +227,9 @@ export async function leaderStatus(projectArg: string, host: LeaderStartHost): P
         ...row.value,
         agentId: found.id,
         state: verified ? "delivery-failed" : "protocol-missing",
-        deliveryMode: verified ? "systemPrompt" : null,
+        // The recovered provider may use ACP. Re-deliver the complete protocol
+        // visibly instead of assuming a creation-only system prompt arrived.
+        deliveryMode: verified ? "session-message" : null,
       });
     }
   }
@@ -231,7 +239,7 @@ export async function leaderStatus(projectArg: string, host: LeaderStartHost): P
   if (row.value.state === "registered") return row.value;
   if (row.value.state === "delivery-failed" && row.value.agentId) {
     try {
-      await host.send(row.value.agentId, introduction(row.value));
+      await host.send(row.value.agentId, introduction(row.value), `leader-start:${row.value.requestId}`);
       return save(row.id, { ...row.value, state: "ready" });
     } catch {
       return row.value;
@@ -248,6 +256,6 @@ export async function recoverLeader(projectArg: string, host: LeaderStartHost): 
     throw new KanbanError("invalid", translate(row?.value.language ?? "en", "leaderStart.error.recoverNeedsSession"));
   }
   const protocol = protocolFor("supervisor", { language: row.value.language });
-  await host.send(row.value.agentId, `${translate(row.value.language, "leaderStart.recovery")}\n\n${protocol}\n\n${introduction(row.value)}`);
+  await host.send(row.value.agentId, `${translate(row.value.language, "leaderStart.recovery")}\n\n${protocol}\n\n${introduction(row.value)}`, `leader-recovery:${row.value.requestId}`);
   return save(row.id, { ...row.value, state: "ready", deliveryMode: "session-message" });
 }

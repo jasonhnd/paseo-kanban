@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { openAgent as refuseDesktopOpen } from "../open";
 import { createPolicyChannel, injectPolicyChannel, onPolicyPublished } from "../application/policy-snapshot";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { existsSync, readFileSync } from "node:fs";
@@ -113,20 +114,7 @@ function registerFleet(server: PluginServerContext, currentHandle: () => PaseoAp
   server.handle(rolesPageRpc, async () => buildRolesPageView());
   server.handle(rolesSetRpc, async (input) => changesBoard(setRoleModel(input)));
   server.handle(rolesUndoRpc, async ({ id }) => changesBoard(undoRoleChange(id)));
-  server.handle(openAgentRpc, async ({ agentId }) => {
-    // Opening loads the agent; if its working directory is gone, Paseo can crash while starting the provider.
-    const rec = (await readAgentRecords()).find((r) => r.id === agentId);
-    if (rec && !existsSync(rec.cwd)) {
-      return { ok: false, message: t("server.open.cwdMissing", { cwd: rec.cwd }) };
-    }
-    // `paseo agent open` resolves the agent's workspace on the daemon, so it works for agents the app has not loaded.
-    try {
-      const out = await run(BIN.paseo, ["agent", "open", agentId, "--json"], 15_000);
-      return { ok: /"opened"/.test(out), message: out.trim().slice(0, 200) };
-    } catch (e) {
-      return { ok: false, message: String(e).slice(0, 200) };
-    }
-  });
+  server.handle(openAgentRpc, ({ agentId }) => refuseDesktopOpen(agentId));
   server.handle(agentLinkRpc, async ({ agentId }) => {
     // Deep link the Paseo app understands: /h/<server>/workspace/<workspace>?open=agent:<id>.
     // Works on the phone even when the app has not loaded that agent yet.

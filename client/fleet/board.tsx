@@ -6,7 +6,8 @@ import { useQuery } from "../query";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { Linking, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { accessRpc } from "../../shared/fleet/access";
-import { agentLinkRpc, boardInsightsRpc, boardSnapshotRpc, openAgentRpc } from "../../shared/fleet/board";
+import { agentLinkRpc, boardInsightsRpc, boardSnapshotRpc } from "../../shared/fleet/board";
+import { openAgentInHost } from "../agent-navigation";
 import {
   appearanceDirty,
   boardWarnings,
@@ -16,7 +17,6 @@ import {
   phoneLinkPlan,
   phoneOpenError,
   prefsSaveFailed,
-  desktopOpenNotice,
   shouldWarmUsage,
   snapshotRefetchMs,
   SNAPSHOT_TABS,
@@ -39,12 +39,12 @@ import { RolesTab } from "./roles";
 import { TabPane, useMountedTabs } from "./tab-pane";
 import { Empty, Fold, type OpenAgent, pressed, Segmented, timeAgo, useStyles } from "./ui";
 
-type BoardProps = Pick<PluginSurfaceProps, "theme" | "layout" | "navigation">;
+type BoardProps = Pick<PluginSurfaceProps, "theme" | "layout" | "host" | "navigation">;
 
 const SNAPSHOT_KEY = ["afc", "snapshot"] as const;
 
-export function RoleBoard({ theme, layout, navigation, tab, onTabChange, integrated = false }: PluginSurfaceProps & { tab?: PanelTab; onTabChange?: (tab: PanelTab) => void; integrated?: boolean }) {
-  const board = useRoleBoard({ theme, layout, navigation }, tab, onTabChange, integrated);
+export function RoleBoard({ theme, layout, host, navigation, tab, onTabChange, integrated = false }: PluginSurfaceProps & { tab?: PanelTab; onTabChange?: (tab: PanelTab) => void; integrated?: boolean }) {
+  const board = useRoleBoard({ theme, layout, host, navigation }, tab, onTabChange, integrated);
   // Keyed on the language so every row renders again in the server's language once the prefs reply arrives.
   return (
     <View key={board.lang} style={board.s.screen} onLayout={(event) => board.setPanelWidth(event.nativeEvent.layout.width)}>
@@ -62,12 +62,12 @@ export function RoleBoard({ theme, layout, navigation, tab, onTabChange, integra
   );
 }
 
-function useRoleBoard({ theme, layout, navigation }: BoardProps, controlledTab?: PanelTab, onTabChange?: (tab: PanelTab) => void, integrated = false) {
+function useRoleBoard({ theme, layout, host, navigation }: BoardProps, controlledTab?: PanelTab, onTabChange?: (tab: PanelTab) => void, integrated = false) {
   const [panelWidth, setPanelWidth] = useState<number | null>(null);
   const { width } = useWindowDimensions();
   const chrome = usePanelChrome(theme, layout, panelWidth, width, integrated);
   const data = useBoardQueries(chrome.queryClient);
-  const openAgent = useOpenAgent(layout.platform, navigation, chrome.setNotice);
+  const openAgent = useOpenAgent(layout.platform, host.id, navigation, chrome.setNotice);
   const tab = controlledTab ?? chrome.prefs.tab;
   const mounted = useMountedTabs(tab, SNAPSHOT_TABS, Boolean(data.snap));
   const badges = panelTabBadges(data.snap, data.insights.data, data.access.data?.services.length ?? 0);
@@ -151,12 +151,13 @@ function useWarmUsage(ready: boolean, queryClient: QueryClient, usageRpc: (input
   }, [ready, queryClient, usageRpc]);
 }
 
-function useOpenAgent(platform: string, navigation: PluginSurfaceProps["navigation"], setNotice: (notice: string | null) => void): OpenAgent {
-  const openOnDesktop = useRpc(openAgentRpc);
+function useOpenAgent(platform: string, serverId: string, navigation: PluginSurfaceProps["navigation"], setNotice: (notice: string | null) => void): OpenAgent {
   const agentLink = useRpc(agentLinkRpc);
   return (agentId) => {
     if (openChannel(platform) === "desktop") {
-      openOnDesktop({ agentId }).then((result) => setNotice(desktopOpenNotice(result.ok, result.message))).catch(() => navigation?.openAgent({ agentId }));
+      openAgentInHost(agentId, serverId, navigation, agentLink)
+        .then(() => setNotice(null))
+        .catch((error) => setNotice(phoneOpenError(error)));
       return;
     }
     agentLink({ agentId })
@@ -167,7 +168,6 @@ function useOpenAgent(platform: string, navigation: PluginSurfaceProps["navigati
       })
       .catch((error: unknown) => {
         setNotice(phoneOpenError(error));
-        navigation?.openAgent({ agentId });
       });
   };
 }

@@ -25,6 +25,7 @@ export function steps() {
     { name: "build (Paseo)", command: node("scripts/paseo-build-check.mjs", "--strict") },
     { name: "test (plugin)", command: node("scripts/test-plugin.mjs") },
     { name: "scan (check-private --all)", command: node("scripts/check-private.mjs", "--all", "--quiet") },
+    { name: "scan (public occurrence freshness)", command: node("scripts/check-public-occurrences.mjs") },
     { name: "scan (reachable history)", command: node("scripts/check-private.mjs", "--history", "HEAD", "--quiet") },
     { name: "identity (next commit)", command: node("scripts/check-identity.mjs") },
     { name: "identity (history)", command: node("scripts/check-identity.mjs", "--history") },

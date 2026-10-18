@@ -11,6 +11,7 @@
 //   --list       private denylist (default $FLEET_PRIVATE_DENYLIST, else ~/.config/paseo-fleet/private-denylist.txt)
 //   --no-private-list   generic rules only (CI; the private list never leaves the author's machine)
 // Exit: 0 clean, 1 hits, 2 setup problem (missing denylist, unreadable rules, not a git checkout).
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -58,6 +59,17 @@ const regex = (source, flags = "") => new RegExp(source, flags);
 export function compileRules(json) {
   const list = (items) => (items ?? []).map((source) => regex(source));
   return {
+    // Reviewed public-name collisions are bound to the exact match, path and line.
+    // These fingerprints never exempt another rule, another match or a changed line.
+    publicOccurrenceLiterals: (json.publicOccurrenceLiterals ?? []).map(value => {
+      if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/.test(value)) throw new SetupError("invalid public occurrence literal");
+      return value;
+    }),
+    usedPublicOccurrences: new Set(),
+    publicOccurrenceFingerprints: new Set((json.publicOccurrenceFingerprints ?? []).map(value => {
+      if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) throw new SetupError("invalid public occurrence fingerprint");
+      return value;
+    })),
     privateIdentifierExceptions: (json.privateIdentifierExceptions ?? []).map(item => {
       if (!Array.isArray(item.termParts) || !item.termParts.length
           || item.termParts.some(part => typeof part !== "string" || !part)
@@ -125,12 +137,30 @@ export function isForbiddenPath(path, compiled) {
     || (anyMatch(compiled.forbidden, path) && !anyMatch(compiled.forbiddenAllow, path));
 }
 
+export function occurrenceFingerprint(path, line, match, literal) {
+  return createHash("sha256").update(JSON.stringify([path, line, match.index, match[0], literal.toLowerCase()])).digest("hex");
+}
+
+function reviewedPublicMatch(compiled, path, line, match, rule) {
+  if (typeof rule.literal !== "string") return false; // Regex rules are never exempted.
+  const fingerprint = occurrenceFingerprint(path, line, match, rule.literal);
+  if (!compiled.publicOccurrenceFingerprints?.has(fingerprint)) return false;
+  compiled.usedPublicOccurrences.add(fingerprint);
+  return true;
+}
+
+export function unusedPublicOccurrences(compiled) {
+  return [...compiled.publicOccurrenceFingerprints].filter(value => !compiled.usedPublicOccurrences.has(value));
+}
+
 /** Hits for one file. `text` is null for binary files, which are judged by path only. */
 export function scanFile(path, text, compiled, privateRules = []) {
   const hits = [];
   // A file name can leak as much as its content, so private terms are checked on every path, ignored ones too.
   for (const rule of privateRules) {
-    for (const match of path.matchAll(rule.pattern)) hits.push({ path, line: 0, rule: rule.id, snippet: masked(path, match.index, match[0].length) });
+    for (const match of path.matchAll(rule.pattern)) {
+      if (!reviewedPublicMatch(compiled, path, null, match, rule)) hits.push({ path, line: 0, rule: rule.id, snippet: masked(path, match.index, match[0].length) });
+    }
   }
   if (isForbiddenPath(path, compiled)) hits.push({ path, line: 0, rule: "forbidden-path", snippet: path });
   // Ignoring file content never exempts a prohibited path, including images and other binary files.
@@ -143,6 +173,7 @@ export function scanFile(path, text, compiled, privateRules = []) {
     for (const rule of rules) {
       for (const match of line.matchAll(rule.pattern)) {
         if (anyMatch(rule.allow, match[0])) continue;
+        if (rule.id === "private" && reviewedPublicMatch(compiled, path, line, match, rule)) continue;
         if (rule.id === "private" && identifiers.has(`${offset + match.index}:${match[0].length}`)) continue;
         hits.push({ path, line: index + 1, rule: rule.id, snippet: masked(line, match.index, match[0].length) });
       }
@@ -213,7 +244,7 @@ export function run(argv, env = process.env, cwd = process.cwd()) {
     }
     hits.push(...scanFile(path, asText(buffer), compiled, privateRules));
   }
-  return { files: files.length, hits };
+  return { files: files.length, hits, unusedPublicOccurrences: unusedPublicOccurrences(compiled) };
 }
 
 export function summarize(hits) {
