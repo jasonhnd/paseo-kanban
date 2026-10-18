@@ -74,13 +74,19 @@ paseo plugin install github:jasonhnd/paseo-kanban --ref c106efb88a659931d01f40a2
 2. 配置自己的额度来源和策略。Fleet 向派活入口提供不可变 `paseo-policy/v1`；策略缺失／无效或受保护额度未知时，拒绝派活，未知不是 0。旧 `fleet-quota/v1` 文件、`afc`／`roles` 是同根下兼容入口。不要再注册独立的旧 Fleet 插件。
 3. 新装使用 `KANBAN_DATA_DIR`，否则为 `PASEO_HOME/plugin-data/paseo-kanban`（Paseo home 默认 `~/.paseo`）。取消非空旧存储变量。不会自动导入旧资料；复用状态前阅读[数据归属](DATA.md)和[手动转移](../MANUAL-MIGRATION.md)。
 4. 建立可丢弃的 `demo` Git 仓库／workspace，先做初始 commit。项目设置填 workspace、短号、保护分支；项目 leader 面板选档案／workspace／语言，预览并启动 leader，确认协议送达。普通对话选择同一档案不完成此设置。
-5. 在该 leader 会话为 `demo` 调用 `kanban_supervise`，或运行：
+5. 在该 leader 会话为 `demo` 调用 `kanban_supervise`，或运行稳定看板命令。已设置 `KANBAN_DATA_DIR` 时：
 
    ```sh
-   node "$BOARD_INSTALL/bin/paseo-kanban.mjs" supervise --project demo
+   "$KANBAN_DATA_DIR/bin/paseo-kanban" supervise --project demo
    ```
 
-   `BOARD_INSTALL` 取自 `paseo plugin ls paseo-kanban --json` 报告的当前安装路径。CLI 与插件使用相同 Paseo home／数据根。会话使用自己注入的身份，不粘贴 token。面板确认登记；已有活着的 leader 须交接，不直接替换。
+   否则：
+
+   ```sh
+   "${PASEO_HOME:-$HOME/.paseo}/plugin-data/paseo-kanban/bin/paseo-kanban" supervise --project demo
+   ```
+
+   插件每次启动重写这条命令，使它执行当前安装。不要把长期会话指到安装目录的 `bin/paseo-kanban.mjs`；该目录名每次更新都会变。CLI 与插件使用相同 Paseo home 与数据根。会话使用自己注入的身份，不粘贴 token。面板确认登记；已有活着的 leader 须交接，不直接替换。
 6. 告诉 leader：“创建 L1 卡，在 demo 仓库添加 hello.md，内容严格为 Hello 加换行；检查文件与内容，本地提交、审查、验收，不 push 或发布。”核对执行 commit／交接、不同实际 model 审查、leader 验收、卡片完成、内容正确、Git 干净及托管 agent／workspace 清理。这是验证步骤，不是首卡已通过的报告。
 
 派活等待时查[工作流](WORKFLOW.md)及[排错](COMPATIBILITY.md)。不要把认证文件、原始数据库、备份或未脱敏 doctor 输出发进 issue。
@@ -99,11 +105,11 @@ paseo plugin ls paseo-kanban --json
 
 升级或 reload 期间，已挂载面板遇到暂时的“Plugin not available”读取失败会保留上次数据，并温和显示“插件正在更新…”。已确认可重复的读取最多退避重试 5 次，重试窗口不超过 15 秒；其他错误仍正常显示。保存和操作不会自动重试，请确认结果后再试。插件持续不可用时，面板会提示稍后刷新。
 
-每次升级或代码回退后，保持停派活，直到同一宿主报告目标完整 revision、当前安装路径、enabled/running，且数据根和设置未变。更新 `BOARD_INSTALL`，从该路径运行已安装 Node CLI。等待两份导出都指向该路径，再在真实面板用获准的可丢弃决定：关闭，核两处计数和已存 done；在面板仍挂载时 Undo，再核恢复为 open。导出一致或只有 running 都不证明写入可用。动作失败时保留错误，继续停派活。
+每次升级或代码回退后，保持停派活，直到同一宿主报告目标完整 revision、当前安装路径、enabled/running，且数据根和设置未变。更新 `BOARD_INSTALL` 并从该路径运行已安装 Node CLI，只用于你自己核对已安装 CLI。Agent 提示和数据目录 `bin/` 里的稳定命令在插件启动后已经跟随当前安装，不必再换路径。等待两份导出都指向当前安装，再在真实面板用获准的可丢弃决定：关闭，核两处计数和已存 done；在面板仍挂载时 Undo，再核恢复为 open。导出一致或只有 running 都不证明写入可用。动作失败时保留错误，继续停派活。
 
 回退到 c106 或未改动的本地 rc.1/rc.2 代码时，**更新后必须在同一宿主运行 `paseo plugin reload paseo-kanban --json`，确认 running 再做上述复验**；这些旧版本在模块加载时缓存命令路径。reload 和所有 plugin 命令使用同一个 `--host` 或本地 `--home` 选择器，绝不同时用两者。GitHub 回退不可使用未公开 tag。reload 失败保持 failed，修复／重载前不恢复，不是自动回退。仅加载本代码改动无需重启 daemon。
 
-`--check` 只预览。`--ref` 只选择这次操作；以后不带 ref 更新会跟随远端默认 HEAD。完整审过的 SHA 可精确指定目标。更新后核对 revision／路径和真实 UI，托管目录可能变化，因此更新 `BOARD_INSTALL`。不要在托管 checkout 里改代码或构建。[发布与恢复](RELEASE.md)提供备份、精确 SHA 回退和待重放清单。
+`--check` 只预览。`--ref` 只选择这次操作；以后不带 ref 更新会跟随远端默认 HEAD。完整审过的 SHA 可精确指定目标。更新后核对 revision／路径和真实 UI。`BOARD_INSTALL` 只在核对已安装 CLI 时更新；数据目录里的稳定命令不变。不要在托管 checkout 里改代码或构建。[发布与恢复](RELEASE.md)提供备份、精确 SHA 回退和待重放清单。
 
 要把代码回退到已验证的公开 c106 基线，保持同一数据根，两条操作都用完整 SHA：
 

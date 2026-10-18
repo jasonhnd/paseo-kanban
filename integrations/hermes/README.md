@@ -38,8 +38,10 @@ give each provider command its own `--memory-dir`.
 Example provider command argv (replace each placeholder with an absolute path):
 
 ```json
-["python3", "/path/to/memory_bridge.py", "--memory-dir", "/path/to/existing-profile/memories", "--", "hermes", "-p", "existing-profile", "acp"]
+["python3", "<data directory>/bin/memory_bridge.py", "--memory-dir", "/path/to/existing-profile/memories", "--", "hermes", "-p", "existing-profile", "acp"]
 ```
+
+Every plugin start refreshes a copy of this wrapper at `<data directory>/bin/memory_bridge.py` when the copy differs from the current install. `<data directory>` is `KANBAN_DATA_DIR` when that variable is set, otherwise `$PASEO_HOME/plugin-data/paseo-kanban` (`PASEO_HOME` defaults to `~/.paseo`). Point the `hermes-leader` provider command at that copy once. A later plugin upgrade does not require editing the provider command. This plugin does not rewrite provider configuration.
 
 Configure this on the **test daemon first**, using the normal `hermes` provider id.
 The wrapper must point at the same profile as the child command. It does not read,

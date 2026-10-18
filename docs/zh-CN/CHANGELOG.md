@@ -7,6 +7,7 @@
 ### 修复（Fixed）
 
 - 允许 Paseo daemon/app `>=0.11.0 <0.13.0`，恢复升级到 0.12.x 后的插件加载、调度 tick 和看板 MCP。使用隔离的官方 0.11.2 与 0.12.0 runtime 验证；保留 0.11 SDK 依赖锁定，使两个宿主沿用共同的通信契约。修复 [issue #14](https://github.com/jasonhnd/paseo-kanban/issues/14)。
+- 插件每次启动在自己的数据目录刷新固定 `bin`：看板命令启动器，以及 `integrations/hermes/memory_bridge.py` 的副本。协议文本、新建 leader 的提示和换班交接消息都使用这个启动器。固定命令缺失或与当前安装不一致时，doctor 报 yellow。把 provider 命令指到这份稳定副本一次即可；插件不改写 provider 配置，之后升级不用再改这条命令。修复 [issue #12](https://github.com/jasonhnd/paseo-kanban/issues/12)。
 
 ## 0.1.0-rc.20 — 待审查与发布
 

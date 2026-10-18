@@ -72,13 +72,19 @@ Installation performs locked dependency preparation and generates the command bu
 2. Configure your own pool sources and policy. Fleet supplies an immutable `paseo-policy/v1` revision to Kanban admission. Missing/invalid policy or unknown protected quota keeps dispatch closed; an unknown reading is not zero. Old `fleet-quota/v1` files and `afc`/`roles` are compatibility interfaces below the same root. Do not register a separate old Fleet plugin.
 3. New installs use `KANBAN_DATA_DIR`, or `PASEO_HOME/plugin-data/paseo-kanban` (Paseo home defaults to `~/.paseo`). Unset nonempty retired storage overrides. Existing data is not automatically imported. Read [data ownership](docs/DATA.md) and [manual transfer](docs/MANUAL-MIGRATION.md) before reusing old state.
 4. Create a disposable Git repository/workspace named `demo` with an initial commit. In project settings, set its workspace, short code and protected branches. In the project's leader panel, choose a leader profile/workspace/language, preview and start the leader. Confirm protocol delivery. An ordinary conversation using the same profile does not perform this setup.
-5. In that leader session, call `kanban_supervise` for project `demo`, or run:
+5. In that leader session, call `kanban_supervise` for project `demo`, or run the stable board command. When `KANBAN_DATA_DIR` is set:
 
    ```sh
-   node "$BOARD_INSTALL/bin/paseo-kanban.mjs" supervise --project demo
+   "$KANBAN_DATA_DIR/bin/paseo-kanban" supervise --project demo
    ```
 
-   Set `BOARD_INSTALL` to the current installed path reported by `paseo plugin ls paseo-kanban --json`. Use the same Paseo home/data root as the plugin. The session uses its own injected identity; do not paste tokens. Confirm registration in the panel; hand over an existing live leader instead of replacing it.
+   Otherwise:
+
+   ```sh
+   "${PASEO_HOME:-$HOME/.paseo}/plugin-data/paseo-kanban/bin/paseo-kanban" supervise --project demo
+   ```
+
+   The plugin rewrites that command on every start so it runs the current install. Do not point a long-lived session at the install directory's `bin/paseo-kanban.mjs`; that directory name changes on every update. Use the same Paseo home and data root as the plugin. The session uses its own injected identity; do not paste tokens. Confirm registration in the panel; hand over an existing live leader instead of replacing it.
 6. Ask the leader: "Create an L1 card to add hello.md containing exactly Hello and a newline in the demo repository. Verify the file and content. Commit, review and accept locally; do not push or publish." Require an executor commit and handoff, review by a different actual model, leader acceptance, a finished card, correct file, clean Git status and managed agent/workspace cleanup. This is a validation walkthrough, not a report that the cycle has passed.
 
 Use [workflow](docs/WORKFLOW.md) and [troubleshooting](docs/COMPATIBILITY.md) if dispatch is held. Never share authentication files, raw board databases, backups or unredacted doctor output in an issue.
@@ -99,11 +105,11 @@ Use those two update commands only when the GitHub Release record authorizes `v0
 
 During an update or reload, mounted panels keep their last data and show “Plugin is updating…” for temporary “Plugin not available” read failures. Audited reads retry up to five times with backoff (a 15-second retry window); other errors remain visible. Saves and actions are never automatically retried: check the result before trying again. If the plugin stays unavailable, the panel asks you to refresh later.
 
-After every upgrade or code rollback, keep dispatch paused until the same host reports the intended full revision, current installed path, enabled/running state and unchanged data root/settings. Refresh `BOARD_INSTALL`; run the installed Node CLI from that path. Wait for both exports to name it, then use an approved disposable decision in the real panel: close it, verify both counts and stored done state, Undo while mounted, and verify it is open again. An export match or `running` alone does not prove a write works. If an action fails, preserve the error and keep dispatch paused.
+After every upgrade or code rollback, keep dispatch paused until the same host reports the intended full revision, current installed path, enabled/running state and unchanged data root/settings. Refresh `BOARD_INSTALL` and run the installed Node CLI from that path only to check the installed CLI yourself. Agent prompts and the stable command in the data directory's `bin/` already follow the current install after the plugin starts, so they do not need a new path. Wait for both exports to name the current install, then use an approved disposable decision in the real panel: close it, verify both counts and stored done state, Undo while mounted, and verify it is open again. An export match or `running` alone does not prove a write works. If an action fails, preserve the error and keep dispatch paused.
 
 When downgrading to c106 or the unchanged local rc.1/rc.2 code, **run `paseo plugin reload paseo-kanban --json` on that same host after the update and require `running` before the checks above**. Those older versions cache command paths at module load. Use the same `--host` or local `--home` selector on reload and all plugin commands; never both. Do not use an unpublished tag for a GitHub rollback. Reload failure stays failed until repaired/reloaded; it is not automatic rollback. A daemon restart is not required solely for this code change.
 
-`--check` previews without installing. `--ref` selects this operation only; a later update without it follows the remote's default HEAD. A full reviewed SHA provides an exact target. Check the installed revision/path and actual UI after the update, and refresh `BOARD_INSTALL` because managed paths can change. Do not edit or build inside a managed checkout. See [release and recovery](docs/RELEASE.md) for backup, exact-SHA rollback and the pending verification checklist.
+`--check` previews without installing. `--ref` selects this operation only; a later update without it follows the remote's default HEAD. A full reviewed SHA provides an exact target. Check the installed revision/path and actual UI after the update. Refresh `BOARD_INSTALL` only to check the installed CLI; the stable command in the data directory does not change. Do not edit or build inside a managed checkout. See [release and recovery](docs/RELEASE.md) for backup, exact-SHA rollback and the pending verification checklist.
 
 For code rollback to the previously verified public c106 baseline, keep the same data root and use its full SHA on both operations:
 
