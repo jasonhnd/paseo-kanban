@@ -4,6 +4,8 @@
 
 ## 未发布
 
+- 修复 [issue #13](https://github.com/jasonhnd/paseo-kanban/issues/13)：派活统计按档案归属的额度池汇总运行次数，使池与档案总数一致；按相同额度观测区间估算每次运行的消耗，并读取 Codex 自定义目录／归档会话及 Grok 每轮用量。缺失的用量或价格保持未知，不拉低平均值；用量面板明确显示“无用量数据”。
+
 ### 修复（Fixed）
 
 - 允许 Paseo daemon/app `>=0.11.0 <0.13.0`，恢复升级到 0.12.x 后的插件加载、调度 tick 和看板 MCP。使用隔离的官方 0.11.2 与 0.12.0 runtime 验证；保留 0.11 SDK 依赖锁定，使两个宿主沿用共同的通信契约。修复 [issue #14](https://github.com/jasonhnd/paseo-kanban/issues/14)。

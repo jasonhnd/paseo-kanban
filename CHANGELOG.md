@@ -5,6 +5,8 @@ Twenty release candidates are recorded here. `0.1.0-rc.20` is the current unpubl
 
 ## Unreleased
 
+- Fix [issue #13](https://github.com/jasonhnd/paseo-kanban/issues/13): reconcile dispatch pool run totals with profile totals, estimate per-run quota costs from matching observation spans, and read Codex custom/archived sessions and Grok turn usage. Missing usage or prices remain unknown and do not dilute averages; the usage panel shows missing usage explicitly.
+
 ### Fixed
 
 - Allow Paseo daemon/app `>=0.11.0 <0.13.0`, restoring plugin loading, scheduler ticks and board MCP after a host upgrade to 0.12.x. Verified with isolated official 0.11.2 and 0.12.0 runtimes; the 0.11 SDK dependency pins preserve the older wire contract on both hosts. Fixes [issue #14](https://github.com/jasonhnd/paseo-kanban/issues/14).
