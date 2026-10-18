@@ -15,6 +15,7 @@ const paseoDir = join(fixtureRoot, "paseo");
 const dataDir = join(fixtureRoot, "data");
 const fleetDir = join(dataDir, "fleet");
 const codexDir = join(fixtureRoot, "codex-demo");
+const grokDir = join(fixtureRoot, "grok-demo");
 const saved = { ...process.env };
 const hourMs = 3_600_000;
 const now = Math.floor(Date.now() / hourMs) * hourMs;
@@ -43,6 +44,7 @@ before(async () => {
     CODEX_HOME: codexDir, AFC_LANGUAGE: "en",
   });
   delete process.env.AFC_TRANSCRIPT_HOME;
+  delete process.env.GROK_HOME;
   put(join(paseoDir, "config.json"), {
     features: { voiceMode: { enabled: false }, dictation: { enabled: false } }, daemon: { agentProfiles: profiles },
   });
@@ -91,6 +93,19 @@ before(async () => {
           params: { update: { sessionUpdate: "turn_completed", stop_reason: "end_turn", usage: { modelUsage: { [profile.model!]: usage } } } },
         }]);
       }
+    }
+  }
+  for (let i = 0; i < 3; i++) {
+    const sessionId = `grok-session-${i}`;
+    const sessionDir = join(grokDir, "sessions/demo", sessionId);
+    const usage = { inputTokens: 1900, outputTokens: 100, modelCalls: 1 };
+    if (i < 2) {
+      put(join(sessionDir, "usage.json"), { sessionId,
+        turns: [{ turnNumber: 1, endedAt: at(runStart + 1000), ...usage, modelUsage: { "grok-demo": usage } }] });
+    } else {
+      jsonl(join(sessionDir, "updates.jsonl"), [{ timestamp: at(runStart + 1000),
+        params: { update: { sessionUpdate: "turn_completed", usage: { modelUsage: { "grok-demo": usage } } } },
+      }]);
     }
   }
   db.close();
@@ -171,6 +186,30 @@ for (const profile of profiles) test(`${profile.provider} usage matches its sess
   assert.equal(row.avgTokens, 1000);
   assert.equal(row.avgUsd, 0.001);
   assert.equal(row.usageSamples, 3);
+});
+
+for (const { name, grokHome, transcriptHome, tokens } of [
+  { name: "unset GROK_HOME uses HOME/.grok", tokens: 1000 },
+  { name: "empty GROK_HOME uses HOME/.grok", grokHome: "", tokens: 1000 },
+  { name: "GROK_HOME overrides HOME/.grok for current and legacy usage", grokHome: grokDir, tokens: 2000 },
+  { name: "missing GROK_HOME sessions stay unknown instead of reading HOME/.grok", grokHome: join(fixtureRoot, "missing-grok-demo"), tokens: null },
+  { name: "AFC_TRANSCRIPT_HOME isolates Grok usage from GROK_HOME", grokHome: grokDir, transcriptHome: fixtureRoot, tokens: 1000 },
+]) test(name, async () => {
+  const scan = await import("../scan");
+  try {
+    if (grokHome === undefined) delete process.env.GROK_HOME; else process.env.GROK_HOME = grokHome;
+    if (transcriptHome === undefined) delete process.env.AFC_TRANSCRIPT_HOME; else process.env.AFC_TRANSCRIPT_HOME = transcriptHome;
+    await scan.ensureScan(0);
+    const row = (await published()).byProfileEffort.find((r) => r.profile === "Demo Grok")!;
+    assert.equal(row.runs, 4);
+    assert.equal(row.usageSamples, tokens === null ? 0 : 3);
+    assert.equal(row.avgTokens, tokens);
+    assert.equal(row.avgUsd, tokens === null ? null : tokens / 1_000_000);
+  } finally {
+    delete process.env.GROK_HOME;
+    delete process.env.AFC_TRANSCRIPT_HOME;
+    await scan.ensureScan(0);
+  }
 });
 
 test("missing quota history and reset boundaries leave per-run cost unknown without dropping run totals", async () => {
