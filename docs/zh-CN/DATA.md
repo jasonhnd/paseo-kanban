@@ -47,6 +47,12 @@ fresh root 的 `cursor-api`、`keychain`、`antigravity-cli` 均默认 off。开
 
 provider 登录由用户掌握，不借其他应用认证文件，不把生产凭证搬进测试 home。插件登录状态、supervisor 凭证、原始任务、日志、路径和导出都可能敏感，即使公开源码不含 secret。
 
+## Cloudflare 账号状态
+
+账号检查使用只读命令 `cf user get`，读取当前认证用户。捕获输出时 CLI 默认返回 JSON，不需要 JSON 参数。只保留账号标签和组织名称，不保留用户或组织 ID、令牌值，也不把组织权限当作令牌 scope。缺少认证时显示未登录；命令不存在或响应无法识别时显示未知。
+
+`fleet/access-map.json` 的规范服务键是 `cloudflare-cf`。读取旧配置时，把 `cloudflare-wrangler` 键及其精确的 `wrangler whoami --json` 检查，或旧的 `cf auth whoami` 检查，在内存中转换为 `cloudflare-cf` 和 `cf user get`；其他命令仍被拒绝。两个键同时存在时，优先使用规范键。不会重写配置文件；旧键下的缓存结果会被忽略，并在下次检查后替换。旧 CLI 名字仅用于兼容配置，以及安全概述回收记录里的历史操作，账号检查不会执行它。
+
 ## 读写边界
 
 | 域 | 边界 |

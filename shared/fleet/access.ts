@@ -80,17 +80,27 @@ export function parseAccessMap(raw: unknown): MapService[] {
   for (const row of list) {
     if (!row || typeof row !== "object") continue;
     const rec = row as Record<string, unknown>;
-    const id = prose(rec.id, 80);
+    const storedId = prose(rec.id, 80);
+    // Read old maps without ever executing the retired CLI or its obsolete cf command.
+    const legacyCloudflare = storedId === "cloudflare-wrangler";
+    const id = legacyCloudflare ? "cloudflare-cf" : storedId;
     const name = prose(rec.name, 80);
     if (!id || !name) continue;
-    const check = readCheck(rec.check);
+    let check = readCheck(rec.check);
+    if (id === "cloudflare-cf" && !check?.pluginId && (
+      sameCommand({ bin: "cf", args: ["auth", "whoami"] }, check) ||
+      (legacyCloudflare && sameCommand({ bin: "wrangler", args: ["whoami", "--json"] }, check))
+    )) check = STATUS_COMMANDS["cloudflare-cf"];
     const also = readCheck(rec.also);
     const checkOk = check !== null && commandAllowed(check.bin, check.args) && sameCommand(STATUS_COMMANDS[id], check);
     const alsoOk = also === null || (commandAllowed(also.bin, also.args) && sameCommand(STATUS_COMMANDS[`${id}-plugin`], also));
     const blocked = (check !== null && !checkOk) || !alsoOk;
+    const previous = id === "cloudflare-cf" ? out.findIndex((service) => service.id === id) : -1;
+    if (previous >= 0 && legacyCloudflare) continue;
+    if (previous >= 0) out.splice(previous, 1);
     out.push({
       id,
-      name,
+      name: legacyCloudflare ? "Cloudflare (cf)" : name,
       login: prose(rec.login) ?? t("access.pending"),
       accountNote: prose(rec.accountNote) ?? t("access.pending"),
       permission: prose(rec.permission) ?? t("access.pending"),

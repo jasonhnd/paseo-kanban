@@ -47,6 +47,12 @@ Fresh roots start with `cursor-api`, `keychain` and `antigravity-cli` off. Switc
 
 Keep provider login under the user's control. Do not borrow another application's authentication files or move production credentials into a test home. Plugin-owned login state, supervisor credentials, raw prompts, logs, paths and exports can be sensitive even when the public source contains no secrets.
 
+## Cloudflare account status
+
+The account check uses `cf user get`, a read-only request for the currently authenticated user. The CLI emits JSON by default when captured; no JSON flag is needed. Only the account label and organization names are kept, never user/organization IDs, token values or organization permissions as token scopes. Missing authentication is shown as logged out; a missing CLI or an unrecognized response is unknown.
+
+`cloudflare-cf` is the canonical service key in `fleet/access-map.json`. On read, the retired `cloudflare-wrangler` key and its exact `wrangler whoami --json` check, or the former `cf auth whoami` check, are normalized in memory to `cloudflare-cf` and `cf user get`. Other commands remain blocked. If both keys exist, the canonical entry takes precedence. The configuration file is not rewritten; cached results under the retired key are ignored and replaced on the next check. The retired CLI name remains only for configuration compatibility and safe summaries of historical reclaim operations; it is never executed by an account check.
+
 ## Readers and writers
 
 | Domain | Boundary |

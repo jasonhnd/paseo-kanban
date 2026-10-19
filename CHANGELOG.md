@@ -11,6 +11,7 @@ Local candidate tag: `v0.1.0-rc.21`. Prepared for independent review only; no Gi
 
 ### Fixed
 
+- Cloudflare account check uses the official cf CLI instead of Wrangler.
 - Fix [issue #13](https://github.com/jasonhnd/paseo-kanban/issues/13): reconcile dispatch pool run totals with profile totals, estimate per-run quota costs from matching observation spans, and read Codex custom/archived sessions and Grok turn usage (including custom `GROK_HOME` directories). Missing usage or prices remain unknown and do not dilute averages; the usage panel shows missing usage explicitly.
 - Allow Paseo daemon/app `>=0.11.0 <0.13.0`, restoring plugin loading, scheduler ticks and board MCP after a host upgrade to 0.12.x. Verified with isolated official 0.11.2 and 0.12.0 runtimes; the 0.11 SDK dependency pins preserve the older wire contract on both hosts. Fixes [issue #14](https://github.com/jasonhnd/paseo-kanban/issues/14).
 - On every start the plugin refreshes a stable `bin` in its data directory: a board-command launcher and a copy of `integrations/hermes/memory_bridge.py`. Protocol text, new-leader prompts and handover messages name that launcher. Doctor reports yellow when the stable command is missing or does not match the current install. Point a provider command at the stable copy once; the plugin does not rewrite provider configuration, and an upgrade does not require editing that command. Fixes [issue #12](https://github.com/jasonhnd/paseo-kanban/issues/12).

@@ -162,7 +162,8 @@ function ghAction(args: string[]): string | null {
 
 /** Tools whose arguments are never shown but whose use matters: they may have written something outside the repo. */
 const WRITE_TOOLS: ReadonlySet<string> = new Set([
-  "prisma", "supabase", "vercel", "wrangler", "netlify", "firebase", "fly", "flyctl", "aws", "gcloud",
+  // Retain the retired CLI name only to recognize historical operations; arguments stay hidden.
+  "prisma", "supabase", "vercel", "cf", "wrangler", "netlify", "firebase", "fly", "flyctl", "aws", "gcloud",
   "kubectl", "terraform", "slack", "sendmail",
 ]);
 /** Database clients; shown as "database command <name>". */

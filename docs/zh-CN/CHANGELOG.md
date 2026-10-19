@@ -10,6 +10,7 @@
 
 ### 修复（Fixed）
 
+- Cloudflare 账号检查改用官方 cf CLI，取代 Wrangler。
 - 修复 [issue #13](https://github.com/jasonhnd/paseo-kanban/issues/13)：派活统计按档案归属的额度池汇总运行次数，使池与档案总数一致；按相同额度观测区间估算每次运行的消耗，并读取 Codex 自定义目录／归档会话及 Grok 每轮用量（含自定义 `GROK_HOME` 目录）。缺失的用量或价格保持未知，不拉低平均值；用量面板明确显示“无用量数据”。
 - 允许 Paseo daemon/app `>=0.11.0 <0.13.0`，恢复升级到 0.12.x 后的插件加载、调度 tick 和看板 MCP。使用隔离的官方 0.11.2 与 0.12.0 runtime 验证；保留 0.11 SDK 依赖锁定，使两个宿主沿用共同的通信契约。修复 [issue #14](https://github.com/jasonhnd/paseo-kanban/issues/14)。
 - 插件每次启动在自己的数据目录刷新固定 `bin`：看板命令启动器，以及 `integrations/hermes/memory_bridge.py` 的副本。协议文本、新建 leader 的提示和换班交接消息都使用这个启动器。固定命令缺失或与当前安装不一致时，doctor 报 yellow。把 provider 命令指到这份稳定副本一次即可；插件不改写 provider 配置，之后升级不用再改这条命令。修复 [issue #12](https://github.com/jasonhnd/paseo-kanban/issues/12)。

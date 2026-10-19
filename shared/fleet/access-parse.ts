@@ -13,8 +13,7 @@ export interface StatusCommand {
 
 /** Exact argv of status commands. login / logout / permission changes are not in this list. */
 export const STATUS_COMMANDS: Record<string, StatusCommand> = {
-  "cloudflare-cf": { bin: "cf", args: ["auth", "whoami"] },
-  "cloudflare-wrangler": { bin: "wrangler", args: ["whoami", "--json"] },
+  "cloudflare-cf": { bin: "cf", args: ["user", "get"] },
   vercel: { bin: "vercel", args: ["whoami"] },
   github: { bin: "gh", args: ["auth", "status"] },
   neon: { bin: "neonctl", args: ["me"] },
@@ -207,18 +206,12 @@ function loggedOut(): LiveCheck {
 }
 
 function cloudflare(text: string, ok: boolean): LiveCheck {
+  if (/no authentication token found|not authenticated|not logged|authentication error|invalid (?:access |api )?token|unauthorized/i.test(text) && !ok) return loggedOut();
   const json = readJsonObject(text);
-  if (!json) {
-    if (/not authenticated|not logged/i.test(text)) return loggedOut();
-    return unknown(failedDetail(text, ok));
-  }
-  const authed = json.authenticated === true || json.loggedIn === true;
-  const denied = json.authenticated === false || json.loggedIn === false;
-  const account = joinAccounts(short(json.email), accountNames(json.accounts));
-  const scopeCount = Array.isArray(json.scopes) ? json.scopes.length : null;
-  if (denied) return { state: "out", account: null, scopeCount, detail: null };
-  if (authed || (ok && account)) return { state: "in", account, scopeCount, detail: null };
-  return { state: "unknown", account: null, scopeCount, detail: failedDetail(text, ok) };
+  if (!ok || !json) return unknown(t(ok ? "access.detail.unrecognized" : "access.detail.commandFailed"));
+  // `cf user get` emits the user object directly. Organization permissions are not token scopes.
+  const account = joinAccounts(short(json.email) ?? short(json.username), accountNames(json.organizations));
+  return account ? { state: "in", account, scopeCount: null, detail: null } : unknown(t("access.detail.unrecognized"));
 }
 
 function vercel(text: string, ok: boolean): LiveCheck {
@@ -374,7 +367,6 @@ function scrub(row: LiveCheck): LiveCheck {
 /** One parser per entry of STATUS_COMMANDS, keyed the same way. */
 const PARSERS: Record<string, (text: string, ok: boolean) => LiveCheck> = {
   "cloudflare-cf": cloudflare,
-  "cloudflare-wrangler": cloudflare,
   vercel,
   github,
   neon,
