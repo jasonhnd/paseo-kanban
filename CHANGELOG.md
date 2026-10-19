@@ -5,6 +5,10 @@ Twenty release candidates are recorded here. `0.1.0-rc.20` is the current unpubl
 
 ## Unreleased
 
+### Fixed
+
+- Allow Paseo daemon/app `>=0.11.0 <0.13.0`, restoring plugin loading, scheduler ticks and board MCP after a host upgrade to 0.12.x. Verified with isolated official 0.11.2 and 0.12.0 runtimes; the 0.11 SDK dependency pins preserve the older wire contract on both hosts. Fixes [issue #14](https://github.com/jasonhnd/paseo-kanban/issues/14).
+
 ## 0.1.0-rc.20 — pending review and publication
 
 Local candidate tag: `v0.1.0-rc.20`. This candidate is prepared only. Install it from GitHub only after its matching prerelease and exact reviewed commit/tag are independently verified. Frozen rc.1 through rc.19 tags are never moved.

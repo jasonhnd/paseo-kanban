@@ -4,6 +4,10 @@
 
 ## 未发布
 
+### 修复（Fixed）
+
+- 允许 Paseo daemon/app `>=0.11.0 <0.13.0`，恢复升级到 0.12.x 后的插件加载、调度 tick 和看板 MCP。使用隔离的官方 0.11.2 与 0.12.0 runtime 验证；保留 0.11 SDK 依赖锁定，使两个宿主沿用共同的通信契约。修复 [issue #14](https://github.com/jasonhnd/paseo-kanban/issues/14)。
+
 ## 0.1.0-rc.20 — 待审查与发布
 
 本地候选 tag 为 `v0.1.0-rc.20`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.19 tag 绝不挪动。
