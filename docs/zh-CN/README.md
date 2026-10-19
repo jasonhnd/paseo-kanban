@@ -4,7 +4,7 @@
 
 [English](../../README.md)
 
-> **实验性 RC `0.1.0-rc.20`，尚未发布。** 已公开预发布 rc.19 于 2026-10-17 发布，GitHub Release 存在，冻结在 `d63cdc419f6f99300342bda5716d68e37a3e4c97`（annotated object `65df87c70bb68bb5630f7cb5705ad33dc3b3a916`）。只有对应 GitHub prerelease 存在，且目标为[发布记录](RELEASE.md)中的独立审查提交时，才能安装 rc.20 的 tag。已在 macOS 的 Microsoft Edge 验证隔离官方 **0.11.2 Web UI**；原生 app、真实手机及已认证 provider 首卡仍未验证。不宣布稳定版、npm 发布、官方目录收录或响应时间承诺。
+> **实验性 RC `0.1.0-rc.21`，尚未发布。** 已公开预发布 rc.20 于 2026-10-18 发布，GitHub Release 存在，冻结在 `bec4af0626d7f75e94dfdef9a577a5caa2cbd65e`（annotated object `e0e9cc3ae464c2200318f85042c982c3076d8aa7`）。只有对应 GitHub prerelease 存在，且目标为[发布记录](RELEASE.md)中的独立审查提交时，才能安装 rc.21 的 tag。已在 macOS 的 Microsoft Edge 验证隔离官方 **0.11.2 Web UI**；原生 app、真实手机及已认证 provider 首卡仍未验证。不宣布稳定版、npm 发布、官方目录收录或响应时间承诺。
 
 唯一插件 id 为 `paseo-kanban`，一个侧栏入口打开看板、Fleet 和设置，看板使用包含宿主 id 的深链，并保留 workspace 项目筛选。
 
@@ -26,7 +26,7 @@ macOS 按 **⌘K**（Windows／Linux 为 Ctrl+K）搜索 **打开项目看板**�
 
 ## 从这里开始
 
-1. **准备：** Paseo daemon 和 app `>=0.11.0 <0.12.0`，Node `>=24.21.0` 且 `node:sqlite` 可用，另需 Git、npm。只在目标宿主启用受信任插件，先阅读下方访问说明。真实自动首卡需要自行登录的本地 provider／档案，且两个实际 model 已确认、非空、不同。见[前置要求](#前置要求)。
+1. **准备：** Paseo daemon 和 app `>=0.11.0 <0.13.0`，Node `>=24.21.0` 且 `node:sqlite` 可用，另需 Git、npm。只在目标宿主启用受信任插件，先阅读下方访问说明。真实自动首卡需要自行登录的本地 provider／档案，且两个实际 model 已确认、非空、不同。见[前置要求](#前置要求)。
 2. **安装：** 按[GitHub 安装](#从-github-安装)明确指定已公开基线。RC tag 要等对应 Release 存在才能用；评估未公开候选时，在隔离开发 daemon 按[本地 directory 流程](#开发者-directory-流程)操作。
 3. **首次可见成功：** `paseo plugin ls paseo-kanban --json` 报告 `running` 且无加载错误；同一宿主侧栏的 **Paseo Kanban** 能打开看板与 Fleet。再按[首卡配置](#配置并完成首卡)核对 commit、独立审查和 leader 验收。截图不代表 provider 首卡已通过。
 
@@ -34,7 +34,7 @@ macOS 按 **⌘K**（Windows／Linux 为 Ctrl+K）搜索 **打开项目看板**�
 
 ## 前置要求
 
-- Paseo **daemon 和 app** 均在 `>=0.11.0 <0.12.0`，全局插件和本插件开关均启用。本批命令／编译器基线为 **0.11.2**；声明范围不代表每个补丁和客户端都已验证。
+- Paseo **daemon 和 app** 均在 `>=0.11.0 <0.13.0`，全局插件和本插件开关均启用。本候选已在 **0.11.2 和 0.12.0** 通过隔离插件加载、调度 tick、MCP ping 及 CLI 建卡/show；声明范围不代表每个补丁和客户端都已验证。
 - Node **>=24.21.0** 且 `node:sqlite` 可用；Git、npm 位于 **daemon 宿主的 PATH**。包括 CLI 指向远端时，下载和准备都在该宿主执行。
 - 用户自行安装、登录的本地 provider。自动执行／审查流程要求**两个已确认、非空、不同的实际 model**。发现 provider 不证明登录和额度可用。
 - macOS arm64、Node 24.21.0/npm 12.1.0 有隔离本地 Git、CLI／编译和真实 0.11.2 Web app 证据，不认证其他版本或 provider 闭环。Linux、WSL2 仍需分别验证真实流程。首发不支持原生 Windows。见[兼容性](COMPATIBILITY.md)。
@@ -43,12 +43,12 @@ Paseo 插件是**受信任、无沙箱的代码**。server 和准备命令可以
 
 ## 从 GitHub 安装
 
-先核对 CLI、daemon、app 版本及 daemon 的 Node 环境。`paseo --version` 只报告 CLI 版本，不证明 daemon/app 版本。**只有 `v0.1.0-rc.20` 的 GitHub Release 记录存在，且目标 commit 等于[发布记录](RELEASE.md)中的已审完整 SHA 时，才执行下面的 tag 命令。该记录不存在时，候选未发布，这个 tag 不是 GitHub 安装目标。**
+先核对 CLI、daemon、app 版本及 daemon 的 Node 环境。`paseo --version` 只报告 CLI 版本，不证明 daemon/app 版本。**只有 `v0.1.0-rc.21` 的 GitHub Release 记录存在，且目标 commit 等于[发布记录](RELEASE.md)中的已审完整 SHA 时，才执行下面的 tag 命令。该记录不存在时，候选未发布，这个 tag 不是 GitHub 安装目标。**
 
 ```sh
 paseo --version
 node --version
-paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.20
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.21
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -58,7 +58,7 @@ paseo plugin ls paseo-kanban --json
 paseo plugin install github:jasonhnd/paseo-kanban --ref c106efb88a659931d01f40a236001823473561a8 --json
 ```
 
-该基线包元数据为 `0.1.0`。它不是 `0.1.0-rc.20`，也不是未公开的本地准备 `0.1.0-rc.1`。[RC 变更记录](CHANGELOG.md)列出源码变化与未解决的依赖告警。
+该基线包元数据为 `0.1.0`。它不是 `0.1.0-rc.21`，也不是未公开的本地准备 `0.1.0-rc.1`。[RC 变更记录](CHANGELOG.md)列出源码变化与未解决的依赖告警。
 
 1. 在目标宿主 **Settings -> Plugins** 打开 **Enable plugins** 和单独的 `paseo-kanban` 开关。全局开关也会启动其他单独启用的插件。全局开关开启后可运行 `paseo plugin enable paseo-kanban --json` 启用本插件。
 2. 再运行 `paseo plugin ls paseo-kanban --json`，确认 `running` 且无加载错误。从该宿主的侧栏打开 **Paseo Kanban**；看板、Fleet、Settings 应共用这一个入口。必须打开真实页面；只有 `running` 不证明 client 挂载成功。窄视口不证明真实手机。
@@ -96,12 +96,12 @@ paseo plugin install github:jasonhnd/paseo-kanban --ref c106efb88a659931d01f40a2
 先备份状态，并记录当前完整 revision、来源、安装路径与 enabled 状态。确认 RC 已发布后，**每次明确 ref**，先预览再更新：
 
 ```sh
-paseo plugin update paseo-kanban --check --ref v0.1.0-rc.20 --json
-paseo plugin update paseo-kanban --ref v0.1.0-rc.20 --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.21 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.21 --json
 paseo plugin ls paseo-kanban --json
 ```
 
-这两条更新命令同样只在 GitHub Release 记录允许 `v0.1.0-rc.20` 时使用，见[从 GitHub 安装](#从-github-安装)。托管更新后，看板和 Fleet 信息导出仍可能在约 600 秒内保留已删除 checkout 的路径，这是现有导出周期。新命令入口在动作执行时解析当前托管路径；导出延迟不变。
+这两条更新命令同样只在 GitHub Release 记录允许 `v0.1.0-rc.21` 时使用，见[从 GitHub 安装](#从-github-安装)。托管更新后，看板和 Fleet 信息导出仍可能在约 600 秒内保留已删除 checkout 的路径，这是现有导出周期。新命令入口在动作执行时解析当前托管路径；导出延迟不变。
 
 升级或 reload 期间，已挂载面板遇到暂时的“Plugin not available”读取失败会保留上次数据，并温和显示“插件正在更新…”。已确认可重复的读取最多退避重试 5 次，重试窗口不超过 15 秒；其他错误仍正常显示。保存和操作不会自动重试，请确认结果后再试。插件持续不可用时，面板会提示稍后刷新。
 

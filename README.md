@@ -4,7 +4,7 @@ A [Paseo](https://github.com/getpaseo/paseo) plugin that combines a cross-projec
 
 [Simplified Chinese](docs/zh-CN/README.md)
 
-> **Experimental RC `0.1.0-rc.20`, unpublished.** Public prerelease rc.19 was published on 2026-10-17 and its GitHub Release exists, frozen at `d63cdc419f6f99300342bda5716d68e37a3e4c97` (annotated object `65df87c70bb68bb5630f7cb5705ad33dc3b3a916`). Install the rc.20 tag only after the matching GitHub prerelease targets the independently reviewed commit in the [release record](docs/RELEASE.md). Isolated official **0.11.2 Web UI** has been checked in Microsoft Edge on macOS; native app, physical phones and an authenticated provider first-card cycle remain unverified. No stable release, npm publication, official registry listing or response-time commitment is declared.
+> **Experimental RC `0.1.0-rc.21`, unpublished.** Public prerelease rc.20 was published on 2026-10-18 and its GitHub Release exists, frozen at `bec4af0626d7f75e94dfdef9a577a5caa2cbd65e` (annotated object `e0e9cc3ae464c2200318f85042c982c3076d8aa7`). Install the rc.21 tag only after the matching GitHub prerelease targets the independently reviewed commit in the [release record](docs/RELEASE.md). Isolated official **0.11.2 Web UI** has been checked in Microsoft Edge on macOS; native app, physical phones and an authenticated provider first-card cycle remain unverified. No stable release, npm publication, official registry listing or response-time commitment is declared.
 
 One plugin id, `paseo-kanban`, opens Board, Fleet and Settings from one sidebar entry. The board uses host-qualified deep links and retains workspace project filtering.
 
@@ -24,7 +24,7 @@ On macOS, press **⌘K** (Ctrl+K on Windows/Linux) and search **Open project boa
 
 ## Start here
 
-1. **Prepare:** Paseo daemon and app `>=0.11.0 <0.12.0`, Node `>=24.21.0` with `node:sqlite`, Git and npm. Enable trusted plugins only on the intended host; read the access warning below. A real automatic card needs authenticated local profiles with two confirmed, different actual models. [Requirements](#requirements).
+1. **Prepare:** Paseo daemon and app `>=0.11.0 <0.13.0`, Node `>=24.21.0` with `node:sqlite`, Git and npm. Enable trusted plugins only on the intended host; read the access warning below. A real automatic card needs authenticated local profiles with two confirmed, different actual models. [Requirements](#requirements).
 2. **Install:** follow [GitHub installation](#install-from-github) for the explicitly pinned public baseline. The RC tag is unavailable until its matching Release exists. To evaluate the unpublished candidate, use [directory setup](#developer-directory-setup) on an isolated development daemon.
 3. **First visible success:** `paseo plugin ls paseo-kanban --json` reports `running` without a load error, and **Paseo Kanban** opens Board and Fleet on that same host. Then follow [first-card setup](#configure-and-finish-a-first-card) and require a commit, independent review and leader acceptance. The screenshots do not certify that provider cycle.
 
@@ -32,7 +32,7 @@ Prior RC commit/tag identities and rejection history are retained in the [change
 
 ## Requirements
 
-- Paseo **daemon and app** in `>=0.11.0 <0.12.0`, with global plugins and this plugin enabled. **0.11.2** is the command/compiler baseline for this work; the declared range does not certify every patch or client.
+- Paseo **daemon and app** in `>=0.11.0 <0.13.0`, with global plugins and this plugin enabled. **0.11.2 and 0.12.0** passed isolated plugin load, scheduler tick, MCP ping and CLI create/show checks for this candidate; the declared range does not certify every patch or client.
 - Node **>=24.21.0** with working `node:sqlite`, plus Git and npm on the **daemon host's PATH**. Source acquisition and preparation run there, including when the CLI targets a remote host.
 - User-installed, user-authenticated local providers. Automatic executor/reviewer flow needs **two confirmed, nonempty, different actual models**. Discovery is not proof of login or usable quota.
 - macOS arm64 has isolated local Git, CLI/compiler and actual 0.11.2 web-app evidence with Node 24.21.0/npm 12.1.0. This does not certify other versions or a provider cycle. Linux and WSL2 still need separate real workflow validation; native Windows is not supported for the initial release. See [compatibility](docs/COMPATIBILITY.md).
@@ -41,12 +41,12 @@ Paseo plugins are **trusted, unsandboxed code**. Server and preparation code can
 
 ## Install from GitHub
 
-Check the CLI, daemon and app versions, and the daemon's Node environment first. `paseo --version` reports the CLI version, not proof of the app/daemon versions. **Run the following tag command only when the GitHub Release record for `v0.1.0-rc.20` exists and its target commit equals the reviewed full SHA in the [release record](docs/RELEASE.md). While that record is absent, the candidate is unpublished and the tag is not a GitHub install target.**
+Check the CLI, daemon and app versions, and the daemon's Node environment first. `paseo --version` reports the CLI version, not proof of the app/daemon versions. **Run the following tag command only when the GitHub Release record for `v0.1.0-rc.21` exists and its target commit equals the reviewed full SHA in the [release record](docs/RELEASE.md). While that record is absent, the candidate is unpublished and the tag is not a GitHub install target.**
 
 ```sh
 paseo --version
 node --version
-paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.20
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.21
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -56,7 +56,7 @@ This uses the official Paseo CLI's GitHub acquisition path. The tag must never m
 paseo plugin install github:jasonhnd/paseo-kanban --ref c106efb88a659931d01f40a236001823473561a8 --json
 ```
 
-That baseline has package metadata `0.1.0`. It is not `0.1.0-rc.20`, and it is not the unpublished local `0.1.0-rc.1` preparation. See [the RC changelog](CHANGELOG.md) for source changes and unresolved dependency alerts.
+That baseline has package metadata `0.1.0`. It is not `0.1.0-rc.21`, and it is not the unpublished local `0.1.0-rc.1` preparation. See [the RC changelog](CHANGELOG.md) for source changes and unresolved dependency alerts.
 
 1. In the intended host's **Settings -> Plugins**, turn on **Enable plugins** and the individual `paseo-kanban` switch. The global switch starts other individually enabled plugins too. You can enable this plugin with `paseo plugin enable paseo-kanban --json` once the global switch is on.
 2. Repeat `paseo plugin ls paseo-kanban --json`; require `running` without a load error. Open **Paseo Kanban** from that host's sidebar. Board, Fleet and Settings should share that entry. Check the actual page; `running` alone does not prove client mounting. A compact viewport does not prove a physical phone.
@@ -96,12 +96,12 @@ Card scratch uses the project’s `.kanban-work/<card code>/`; see [card work di
 Back up state and record the current full revision, source, installed path and enabled state first. After RC publication is confirmed, preview and apply an **explicit ref each time**:
 
 ```sh
-paseo plugin update paseo-kanban --check --ref v0.1.0-rc.20 --json
-paseo plugin update paseo-kanban --ref v0.1.0-rc.20 --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.21 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.21 --json
 paseo plugin ls paseo-kanban --json
 ```
 
-Use those two update commands only when the GitHub Release record authorizes `v0.1.0-rc.20`, as in [Install from GitHub](#install-from-github). After a managed update, board and Fleet information exports can still name a removed checkout for about 600 seconds. That is their existing export period. The new command handlers resolve the current managed path when an action runs; the export delay remains unchanged.
+Use those two update commands only when the GitHub Release record authorizes `v0.1.0-rc.21`, as in [Install from GitHub](#install-from-github). After a managed update, board and Fleet information exports can still name a removed checkout for about 600 seconds. That is their existing export period. The new command handlers resolve the current managed path when an action runs; the export delay remains unchanged.
 
 During an update or reload, mounted panels keep their last data and show “Plugin is updating…” for temporary “Plugin not available” read failures. Audited reads retry up to five times with backoff (a 15-second retry window); other errors remain visible. Saves and actions are never automatically retried: check the result before trying again. If the plugin stays unavailable, the panel asks you to refresh later.
 

@@ -1,19 +1,26 @@
 # 变更记录
 
-单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.20` 是当前未公开、待独立审查的候选。已公开预发布 rc.19 于 2026-10-17 发布，GitHub Release 存在，冻结在 `d63cdc419f6f99300342bda5716d68e37a3e4c97`（annotated object `65df87c70bb68bb5630f7cb5705ad33dc3b3a916`）。已公开预发布 rc.18 于 2026-10-17 发布，GitHub Release 存在，冻结在 `d4ca860e01fb3256c2cc787d383b5de25bd396e5`（annotated object `9943de9e2b538a60368de7ab12641357a959d084`）。已公开预发布 rc.17 于 2026-10-16 发布，GitHub Release 存在，冻结在 `d7eec4188a108eb660c77f806b6ce91f85e5c26f`（annotated object `077ca0f5a83d2f827b1169c82ccfb0ece9307c8c`）。已公开预发布 rc.16 于 2026-10-16 发布，GitHub Release 存在，冻结在 `6ed3be48e5e002351668a2d2d8765c2cca67413a`（annotated object `9747d649314d270b581d95ba5aebb37c0e4276b7`）。已公开预发布 rc.12 于 2026-10-16 发布，GitHub Release 存在，冻结在 `4162cbca1acb2aa70ad1d5fb77c0c78f25c68ab2`（annotated object `a5d68644e9d02206e2cf07ee7d32005f59801ee9`）。已公开预发布 rc.11 于 2026-10-15 发布，GitHub Release 存在，冻结在 `09963b85e0d7c9c5d881aa39e3c65ebbb719b7a0`（annotated object `042413d64aeee4f41c34120b4b3af4003c685741`）。已公开预发布 rc.10 于 2026-10-15 发布，GitHub Release 存在，冻结在 `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129`（annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`）。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
+单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.21` 是当前未公开、待独立审查的候选。已公开预发布 rc.20 于 2026-10-18 发布，冻结在 `bec4af0626d7f75e94dfdef9a577a5caa2cbd65e`（annotated object `e0e9cc3ae464c2200318f85042c982c3076d8aa7`）。已公开预发布 rc.19 于 2026-10-17 发布，GitHub Release 存在，冻结在 `d63cdc419f6f99300342bda5716d68e37a3e4c97`（annotated object `65df87c70bb68bb5630f7cb5705ad33dc3b3a916`）。已公开预发布 rc.18 于 2026-10-17 发布，GitHub Release 存在，冻结在 `d4ca860e01fb3256c2cc787d383b5de25bd396e5`（annotated object `9943de9e2b538a60368de7ab12641357a959d084`）。已公开预发布 rc.17 于 2026-10-16 发布，GitHub Release 存在，冻结在 `d7eec4188a108eb660c77f806b6ce91f85e5c26f`（annotated object `077ca0f5a83d2f827b1169c82ccfb0ece9307c8c`）。已公开预发布 rc.16 于 2026-10-16 发布，GitHub Release 存在，冻结在 `6ed3be48e5e002351668a2d2d8765c2cca67413a`（annotated object `9747d649314d270b581d95ba5aebb37c0e4276b7`）。已公开预发布 rc.12 于 2026-10-16 发布，GitHub Release 存在，冻结在 `4162cbca1acb2aa70ad1d5fb77c0c78f25c68ab2`（annotated object `a5d68644e9d02206e2cf07ee7d32005f59801ee9`）。已公开预发布 rc.11 于 2026-10-15 发布，GitHub Release 存在，冻结在 `09963b85e0d7c9c5d881aa39e3c65ebbb719b7a0`（annotated object `042413d64aeee4f41c34120b4b3af4003c685741`）。已公开预发布 rc.10 于 2026-10-15 发布，GitHub Release 存在，冻结在 `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129`（annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`）。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
 
 ## 未发布
 
-- 修复 [issue #13](https://github.com/jasonhnd/paseo-kanban/issues/13)：派活统计按档案归属的额度池汇总运行次数，使池与档案总数一致；按相同额度观测区间估算每次运行的消耗，并读取 Codex 自定义目录／归档会话及 Grok 每轮用量（含自定义 `GROK_HOME` 目录）。缺失的用量或价格保持未知，不拉低平均值；用量面板明确显示“无用量数据”。
+## 0.1.0-rc.21 — 待审查与发布
+
+本地候选 tag：`v0.1.0-rc.21`。只准备供独立审查；此处不授权 GitHub 发布或生产安装。
 
 ### 修复（Fixed）
 
+- 修复 [issue #13](https://github.com/jasonhnd/paseo-kanban/issues/13)：派活统计按档案归属的额度池汇总运行次数，使池与档案总数一致；按相同额度观测区间估算每次运行的消耗，并读取 Codex 自定义目录／归档会话及 Grok 每轮用量（含自定义 `GROK_HOME` 目录）。缺失的用量或价格保持未知，不拉低平均值；用量面板明确显示“无用量数据”。
 - 允许 Paseo daemon/app `>=0.11.0 <0.13.0`，恢复升级到 0.12.x 后的插件加载、调度 tick 和看板 MCP。使用隔离的官方 0.11.2 与 0.12.0 runtime 验证；保留 0.11 SDK 依赖锁定，使两个宿主沿用共同的通信契约。修复 [issue #14](https://github.com/jasonhnd/paseo-kanban/issues/14)。
 - 插件每次启动在自己的数据目录刷新固定 `bin`：看板命令启动器，以及 `integrations/hermes/memory_bridge.py` 的副本。协议文本、新建 leader 的提示和换班交接消息都使用这个启动器。固定命令缺失或与当前安装不一致时，doctor 报 yellow。把 provider 命令指到这份稳定副本一次即可；插件不改写 provider 配置，之后升级不用再改这条命令。修复 [issue #12](https://github.com/jasonhnd/paseo-kanban/issues/12)。
 
-## 0.1.0-rc.20 — 待审查与发布
+### 注意（Notes）
 
-本地候选 tag 为 `v0.1.0-rc.20`，只准备、不发布。匹配的 GitHub prerelease 与精确已审 commit／tag 独立核对通过后，才从 GitHub 安装。冻结的 rc.1 至 rc.19 tag 绝不挪动。
+- package 与根 lock 统一为 `0.1.0-rc.21`。Node 仍为 `>=24.21.0`；Paseo daemon/app 支持 `>=0.11.0 <0.13.0`。相对 rc.20，依赖锁定、schema 与契约版本不变。隔离的官方 0.11.2 和 0.12.0 宿主已核对插件加载、调度 tick、看板 MCP 及 CLI 建卡/show。真实认证 provider 发送、浏览器／原生客户端、生产安装和升级／回退仍须另行验证。本候选只准备、不发布或切换生产。
+
+## 0.1.0-rc.20 — 2026-10-18（已公开预发布）
+
+已公开预发布 tag：`v0.1.0-rc.20`，commit `bec4af0626d7f75e94dfdef9a577a5caa2cbd65e`，annotated object `e0e9cc3ae464c2200318f85042c982c3076d8aa7`。此版本支持 Paseo `>=0.11.0 <0.12.0`；0.12.x 请在 rc.21 另行发布后使用。已公开 tag 绝不挪动。
 
 ### 新增（Added）
 

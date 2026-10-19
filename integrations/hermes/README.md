@@ -92,3 +92,13 @@ Schedule the switch while no board RPC or lifecycle operation is in progress,
 retain the prior plugin source for rollback, and compare leader registrations,
 provider-session identities and daemon process IDs before and after. Do not use
 a daemon restart to apply this integration.
+
+## Legacy script path
+
+For an explicit rollback to rc.20, the earlier provider command used an
+installation-bound script path. This historical example is retained for
+comparison; use the stable data-directory example above for current installs.
+
+```json
+["python3", "/path/to/memory_bridge.py", "--memory-dir", "/path/to/existing-profile/memories", "--", "hermes", "-p", "existing-profile", "acp"]
+```

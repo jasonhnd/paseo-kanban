@@ -1,6 +1,13 @@
 # 兼容性与排错
 
-manifest 声明 Paseo **daemon 和 app** `>=0.11.0 <0.12.0`。daemon 兼容不证明 app 兼容。固定官方命令／编译器基线为 **0.11.2**，commit `75953250959979b8f088bbca8dbd6ee61d0151b1`；声明范围不证明所有 0.11 patch 或客户端都已测。放宽前须重跑编译和真实集成。
+manifest 声明 Paseo **daemon 和 app** `>=0.11.0 <0.13.0`。rc.21 已在隔离官方 **0.11.2 与 0.12.0** runtime 通过插件加载、调度 tick、MCP ping 和 CLI 建卡/show。0.11 SDK 依赖锁定是两代宿主共同 API 基线；升级独立客户端会引入旧宿主未声明的能力检查。这些检查不认证每个补丁、浏览器／原生 app 或真实认证 provider 闭环。
+
+## Paseo 0.12 宿主 API 核对
+
+manifest requirements/build、分开的 server/client 入口、RPC 契约、before/on 生命周期钩子、客户端页面／导航、agent 列表／创建／send／timeline／归档、workspace 列表／创建／ref／归档与 provider 发现均保留插件使用的参数。看板 MCP 是插件自己的 loopback HTTP 服务，由 agent-create 钩子注入。看板调度是插件 timer；Fleet 通过 `paseo schedule ls/logs --json` 检查定时任务，没有使用被改名的宿主 schedule API。
+
+插件使用 SDK 创建 workspace，也有多处 CLI `paseo send`。隔离且版本匹配的 0.12.0 CLI/daemon 创建 workspace 成功；带来源身份的 send 到不存在的合成 agent 返回预期的 agent-not-found。版本匹配时未复现所报的 provenance/background-workspace 能力错误。请同时核对目标端点、daemon 和 CLI 版本；本次准备不认证生产端点或真实 provider 发送。
+
 
 ## 要求与证据
 

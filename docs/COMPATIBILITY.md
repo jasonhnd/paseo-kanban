@@ -1,6 +1,13 @@
 # Compatibility and troubleshooting
 
-The manifest declares Paseo **daemon and app** `>=0.11.0 <0.12.0`. A compatible daemon does not prove a compatible app. The fixed official command/compiler baseline is **0.11.2**, commit `75953250959979b8f088bbca8dbd6ee61d0151b1`. This declaration is not evidence that every 0.11 patch or client has been tested. Recompile and verify actual integrations before widening the range.
+The manifest declares Paseo **daemon and app** `>=0.11.0 <0.13.0`. Isolated official **0.11.2 and 0.12.0** runtimes passed plugin loading, scheduler tick, MCP ping and CLI create/show for rc.21. The 0.11 SDK dependency pins are the common API baseline, including on 0.12; upgrading the standalone client would add capability checks absent on older hosts. These checks do not certify every patch, browser/native app or authenticated provider workflow.
+
+## Paseo 0.12 host API check
+
+Manifest requirements/build, separate server/client entries, RPC contracts, before/on lifecycle hooks, client surfaces/navigation, agent list/create/send/timeline/archive, workspace list/create/ref/archive and provider discovery remain available with the arguments used by this plugin. Board MCP is its own loopback HTTP server, injected through the agent-create hook. The board scheduler is a plugin timer; Fleet schedule inspection uses `paseo schedule ls/logs --json`, not a renamed host schedule API.
+
+The plugin uses SDK workspace creation and several CLI `paseo send` paths. On the isolated matched 0.12.0 CLI/daemon, workspace creation succeeds; a provenance-tagged send to a nonexistent synthetic agent reaches the expected agent-not-found response. The reported provenance/background-workspace capability errors were not reproduced with matched official versions. Check the selected endpoint and daemon version as well as the CLI version; no production endpoint or real provider send is certified by this preparation.
+
 
 ## Requirements and evidence
 
