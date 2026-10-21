@@ -223,6 +223,10 @@ describe("MCP inject gate", () => {
     const previous = { executor: 226 + 49 + 107, reviewer: 161 + 30 + 49 + 110 + 32 + 468, supervisor: 181 + 49, reader: 200 + 49 + 107, decision: 200 + 49 + 107 };
     for (const role of ["executor", "reviewer", "supervisor", "reader", "decision"] as const) {
       const text = protocolFor(role);
+      const cli = displayCliPath();
+      assert.ok(text.includes(cli), "the protocol retains the complete CLI path");
+      // Apply the same rule-text budget as the worktree prompt above, independent of fixture depth.
+      const budgetedText = text.replace(cli, "$STABLE_BIN/paseo-kanban");
       const policyBudget = role === "supervisor" ? 650 : role === "reviewer" ? 100 : role === "executor" ? 220 : 0;
       const mergeCardBudget = role === "executor" || role === "supervisor" ? 100 : 0;
       // TEST_0211 adds the per-card TMPDIR and production-database rules to every role but the leader.
@@ -235,7 +239,7 @@ describe("MCP inject gate", () => {
       const checkoutHeadBudget = role === "executor" ? 108 : 0;
       // Immediate deletion replaces the 24-hour wait in the executor temporary-directory rule (12).
       const immediateCleanupBudget = role === "executor" ? 12 : 0;
-      assert.ok(text.length <= previous[role] * 2 + policyBudget + mergeCardBudget + tmpRuleBudget + noWaitBudget + noCiBudget + checkoutHeadBudget + immediateCleanupBudget, `${role} \u5de5\u4f5c\u5b88\u5219\u8d85\u8fc7\u6587\u6848\u9884\u7b97`);
+      assert.ok(budgetedText.length <= previous[role] * 2 + policyBudget + mergeCardBudget + tmpRuleBudget + noWaitBudget + noCiBudget + checkoutHeadBudget + immediateCleanupBudget, `${role} \u5de5\u4f5c\u5b88\u5219\u8d85\u8fc7\u6587\u6848\u9884\u7b97`);
       if (role === "supervisor") assert.match(text, /\u5148\u7528 kanban_comment \u5199\u4e00\u53e5\u8fdb\u5ea6\uff0c\u518d\u7ed3\u675f\u8fd9\u4e00\u8f6e/);
       else {
         assert.match(text, /\u56de\u5408\u7ed3\u675f = \u4f60\u505c\u4e0b\u6765\u4e86\uff0c\u4e0d\u4f1a\u6709\u4eba\u518d\u53eb\u4f60/);
