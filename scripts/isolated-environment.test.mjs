@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { test } from "node:test";
 import { executable, isolatedEnvironment, testHostConfig } from "./isolated-environment.mjs";
 
@@ -47,5 +48,36 @@ test("speech stays off unless a host asks, and the npm cache override stays outs
     const opened = testHostConfig({ features: { voiceMode: { enabled: true }, dictation: { enabled: true } } });
     assert.equal(opened.features.voiceMode.enabled, true);
     assert.equal(opened.features.dictation.enabled, true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("isolated Git retains helpers and default templates with a pre-push PATH", () => {
+  const root = mkdtempSync(join(tmpdir(), "isolated-git-"));
+  try {
+    const execPath = execFileSync("git", ["--exec-path"], { encoding: "utf8" }).trim();
+    const env = isolatedEnvironment(root, { sourceEnv: { PATH: execPath + delimiter + process.env.PATH } });
+    const git = (...args) => execFileSync("git", args, { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    const repo = join(root, "repo");
+    const remote = join(root, "remote.git");
+    const clone = join(root, "clone");
+    git("init", "-q", "-b", "demo", repo);
+    git("init", "-q", "--bare", remote);
+    git("-C", repo, "commit", "--allow-empty", "-qm", "Anonymous transport fixture");
+    const head = git("-C", repo, "rev-parse", "HEAD");
+    git("-C", repo, "push", remote, "HEAD:refs/heads/demo");
+    git("clone", "--no-local", "--branch", "demo", remote, clone);
+    assert.equal(git("-C", clone, "rev-parse", "HEAD"), head);
+    assert.equal(git("--exec-path").trim(), execPath);
+    for (const directory of [repo, clone]) assert.ok(existsSync(join(directory, ".git/info/exclude")), "Git installs its default templates");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("isolated verification uses the same temporary root for both entry points", () => {
+  const root = mkdtempSync(join(tmpdir(), "isolated-tmp-"));
+  try {
+    const env = isolatedEnvironment(root);
+    assert.equal(resolve(env.KANBAN_TMP), resolve(env.TMPDIR));
+    assert.ok(env.KANBAN_TMP.startsWith(root + "/"));
+    assert.ok(existsSync(env.TMPDIR));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
