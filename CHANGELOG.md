@@ -15,16 +15,16 @@ Local candidate only. No tag, publication or production installation is performe
 - Compatibility reports fingerprint the current installation and preserve failed evidence while metadata is unavailable or plugin ids change; missing checks remain explicitly unverified. Fixes [issue #16](https://github.com/jasonhnd/paseo-kanban/issues/16).
 - Cleanup accepts configured integration branches as distinct containment proofs, including lane cards, and doctor rechecks stale merge findings. Fixes [issue #17](https://github.com/jasonhnd/paseo-kanban/issues/17).
 - Temporary cleanup collects recorded placeholder attempts while retaining ownership and retry boundaries. Fixes [issue #18](https://github.com/jasonhnd/paseo-kanban/issues/18).
-- Grok and Cursor quota readers stop the complete session process tree before terminal teardown and inspect screen session listings structurally.
+- Grok and Cursor quota readers stop the complete session process tree before terminal teardown, retry transient cleanup lookup failures and wait for an in-flight launch before closing. Isolated test fixtures also clean up after failures, timeouts, cancellation and test-worker termination.
 
 ### Notes
 
 - Node remains `>=24.21.0`; Paseo daemon/app support remains `>=0.11.0 <0.13.0`. Dependency selections, schema and contract versions are unchanged from rc.21. Existing project card-work directories remain under `.kanban-work`.
 - Review uses exact local verification and disposable-host upgrade/rollback receipts. Production switching, authenticated provider quota values, native clients and final acceptance require separate work.
 
-## 0.1.0-rc.21 — pending review and publication
+## 0.1.0-rc.21 — published prerelease
 
-Local candidate tag: `v0.1.0-rc.21`. Prepared for independent review only; no GitHub prerelease or production installation is authorized here.
+Published prerelease tag: `v0.1.0-rc.21`, commit `2740f8bed023637d1f5c15ebd19fb1fadee82d5b`. Published tags are never moved.
 
 ### Fixed
 
@@ -35,7 +35,7 @@ Local candidate tag: `v0.1.0-rc.21`. Prepared for independent review only; no Gi
 
 ### Notes
 
-- Package and root lock versions agree on `0.1.0-rc.21`. Node remains `>=24.21.0`; Paseo daemon/app support is `>=0.11.0 <0.13.0`. Dependency pins, schema and contract versions are unchanged relative to rc.20. Isolated official 0.11.2 and 0.12.0 host checks cover plugin loading, scheduler ticks, board MCP and CLI create/show. Real authenticated provider delivery, browser/native clients, production installation and upgrade/rollback remain separate validation work. This candidate is prepared only; no publication or production switch is performed.
+- Package and root lock versions agree on `0.1.0-rc.21`. Node remains `>=24.21.0`; Paseo daemon/app support is `>=0.11.0 <0.13.0`. Dependency pins, schema and contract versions are unchanged relative to rc.20. Isolated official 0.11.2 and 0.12.0 host checks cover plugin loading, scheduler ticks, board MCP and CLI create/show. Real authenticated provider delivery, browser/native clients, production installation and upgrade/rollback remain separate validation work. These notes describe the published prerelease; exact rc.22 verification requires new receipts.
 
 ## 0.1.0-rc.20 — 2026-10-18 (public prerelease)
 
