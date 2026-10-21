@@ -460,7 +460,7 @@ describe("leader reminders and shifts", () => {
         { id: "a", label: "Plugin A", dir: "/a", cwdMatch: "alpha-cwd", project: "alpha" },
         { id: "b", label: "Plugin B", dir: "/b", cwdMatch: "beta-cwd", project: "beta" },
       ],
-      hasCompatScript: async () => true,
+      inspectPlugin: async (dir) => ({ identity: `fixture:${dir}`, hasCompatScript: true }),
       runCompat: async () => ({ ok: false, timedOut: false, output: "broken" }),
       listAgents: async () => [
         { id: "alpha-leader", title: "alpha", cwd: "alpha-cwd", archivedAt: null },
