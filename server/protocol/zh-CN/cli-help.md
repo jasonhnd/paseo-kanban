@@ -1,5 +1,5 @@
 用法: kanban <命令> [参数] [--json]
-命令: create show list comment complete block approve request-changes link unlink grant-read revoke-read unblock wait-user unwait accept reject rework pass start archive register supervise handover project rebind purge-agents resume-cleanup native-sessions compact-events vacuum tag audit doctor ping
+命令: create show list comment complete block approve request-changes link unlink grant-read revoke-read unblock wait-user unwait accept reject rework pass start archive register supervise mcp-credential handover project rebind purge-agents resume-cleanup native-sessions compact-events vacuum tag audit doctor ping
 {leaderActionNote}
 卡号: 显示号如 ABC_0031（大小写不敏感，前导零可省，如 ABC_31），或旧的全局号 114、#114。
 定时等待: block <卡号> --kind scheduled --until "<带偏移的未来 ISO 时间>" --reason "<原因>"。until 仅 scheduled 必填，必须带 Z 或 +/-HH:MM，且在未来 7 天内；更长等待请让<leader>用 wait-user。不要用 transient 等钟点。到点前不做 transient 重试、不因等待报 doctor 红；到点后下次 tick 恢复一次。期限与去重消息 ID 持久保存，重试／重启不会重复开模型回合。原 agent 消失或已归档时按原有规则重派。doctor 从到点起计算现有 transient 滞留阈值。执行者可设置自己的卡，所属<leader>可提前 unblock。

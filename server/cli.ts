@@ -21,6 +21,7 @@ import { assertSafeAgentId } from "./agent-id";
 import { assertCliCommandAllowed, assertDiscardCleanupScope, assertNotLeaderAgent, assertProjectScope, assertSupervisorScope, isKanbanLeader, resolveCliIdentity, resolveCompactIdentity } from "./identity";
 import { authorizeDiscard } from "./cleanup-discard";
 import { superviseProject } from "./leader-registry";
+import { exportLeaderMcpCredential } from "./leader-mcp-credential";
 import { auditView, launcherFrom } from "./paseo";
 import type { AgentPresence } from "./presence";
 import { livePresence } from "./live-presence";
@@ -70,6 +71,7 @@ const COMMANDS: Record<string, { flags: readonly string[]; positionals: "none" |
   archive: { flags: ["id"], positionals: "one" },
   register: { flags: ["project", "title", "brief", "role", "profile", "provider", "model", "thinking", "agent", "family", "workspace", "idempotency"], positionals: "none" },
   supervise: { flags: ["project"], positionals: "none" },
+  "mcp-credential": { flags: ["out"], positionals: "none" },
   handover: { flags: ["project", "to", "from", "dry-run", "kanban-leader"], positionals: "none" },
   project: { flags: ["project", "workspace", "base", "lanes", "allow-lanes", "parallel", "always-temp", "wait-parent-pr", "code"], positionals: "none" },
   rebind: { flags: ["id", "agent"], positionals: "one" },
@@ -229,6 +231,7 @@ async function runKanbanInternal(
 
 async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEnv, identity: Identity, hooks?: KanbanHooks): Promise<unknown> {
   assertCliCommandAllowed(identity, parsed.cmd);
+  if (parsed.cmd === "mcp-credential") return exportLeaderMcpCredential(identity, env, parsed.flag("out") ?? "");
   if (parsed.cmd === "supervise") {
     const project = parsed.flag("project")?.trim() ?? "";
     if (!project) throw new KanbanError("invalid", t("cli.supervise.needProject"));

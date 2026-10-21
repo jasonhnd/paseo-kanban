@@ -29,9 +29,12 @@ type Notify = (agentId: string, text: string) => Promise<void>;
 let notifyRef: Notify | null = null;
 /** Event keys whose send has not finished, so two rounds never send the same notice twice. */
 const inflight = new Set<string>();
+/** One diagnostic per missing project until registration recovers or the configured project changes. */
+let missingLeaderProject: string | null = null;
 
 export function setEarlyResetNotify(notify: Notify | null): void {
   notifyRef = notify;
+  if (!notify) missingLeaderProject = null;
 }
 
 const keyOf = (event: { pool: string; afterResetsAt: string }) => `${event.pool}|${event.afterResetsAt}`;
@@ -112,9 +115,9 @@ export async function readEarlyResetLines(now: number): Promise<Record<string, s
   return state ? earlyResetLines(state.events, now) : {};
 }
 
-async function afcLeader(): Promise<string | null> {
+async function afcLeader(project: string): Promise<string | null> {
   const raw = await readJson<Json>(KANBAN_CONFIG, {});
-  const id = supervisorIdFor(readOpsProject(), readSupervisorTable(raw));
+  const id = supervisorIdFor(project, readSupervisorTable(raw));
   return typeof id === "string" && id.length >= 8 ? id : null;
 }
 
@@ -125,11 +128,17 @@ export async function deliverEarlyResetNotices(now: number): Promise<number> {
   if (!notify || !state) return 0;
   const due = pendingEarlyResetNotices(state.events, now).filter((event) => !inflight.has(keyOf(event)));
   if (due.length === 0) return 0;
-  const leader = await afcLeader();
+  const project = readOpsProject();
+  const leader = await afcLeader(project);
   if (!leader) {
-    console.error("[afc] early reset: kanban.config.json has no Kanban <leader>; the early-reset notice waits for the next round");
+    const key = project.toLowerCase();
+    if (missingLeaderProject !== key) {
+      missingLeaderProject = key;
+      console.error(`[afc] early reset: AFC project ${JSON.stringify(project)} has no registered leader (kanban.config.json supervisors); pending notices will retry`);
+    }
     return 0;
   }
+  missingLeaderProject = null;
   const plans = plansOf(await readJson<Json>(PLANS, {}));
   const shortNames = poolNames(poolCatalog(plans), "short");
   const shifting = resetShiftingCoupons(plans);

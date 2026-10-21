@@ -1,13 +1,13 @@
 /// <reference types="node" />
 import { t } from "../shared/i18n";
 import type { DatabaseSync } from "node:sqlite";
-import { envAgentId } from "./agent-id";
+import { envAgentId, SAFE_AGENT_ID } from "./agent-id";
 import { assertConfigReadable, loadConfig, projectSupervisor, type KanbanConfig } from "./config";
 import { getDb } from "./db";
 import { KanbanError } from "./errors";
 import { findAgentFile } from "./open";
 import type { TaskRow } from "./store";
-import { ensureSupervisorToken, identityFromToken, tokenExpired, type Identity } from "./tokens";
+import { ensureSupervisorToken, identityFromToken, LEADER_MCP_ROLE, tokenExpired, type Identity } from "./tokens";
 
 const WORKER_ROLES = new Set(["executor", "reviewer", "reader", "decision", "batch"]);
 
@@ -45,7 +45,7 @@ export function kanbanLaunched(agentId: string, db: DatabaseSync = getDb()): Ide
     return { role: workerRole(card?.role ?? run.role), taskId: run.task_id, agentId };
   }
 
-  const token = db.prepare(`SELECT task_id, role FROM tokens WHERE agent_id = ? AND role != 'guest' ORDER BY created_at DESC LIMIT 1`).get(agentId) as
+  const token = db.prepare(`SELECT task_id, role FROM tokens WHERE agent_id = ? AND role NOT IN ('guest', ?) ORDER BY created_at DESC LIMIT 1`).get(agentId, LEADER_MCP_ROLE) as
     | { task_id: number | null; role: string }
     | undefined;
   if (token) return { role: workerRole(token.role), taskId: token.task_id, agentId };
@@ -83,6 +83,28 @@ export function agentIdentity(agentId: string, db?: DatabaseSync): Identity {
   return { role: GUEST_ROLE, taskId: null, agentId };
 }
 
+/** Exported MCP credentials only represent current registered leaders, never workers or scheduled sessions. */
+export function registeredLeaderMcpIdentity(agentId: string, db?: DatabaseSync): Identity | null {
+  assertConfigReadable();
+  if (!SAFE_AGENT_ID.test(agentId) || scheduleLaunched(agentId)) return null;
+  const identity = agentIdentity(agentId, db);
+  return identity.role === "supervisor" && identity.taskId === null ? identity : null;
+}
+
+function resolveAgentTokenIdentity(identity: Identity, db?: DatabaseSync): Identity {
+  if (identity.role === LEADER_MCP_ROLE) {
+    const current = identity.agentId && identity.taskId === null ? registeredLeaderMcpIdentity(identity.agentId, db) : null;
+    if (!current) throw new KanbanError("unauthorized", t("tokens.invalid"));
+    return current;
+  }
+  return identity.role === GUEST_ROLE && identity.agentId ? agentIdentity(identity.agentId, db) : identity;
+}
+
+/** Bearer validation is shared by MCP and CLI; leader privileges always come from the live registry. */
+export function resolveTokenIdentity(token: string): Identity {
+  return resolveAgentTokenIdentity(identityFromToken(token));
+}
+
 /**
  * CLI identity.
  * A token wins. Otherwise PASEO_AGENT_ID is checked for shape and resolved by agentIdentity,
@@ -92,8 +114,7 @@ export function resolveCliIdentity(env: NodeJS.ProcessEnv): Identity {
   const token = env.KANBAN_TOKEN?.trim();
   if (token) {
     try {
-      const identity = identityFromToken(token);
-      return identity.role === GUEST_ROLE && identity.agentId ? agentIdentity(identity.agentId) : identity;
+      return resolveTokenIdentity(token);
     } catch (err) {
       throw new KanbanError("unauthorized", err instanceof Error ? err.message : String(err));
     }
@@ -114,7 +135,8 @@ export function resolveCompactIdentity(env: NodeJS.ProcessEnv, db: DatabaseSync)
       | { role: string; task_id: number | null; agent_id: string | null; expires_at: string | null }
       | undefined;
     if (!row || tokenExpired(row.expires_at)) throw new KanbanError("unauthorized", t("identity.tokenInvalid"));
-    return { role: row.role, taskId: row.task_id, agentId: row.agent_id };
+    const identity = { role: row.role, taskId: row.task_id, agentId: row.agent_id };
+    return row.role === LEADER_MCP_ROLE ? resolveAgentTokenIdentity(identity, db) : identity;
   }
   const agentId = envAgentId(env);
   if (agentId) return agentIdentity(agentId, db);

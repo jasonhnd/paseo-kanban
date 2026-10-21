@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { randomBytes } from "node:crypto";
 import { t } from "../shared/i18n";
-import { chmodSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "./perf-fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "./perf-fs";
 import { join } from "node:path";
 import { getDb } from "./db";
 import { KanbanError } from "./errors";
@@ -12,6 +12,9 @@ export interface Identity {
   taskId: number | null;
   agentId: string | null;
 }
+
+/** An agent identity credential, never an unrestricted supervisor or a card-worker token. */
+export const LEADER_MCP_ROLE = "leader-mcp";
 
 function tokenPath(): string {
   return join(dataDir(), "supervisor.token");
@@ -124,6 +127,13 @@ export function identityFromToken(token: string): Identity {
 
 export function deleteToken(token: string): void {
   getDb().prepare("DELETE FROM tokens WHERE token = ?").run(token);
+}
+
+/** Registration changes invalidate exported credentials even if the agent still leads another project. */
+export function revokeLeaderMcpTokens(agentId: string | null): void {
+  // Configuring a fresh board must not create a database merely to revoke credentials that cannot exist yet.
+  if (!agentId || !existsSync(join(dataDir(), "kanban.db"))) return;
+  getDb().prepare("DELETE FROM tokens WHERE role = ? AND agent_id = ?").run(LEADER_MCP_ROLE, agentId);
 }
 
 /** Drop a worker token. The supervisor token has no agent id and is left alone. */

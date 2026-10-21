@@ -53,6 +53,7 @@ import { configPath, writeConfigAtomic } from "./config-file";
 import { withConfigLock } from "./config-lock";
 import { applyServerLanguage, languageSetting } from "./language";
 import { isProjectMain, type ListedWorkspace } from "./placement";
+import { revokeLeaderMcpTokens } from "./tokens";
 
 export type WorkspaceList = () => Promise<ListedWorkspace[]>;
 
@@ -412,6 +413,14 @@ function commitDocument(revision: string, document: SettingsDocument): Commit {
     if (invalid) return { ok: false, conflict: false, message: invalid };
     const next = structuredClone(shot.raw);
     applyDocument(next, document);
+    // Settings can remove registrations without going through the individual leader setters.
+    // Revoke under the same lock as credential export, after revision/document checks and before publishing the edit.
+    const remaining = parseConfig(next).supervisors;
+    const revoked = new Set<string>();
+    for (const [name, agentId] of Object.entries(shot.config.supervisors)) {
+      if (!Object.hasOwn(remaining, name) || remaining[name].trim() !== agentId.trim()) revoked.add(agentId.trim());
+    }
+    for (const agentId of revoked) revokeLeaderMcpTokens(agentId);
     writeConfigAtomic(`${JSON.stringify(next, null, 2)}\n`);
     applyServerLanguage();
     return { ok: true, conflict: false, message: t("settings.saved") };

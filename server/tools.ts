@@ -8,7 +8,7 @@ import type { McpTool } from "./mcp";
 import { KanbanError } from "./errors";
 import { acceptTask, approveTask, completeTask, linkTask, unlinkTask, leaderPassTask, leaderReworkTask, rejectTask, requestChanges } from "./flow";
 import { assertSafeAgentId } from "./agent-id";
-import { GUEST_ROLE, SCHEDULE_ROLE, agentIdentity, assertLeaderDecisionScope, assertNotLeaderAgent, assertProjectScope, assertSupervisorScope, assertUnlinkScope, assertWaitUserScope, guestForbidden, scheduleDenial } from "./identity";
+import { GUEST_ROLE, SCHEDULE_ROLE, resolveTokenIdentity, assertLeaderDecisionScope, assertNotLeaderAgent, assertProjectScope, assertSupervisorScope, assertUnlinkScope, assertWaitUserScope, guestForbidden, scheduleDenial } from "./identity";
 import { superviseProject } from "./leader-registry";
 import { livePresence } from "./live-presence";
 import type { AgentPresence } from "./presence";
@@ -23,7 +23,7 @@ import { assertReminderGuard, parseDecisionId, unwait, waitUser, waitUserHold } 
 import { getLanguage, t, type Language, type MessageKey } from "../shared/i18n";
 import { toolText, type ToolTextKey } from "./tools-text";
 import { addComment, appendEvent, archiveTask, blockTask, createTask, getDetail, getTask, listBoard, unblockTask } from "./store";
-import { identityFromToken, type Identity } from "./tokens";
+import type { Identity } from "./tokens";
 import { assertProjectInPaseo } from "./paseo-projects";
 import { doctorSettings, loadConfig, loadConfigForReport, resolveConfiguredProject } from "./config";
 import { connectAndCollect } from "./doctor-live";
@@ -287,8 +287,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, to
   if (!identity) {
     try {
       if (!token) throw new KanbanError("unauthorized", t("tools.missingToken"));
-      identity = identityFromToken(token);
-      if (identity.role === GUEST_ROLE && identity.agentId) identity = agentIdentity(identity.agentId);
+      identity = resolveTokenIdentity(token);
     } catch (err) {
       const error = new KanbanError("unauthorized", err instanceof Error ? err.message : String(err));
       if (ACL[name] && isWriteTool(name)) return auditWrite(name, { role: "unauthenticated", taskId: null, agentId: null }, () => { throw error; });
