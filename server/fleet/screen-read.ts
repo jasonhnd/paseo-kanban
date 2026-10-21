@@ -13,6 +13,7 @@ const COMMAND_TIMEOUT_MS = 5_000;
 const LAUNCH_TIMEOUT_MS = 15_000;
 const KILL_WAIT_MS = 1_000;
 const KILL_GRACE_MS = 400;
+const CLEANUP_ATTEMPTS = 3;
 const POLL_MS = 1_000;
 const FAILURE_LINES = 39;
 
@@ -329,7 +330,7 @@ export function createScreenSession(opts: ScreenSessionOptions): ScreenSession {
   const usable = opts.usable ?? ((frame: string) => Boolean(frame.trim()));
   const ctl = (args: string[], timeoutMs: number, cwd?: string) =>
     runProcess(bin, args, timeoutMs, { cwd, env, label: opts.label });
-  const cleanup = async (): Promise<void> => {
+  const cleanupAttempt = async (): Promise<void> => {
     try {
       const refs = await screenSessions(opts.session, bin, env);
       if (!refs.length) return;
@@ -361,8 +362,26 @@ export function createScreenSession(opts: ScreenSessionOptions): ScreenSession {
       throw error;
     }
   };
+  const cleanup = async (): Promise<void> => {
+    for (let attempt = 1; ; attempt++) {
+      try { return await cleanupAttempt(); }
+      catch (error) {
+        if (attempt >= CLEANUP_ATTEMPTS) throw error;
+        // Reinspect the exact session on every attempt. A timed-out ps or screen
+        // command must not turn a transient load spike into an abandoned terminal.
+        cleanupLog(`Retrying cleanup (${attempt}/${CLEANUP_ATTEMPTS})`);
+        await sleep(100);
+      }
+    }
+  };
+  let pending = Promise.resolve();
+  const serialized = (action: () => Promise<void>): Promise<void> => {
+    const next = pending.then(action);
+    pending = next.catch(() => {});
+    return next;
+  };
   return {
-    open: async () => {
+    open: () => serialized(async () => {
       if (!opts.bin && !platformCapabilities().screen) throw new Error(t("screen.unavailable"));
       await cleanup();
       await rm(opts.dir, { recursive: true, force: true }).catch(() => {});
@@ -379,7 +398,7 @@ export function createScreenSession(opts: ScreenSessionOptions): ScreenSession {
         await cleanup().catch(() => {});
         throw error;
       }
-    },
+    }),
     readFrame: async () => {
       await ctl(["-S", opts.session, "-p", "0", "-X", "hardcopy", shot], COMMAND_TIMEOUT_MS).catch(() => {});
       const frame = await readFile(shot, "utf8").catch(() => "");
@@ -387,6 +406,8 @@ export function createScreenSession(opts: ScreenSessionOptions): ScreenSession {
       return readFile(logPath, "utf8").catch(() => "");
     },
     stuff: (keys) => ctl(["-S", opts.session, "-p", "0", "-X", "stuff", keys], COMMAND_TIMEOUT_MS),
-    close: cleanup,
+    // Cancellation can request close while the detached launcher is still running.
+    // Wait for that launch (including its failure cleanup) before inspecting again.
+    close: () => serialized(cleanup),
   };
 }

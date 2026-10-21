@@ -2,10 +2,18 @@
 // No provider executable, credentials or network are used.
 import { spawn } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
+import { setTimeout as delay } from "node:timers/promises";
 
 const root = process.argv[2] === undefined;
 const depth = Number(process.argv[2] ?? process.env.DEMO_DEPTH);
 const record = (file, value) => appendFileSync(file, `${value}\n`);
+// The test runner can terminate a worker without running its hooks. Every node
+// watches that worker so even a detached, TERM-resistant tree cannot outlive it.
+const owner = Number(process.env.DEMO_OWNER_PID);
+if (Number.isSafeInteger(owner) && owner > 1) setInterval(() => {
+  try { process.kill(owner, 0); }
+  catch (error) { if (error.code === "ESRCH") process.kill(process.pid, "SIGKILL"); }
+}, 100);
 process.on("SIGHUP", () => {});
 process.on("SIGINT", () => {});
 process.on("SIGTERM", () => {
@@ -17,6 +25,7 @@ process.on("SIGTERM", () => {
   }
 });
 record(process.env.DEMO_PID_FILE, process.pid);
+if (root && process.env.DEMO_START_DELAY_MS) await delay(Number(process.env.DEMO_START_DELAY_MS));
 if (depth > 0) spawn(process.execPath, [import.meta.filename, String(depth - 1)], { stdio: "ignore" });
 
 if (root) {

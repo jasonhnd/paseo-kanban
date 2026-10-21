@@ -1,43 +1,15 @@
 /// <reference types="node" />
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import childProcess, { spawn } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
-import { agentLaunchEnv, createScreenSession, finishScreenSession, SCREEN_BIN, screenSessionPids, sleep } from "../screen-read";
+import { alive, pidFile, temporary, terminal, until } from "./screen-fixture";
+import { createScreenSession, finishScreenSession, SCREEN_BIN, screenSessionPids, sleep } from "../screen-read";
 
 const native = (process.platform === "darwin" || process.platform === "linux") && existsSync(SCREEN_BIN);
-const fixtureCli = fileURLToPath(new URL("./fixtures/screen-cli.mjs", import.meta.url));
-const quote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
-let sequence = 0;
-const terminalCleanup = new WeakMap<TestContext, { stops: Array<() => Promise<void>>; dirs: string[] }>();
-
-function temporary(t: TestContext, remove = true): string {
-  // A full-suite TMPDIR can be too long for a Unix screen socket. Stay inside the
-  // card's temp root when one is supplied, including for direct isolated runs.
-  const dir = mkdtempSync(join(process.env.KANBAN_TMP ?? tmpdir(), "sr-"));
-  if (remove) t.after(() => rmSync(dir, { recursive: true, force: true }));
-  return dir;
-}
-
-function pidFile(path: string): number[] {
-  try { return [...new Set(readFileSync(path, "utf8").trim().split("\n").map(Number).filter((pid) => pid > 1))]; }
-  catch { return []; }
-}
-
-function alive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; }
-}
-
-async function until(check: () => boolean, message: string): Promise<void> {
-  const deadline = Date.now() + 10_000;
-  while (!check() && Date.now() < deadline) await sleep(25);
-  assert.ok(check(), message);
-}
-
 function fakeScreen(t: TestContext, body: string): string {
   const file = join(temporary(t), "screen.cjs");
   writeFileSync(file, `#!${process.execPath}\n${body}\n`, { mode: 0o700 });
@@ -125,62 +97,6 @@ test("a stuck screen lookup is killed at the command deadline", { timeout: 9_000
   await assert.rejects(screenSessionPids("demo", bin), /timeout/);
 });
 
-function terminal(t: TestContext, mode = "success", socketDir?: string, name?: string) {
-  const dir = temporary(t, false);
-  const sockets = socketDir ?? join(dir, "s");
-  mkdirSync(sockets, { recursive: true, mode: 0o700 });
-  const pidsPath = join(dir, "pids");
-  const termsPath = join(dir, "terms");
-  const sessionName = name ?? `q${process.pid}.${sequence++}`;
-  const env: NodeJS.ProcessEnv = {
-    ...agentLaunchEnv(), SCREENDIR: sockets, SYSSCREENRC: "/dev/null", SCREENRC: "/dev/null",
-    DEMO_PID_FILE: pidsPath, DEMO_TERM_FILE: termsPath, DEMO_DEPTH: "7", DEMO_MODE: mode,
-  };
-  const launch = join(dir, "cli");
-  writeFileSync(launch, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(fixtureCli)}\n`, { mode: 0o700 });
-  const options = { session: sessionName, dir: join(dir, "frames"), cwd: dir, launch, bin: SCREEN_BIN, env };
-  const session = createScreenSession(options);
-  let startedTree: number[] = [];
-  const pids = () => pidFile(pidsPath);
-  const count = () => pids().filter(alive).length;
-  const listing = () => {
-    const result = spawnSync(SCREEN_BIN, ["-ls"], { env, encoding: "utf8", timeout: 5_000, killSignal: "SIGKILL" });
-    if (result.error) throw result.error;
-    return result.stdout;
-  };
-  const open = async () => {
-    assert.equal(count(), 0, "fixture starts without a leftover process");
-    writeFileSync(pidsPath, "");
-    writeFileSync(termsPath, "");
-    await session.open();
-    await until(() => pids().length === 8, "the eight-process fixture tree starts");
-    startedTree = await screenSessionPids(sessionName, SCREEN_BIN, env);
-    assert.ok(startedTree.length >= 9, "the screen server and complete CLI tree are tracked");
-  };
-  const clean = async () => {
-    await until(() => count() === 0, "the complete fake CLI tree exits");
-    await until(() => startedTree.every((pid) => !alive(pid)), "the screen server and every captured descendant exit");
-    assert.equal(await screenSessionPids(sessionName, SCREEN_BIN, env).then((all) => all.length), 0);
-    assert.ok(!listing().split("\n").some((line) => line.trim().split(/\s+/)[0]?.endsWith(`.${sessionName}`)), "no live or Dead socket remains");
-  };
-  let cleanup = terminalCleanup.get(t);
-  if (!cleanup) {
-    cleanup = { stops: [], dirs: [] };
-    terminalCleanup.set(t, cleanup);
-    const all = cleanup;
-    t.after(async () => {
-      // All sessions sharing this socket directory must stop before any parent is removed.
-      for (const stop of all.stops.reverse()) await stop();
-      for (const path of all.dirs) rmSync(path, { recursive: true, force: true });
-    });
-  }
-  cleanup.stops.push(async () => {
-    await session.close().catch(() => {});
-    await finishScreenSession(pids()).catch(() => {});
-  });
-  cleanup.dirs.push(dir);
-  return { dir, env, sockets, sessionName, options, session, pids, count, listing, open, clean, termsPath };
-}
 
 const fastSleep = (ms: number) => sleep(Math.min(ms, 25));
 
@@ -263,6 +179,70 @@ test("a launch failure after daemon creation still cleans the process tree", { s
   await f.clean();
 });
 
+test("cleanup retries transient session lookup failures without leaving a terminal", { skip: !native, timeout: 25_000 }, async (t) => {
+  const f = terminal(t, "timeout");
+  const state = join(f.dir, "failures");
+  const bin = fakeScreen(t, `
+    const fs = require("node:fs");
+    const {spawnSync} = require("node:child_process");
+    const args = process.argv.slice(2);
+    if (args[0] === "-ls" && fs.existsSync(${JSON.stringify(state)})) {
+      const remaining = Number(fs.readFileSync(${JSON.stringify(state)}, "utf8"));
+      if (remaining > 0) { fs.writeFileSync(${JSON.stringify(state)}, String(remaining - 1)); process.exit(2); }
+    }
+    process.exit(spawnSync(${JSON.stringify(SCREEN_BIN)}, args, {stdio: "inherit"}).status ?? 1);
+  `);
+  await f.open();
+  writeFileSync(state, "2");
+  await createScreenSession({ ...f.options, bin }).close();
+  assert.equal(readFileSync(state, "utf8"), "0");
+  await f.clean();
+});
+
+test("cleanup retries a timed-out process snapshot before quitting the terminal", { skip: !native, timeout: 25_000 }, async (t) => {
+  const original = childProcess.execFile;
+  let failures = 0;
+  const mocked = t.mock.method(childProcess, "execFile", (...args: Parameters<typeof original>) => {
+    if (args[0] === "/bin/ps" && failures > 0) {
+      failures--;
+      const callback = args.at(-1) as (error: Error, stdout: string, stderr: string) => void;
+      queueMicrotask(() => callback(Object.assign(new Error("Synthetic process snapshot timeout"), { killed: true }), "", ""));
+      return undefined as unknown as childProcess.ChildProcess;
+    }
+    return original(...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { mocked.mock.restore(); syncBuiltinESMExports(); });
+  const f = terminal(t, "timeout");
+  await f.open();
+  failures = 2;
+  await f.session.close();
+  assert.equal(failures, 0);
+  await f.clean();
+});
+
+test("close waits for an in-flight launch before removing its process tree", { skip: !native, timeout: 25_000 }, async (t) => {
+  const f = terminal(t, "timeout");
+  const ready = join(f.dir, "launching");
+  const bin = fakeScreen(t, `
+    const fs = require("node:fs");
+    const {spawnSync} = require("node:child_process");
+    const args = process.argv.slice(2);
+    if (args.includes("-dmS")) {
+      fs.writeFileSync(${JSON.stringify(ready)}, "yes");
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 800);
+    }
+    process.exit(spawnSync(${JSON.stringify(SCREEN_BIN)}, args, {stdio: "inherit"}).status ?? 1);
+  `);
+  const session = createScreenSession({ ...f.options, bin });
+  const opening = session.open();
+  await until(() => existsSync(ready), "launch is in flight");
+  await session.close();
+  await opening;
+  assert.deepEqual(await screenSessionPids(f.sessionName, SCREEN_BIN, f.env), []);
+  await f.clean();
+});
+
 test("teardown preserves a different live session with a similar name", { skip: !native, timeout: 20_000 }, async (t) => {
   const target = terminal(t, "timeout");
   const neighbor = terminal(t, "timeout", target.sockets, `${target.sessionName}-keep`);
@@ -292,3 +272,44 @@ test("a Dead session is removed without wiping a different Dead session", { skip
   await neighbor.session.close();
   await neighbor.clean();
 });
+
+for (const mode of ["failure", "timeout", "cancel", "killed"] as const) {
+  test(`fixture cleanup survives test ${mode} during startup`, { skip: !native, timeout: 45_000 }, async (t) => {
+    const dir = temporary(t, false);
+    const record = join(dir, "owner.json");
+    let owned: { dir: string; sockets: string; session: string } | undefined;
+    t.after(async () => {
+      if (owned) {
+        await finishScreenSession(pidFile(`${record}.pids`));
+        if (existsSync(owned.sockets)) await createScreenSession({ session: owned.session, dir: join(owned.dir, "frames"), cwd: owned.dir,
+          launch: "unused", bin: SCREEN_BIN, env: { ...process.env, SCREENDIR: owned.sockets } }).close();
+        rmSync(owned.dir, { recursive: true, force: true });
+      }
+      rmSync(dir, { recursive: true, force: true });
+    });
+    const fixture = fileURLToPath(new URL("./fixtures/screen-lifecycle.ts", import.meta.url));
+    const { NODE_TEST_CONTEXT: _parent, ...baseEnv } = process.env;
+    const env = { ...baseEnv, DEMO_LIFECYCLE: mode, DEMO_LIFECYCLE_RECORD: record };
+    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-reporter=tap", fixture], { env, stdio: ["ignore", "pipe", "pipe"] });
+    let output = "";
+    child.stdout.on("data", (chunk) => { output += String(chunk); });
+    child.stderr.on("data", (chunk) => { output += String(chunk); });
+    t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); });
+    const exit = await new Promise<number | null>((resolve, reject) => {
+      child.on("error", reject);
+      child.on("close", resolve);
+    });
+    assert.ok(existsSync(record), output);
+    owned = JSON.parse(readFileSync(record, "utf8"));
+    assert.notEqual(exit, 0, "the inner interruption actually fails the test worker");
+    if (mode === "failure") assert.match(output, /Synthetic assertion failure/);
+    if (mode === "timeout") assert.match(output, /timed out/);
+    if (mode === "cancel") assert.match(output, /Synthetic test cancellation/);
+    if (mode === "killed") assert.match(output, /SIGKILL/);
+    await until(() => pidFile(`${record}.pids`).every((pid) => !alive(pid)), "all interrupted fixture processes exit");
+    const listing = childProcess.spawnSync(SCREEN_BIN, ["-ls"], { env: { ...process.env, SCREENDIR: owned!.sockets }, encoding: "utf8", timeout: 5_000 });
+    if (listing.error) throw listing.error;
+    assert.ok(!/^\s*\d+\.\S+\s+\(/m.test(listing.stdout), "the interrupted owner's socket directory is empty");
+    if (mode !== "killed") assert.equal(existsSync(owned!.dir), false, "hooks remove the fixture directory after cleanup");
+  });
+}
