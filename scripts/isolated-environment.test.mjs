@@ -72,7 +72,18 @@ test("isolated Git retains helpers and default templates with a pre-push PATH", 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("isolated verification uses the same temporary root for both entry points", () => {
+test("isolated Git can be nested under tool paths containing spaces and quotes", () => {
+  const root = mkdtempSync(join(tmpdir(), "isolated-git-path-"));
+  try {
+    const sourceEnv = isolatedEnvironment(join(root, "Git's tools"));
+    const env = isolatedEnvironment(join(root, "nested"), { sourceEnv });
+    const repo = join(root, "repository with spaces");
+    execFileSync("git", ["init", "-q", repo], { env });
+    assert.ok(existsSync(join(repo, ".git/info/exclude")));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("isolated verification uses the same temporary root for both variables", () => {
   const root = mkdtempSync(join(tmpdir(), "isolated-tmp-"));
   try {
     const env = isolatedEnvironment(root);

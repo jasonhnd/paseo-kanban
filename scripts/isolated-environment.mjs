@@ -1,5 +1,5 @@
 import { accessSync, constants, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { sharedNpmCache } from "./shared-runtime.mjs";
 
 // POSIX tools used by real Git/shell/filesystem fixture tests, not provider executables.
@@ -16,7 +16,16 @@ export function executable(name, path = process.env.PATH ?? "") {
 export function isolatedEnvironment(directory, { release = false, voice = false, sourceEnv = process.env } = {}) {
   const tools = join(directory, "tools"); mkdirSync(tools, { recursive: true });
   symlinkSync(process.execPath, join(tools, "node"));
-  for (const name of [...TEST_TOOLS, ...(release ? ["gitleaks"] : [])]) symlinkSync(executable(name, sourceEnv.PATH), join(tools, name));
+  for (const name of [...TEST_TOOLS, ...(release ? ["gitleaks"] : [])]) {
+    const target = executable(name, sourceEnv.PATH);
+    const command = join(tools, name);
+    if (name === "git") {
+      // Git locates helpers and templates relative to its launch path. A relocated symlink
+      // can lose both when pre-push puts git-core first on PATH; exec the original path.
+      const quoted = resolve(target).replaceAll("'", "'\\''");
+      writeFileSync(command, `#!/bin/sh\nexec '${quoted}' "$@"\n`, { mode: 0o755 });
+    } else symlinkSync(target, command);
+  }
   const dirs = ["home", "paseo", "data", "fleet", "roles", "legacy", "cache", "tmp", "worktrees", "projects"];
   for (const name of dirs) mkdirSync(join(directory, name), { recursive: true });
   const list = join(directory, "anonymous-denylist.txt");
@@ -25,7 +34,7 @@ export function isolatedEnvironment(directory, { release = false, voice = false,
     PATH: tools, HOME: join(directory, "home"), PASEO_HOME: join(directory, "paseo"),
     KANBAN_DATA_DIR: join(directory, "data"),
     KANBAN_PASEO_CONFIG: join(directory, "paseo/config.json"),
-    KANBAN_TMP_ROOT: join(directory, "tmp"), KANBAN_TMP: directory, TMPDIR: join(directory, "tmp"),
+    KANBAN_TMP_ROOT: join(directory, "tmp"), KANBAN_TMP: join(directory, "tmp"), TMPDIR: join(directory, "tmp"),
     KANBAN_WORKTREES_ROOT: join(directory, "worktrees"),
     XDG_CACHE_HOME: join(directory, "cache"), XDG_CONFIG_HOME: join(directory, "home/config"),
     npm_config_cache: sharedNpmCache(sourceEnv), LANG: "C.UTF-8", LC_ALL: "C.UTF-8",
