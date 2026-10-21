@@ -1,15 +1,18 @@
 /// <reference types="node" />
-// Decide when to re-check the three plugins after a Paseo upgrade.
+// Reconcile compatibility coverage after a host upgrade or a plugin installation/check change.
 // The timer and the real `paseo send` live in upgrade-watch.ts; tests call this with fakes.
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { PLUGIN_IDS } from "../contract";
 import { readSupervisorTable } from "../../shared/fleet/decisions";
 import { type MessageKey, t, tAll } from "../../shared/fleet/i18n";
 import { checkoutName, installedPluginDirs, kanbanConfigPath } from "./paths";
 import { isLeaderTitle } from "./records";
-import { type Json, logSwallowed, readJson, STATE_DIR } from "./util";
+import { BIN, CONFIG, PASEO_DIR, type Json, logSwallowed, readJson, STATE_DIR } from "./util";
 import { kanbanSource } from "./kanban-source";
+import { parseDaemonVersion } from "./daemon-log";
 import { readRemovedProjects } from "./removed";
 
 export const COMPAT_STATE_PATH = join(STATE_DIR, "compat-state.json");
@@ -53,11 +56,27 @@ export interface ListedAgent {
 export interface PluginCompatResult {
   id: string;
   label: string;
-  status: "pass" | "fail" | "missing";
+  status: "pass" | "fail" | "timeout" | "missing" | "unknown" | "pending";
   conclusion: string;
   at: string;
   supervisorId: string | null;
   notified: boolean;
+  /** Installation and package/check fingerprint; absent on legacy snapshots. */
+  identity?: string;
+  /** Old evidence remains visible, but cannot establish current compatibility. */
+  stale?: boolean;
+}
+
+export interface PluginInspection {
+  identity: string | null;
+  /** null means the package could not be inspected, rather than a missing script. */
+  hasCompatScript: boolean | null;
+}
+
+export interface CompatContext {
+  version: string | null;
+  /** null means the current plugin inventory could not be read. */
+  plugins: readonly (CompatPlugin & PluginInspection)[] | null;
 }
 
 export interface CompatState {
@@ -78,8 +97,8 @@ export interface UpgradeDeps {
   readState(): Promise<CompatState | null>;
   writeState(state: CompatState): Promise<void>;
   currentVersion(): Promise<string | null>;
-  plugins: readonly CompatPlugin[];
-  hasCompatScript(dir: string): Promise<boolean>;
+  plugins: readonly CompatPlugin[] | null;
+  inspectPlugin(dir: string): Promise<PluginInspection>;
   runCompat(dir: string): Promise<{ ok: boolean; timedOut: boolean; output: string }>;
   listAgents(): Promise<ListedAgent[]>;
   send(agentId: string, text: string): Promise<void>;
@@ -117,6 +136,85 @@ export function defaultPlugins(installed: Array<{ id: string; dir: string }> = i
     const name = checkoutName(dir);
     return { id: known?.id ?? id, label: known?.label ?? id, dir, cwdMatch: name, project: name };
   });
+}
+
+/** Read metadata only: no compatibility command is executed by snapshot consumers. */
+export async function inspectCompatPlugin(dir: string): Promise<PluginInspection> {
+  const path = join(dir, "package.json");
+  const [real, install, metadata, text] = await Promise.all([realpath(dir), stat(dir), stat(path), readFile(path, "utf8")]);
+  const pkg = JSON.parse(text) as { scripts?: { compat?: unknown } } | null;
+  if (!pkg || typeof pkg !== "object" || Array.isArray(pkg)) throw new Error("Invalid package metadata");
+  const script = pkg.scripts?.compat;
+  // Real path and inode/birth time detect replacements (including a retargeted symlink).
+  // Package bytes and file metadata detect version, npm lifecycle and compat-command edits.
+  const identity = createHash("sha256").update(JSON.stringify([
+    real, install.dev, install.ino, install.birthtimeMs,
+    metadata.dev, metadata.ino, metadata.mtimeMs, metadata.ctimeMs, text,
+  ])).digest("hex");
+  return { identity, hasCompatScript: typeof script === "string" && script.trim().length > 0 };
+}
+
+async function inspectPlugins(plugins: UpgradeDeps["plugins"], inspect: UpgradeDeps["inspectPlugin"]): Promise<CompatContext["plugins"]> {
+  if (plugins === null) return null;
+  return Promise.all(plugins.map(async (plugin) => {
+    try {
+      return { ...plugin, ...await inspect(plugin.dir) };
+    } catch (error) {
+      logSwallowed(`upgrade-check inspect ${plugin.id}`, error);
+      return { ...plugin, identity: null, hasCompatScript: null };
+    }
+  }));
+}
+
+export async function currentPaseoVersion(): Promise<string | null> {
+  const fromCli = await new Promise<string>((resolve) => {
+    execFile(BIN.paseo, ["--version"], { timeout: 15_000 }, (err, stdout) => resolve(err ? "" : String(stdout ?? "")));
+  });
+  const parsed = parseVersion(fromCli);
+  if (parsed) return parsed;
+  return parseDaemonVersion(await readFile(join(PASEO_DIR, "daemon.log"), "utf8").catch(() => ""));
+}
+
+export async function currentCompatContext(): Promise<CompatContext> {
+  const version = await currentPaseoVersion();
+  try {
+    const config = JSON.parse(await readFile(CONFIG, "utf8")) as { plugins?: Record<string, { path?: unknown }> };
+    if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("Invalid host config");
+    if (config.plugins !== undefined && (!config.plugins || typeof config.plugins !== "object" || Array.isArray(config.plugins))) throw new Error("Invalid plugin inventory");
+    const installed = Object.entries(config.plugins ?? {}).flatMap(([id, row]) => (
+      row && typeof row.path === "string" && row.path.trim() ? [{ id, dir: row.path.trim() }] : []
+    ));
+    return { version, plugins: await inspectPlugins(defaultPlugins(installed), inspectCompatPlugin) };
+  } catch (error) {
+    logSwallowed("upgrade-check read plugin inventory", error);
+    return { version, plugins: null };
+  }
+}
+
+/** Keep only current plugins; retain stale failures as failures and mark new coverage pending. */
+export function reconcileCompatState(state: CompatState | null, context: CompatContext): CompatState {
+  const base = state ?? { version: context.version ?? "?", recordedAt: "", checkedAt: null, results: [] };
+  if (context.plugins === null) return { ...base, results: base.results.map(row => ({ ...row, stale: true })) };
+  return { ...base, results: context.plugins.map(plugin => {
+    // A config ID can change without changing the installation or the executed check.
+    // Carry that failure forward until a current check replaces it; never inherit a pass.
+    const old = base.results.find(row => row.id === plugin.id) ?? (plugin.identity ? base.results.find(row => (
+      row.identity === plugin.identity && (row.status === "fail" || row.status === "timeout")
+    )) : undefined);
+    if (!old) return { id: plugin.id, label: plugin.label, status: "pending", conclusion: t("upgrade.conclusion.pending", { label: plugin.label }), at: "", supervisorId: null, notified: false };
+    const stale = old.id !== plugin.id || old.stale === true || !context.version || base.version !== context.version || !plugin.identity || old.identity !== plugin.identity;
+    return { ...old, id: plugin.id, label: plugin.label, ...(stale ? { stale: true } : {}) };
+  }) };
+}
+
+export async function readCompatSnapshot(raw: unknown, readContext = currentCompatContext): Promise<CompatState> {
+  let context: CompatContext = { version: null, plugins: null };
+  try {
+    context = await readContext();
+  } catch (error) {
+    logSwallowed("upgrade-check inspect current context", error);
+  }
+  return reconcileCompatState(normalizeState(raw), context);
 }
 
 export function parseVersion(text: string): string | null {
@@ -228,10 +326,20 @@ export function normalizeListed(raw: unknown): ListedAgent[] {
   return out;
 }
 
-function isResult(x: unknown): x is PluginCompatResult {
-  if (!x || typeof x !== "object") return false;
+function normalizeResult(x: unknown): PluginCompatResult[] {
+  if (!x || typeof x !== "object") return [];
   const o = x as Json;
-  return typeof o.label === "string" && (o.status === "pass" || o.status === "fail" || o.status === "missing") && typeof o.conclusion === "string";
+  if (typeof o.id !== "string" || !o.id) return [];
+  const status = ["pass", "fail", "timeout", "missing", "pending"].includes(String(o.status)) ? o.status as PluginCompatResult["status"] : "unknown";
+  return [{
+    id: o.id, label: typeof o.label === "string" ? o.label : o.id, status,
+    conclusion: typeof o.conclusion === "string" ? o.conclusion : "",
+    at: typeof o.at === "string" ? o.at : "",
+    supervisorId: typeof o.supervisorId === "string" ? o.supervisorId : null,
+    notified: o.notified === true,
+    ...(typeof o.identity === "string" ? { identity: o.identity } : {}),
+    ...(o.stale === true ? { stale: true } : {}),
+  }];
 }
 
 export function normalizeState(raw: unknown): CompatState | null {
@@ -242,7 +350,7 @@ export function normalizeState(raw: unknown): CompatState | null {
     version: o.version,
     recordedAt: typeof o.recordedAt === "string" ? o.recordedAt : "",
     checkedAt: typeof o.checkedAt === "string" ? o.checkedAt : null,
-    results: Array.isArray(o.results) ? o.results.filter(isResult) : [],
+    results: Array.isArray(o.results) ? o.results.flatMap(normalizeResult) : [],
   };
 }
 
@@ -250,27 +358,29 @@ export function alertsFromState(state: CompatState | null): CompatAlert[] {
   if (!state) return [];
   const alerts: CompatAlert[] = [];
   for (const r of state.results) {
-    if (r.status === "missing") {
-      alerts.push({ level: "info", kind: t("upgrade.conclusion.missing"), text: t("upgrade.alert.missing", { label: r.label }), agentId: null });
-      continue;
-    }
-    if (r.status === "fail") {
+    if (r.status === "fail" || r.status === "timeout") {
       const who = !r.supervisorId ? t("upgrade.alert.nobody") : r.notified ? "" : t("upgrade.alert.notSent");
       alerts.push({
         level: "red",
         kind: t("upgrade.conclusion.failed"),
-        text: t("upgrade.alert.failed", { label: r.label, conclusion: r.conclusion, who }),
+        text: t("upgrade.alert.failed", { label: r.label, conclusion: r.conclusion, who }) + (r.stale ? t("upgrade.alert.stale") : ""),
         agentId: r.supervisorId,
       });
+    } else if (r.status !== "pass" || r.stale) {
+      const key = r.stale ? "upgrade.alert.staleResult" : r.status === "missing" ? "upgrade.alert.missing" : r.status === "pending" ? "upgrade.conclusion.pending" : "upgrade.conclusion.unknown";
+      alerts.push({ level: "info", kind: t("upgrade.conclusion.unverified"), text: t(key, { label: r.label }), agentId: null });
     }
   }
   return alerts;
 }
 
-export async function readCompatAlerts(): Promise<CompatAlert[]> {
+export async function readCompatAlerts(deps = {
+  readState: () => readJson<unknown>(COMPAT_STATE_PATH, null),
+  context: currentCompatContext,
+}): Promise<CompatAlert[]> {
   try {
-    const raw = await readJson<unknown>(COMPAT_STATE_PATH, null);
-    return alertsFromState(normalizeState(raw));
+    const raw = await deps.readState();
+    return alertsFromState(await readCompatSnapshot(raw, deps.context));
   } catch (error) {
     logSwallowed("upgrade-check read compat state", error);
     return [];
@@ -281,18 +391,27 @@ function emptyOutcome(reason: string, state: CompatState | null): UpgradeOutcome
   return { ran: false, reason, state, alerts: alertsFromState(state), notifications: [] };
 }
 
-/** First sight of a version only records it. A later change, or force, runs each plugin. */
+/** First sight records pending coverage. Host or installation changes recheck affected plugins. */
 export async function runUpgradeCheck(deps: UpgradeDeps, opts: { force: boolean }): Promise<UpgradeOutcome> {
   const version = await deps.currentVersion();
   const prev = normalizeState(await deps.readState());
-  if (!version) return emptyOutcome(t("upgrade.reason.noVersion"), prev);
+  const plugins = await inspectPlugins(deps.plugins, deps.inspectPlugin);
+  const reconciled = reconcileCompatState(prev, { version, plugins });
+  if (!version) return emptyOutcome(t("upgrade.reason.noVersion"), reconciled);
   const now = deps.now();
   if (!opts.force && !prev?.version) {
-    const state: CompatState = { version, recordedAt: now, checkedAt: null, results: [] };
+    const state: CompatState = { ...reconciled, version, recordedAt: now, checkedAt: null };
     await deps.writeState(state);
     return emptyOutcome(t("upgrade.reason.firstSeen"), state);
   }
-  if (!opts.force && prev?.version === version) return emptyOutcome(t("upgrade.reason.unchanged"), prev);
+  const changed = opts.force || prev?.version !== version;
+  const targets = (plugins ?? []).filter(plugin => {
+    const row = reconciled.results.find(row => row.id === plugin.id);
+    return changed || row?.stale || row?.status === "pending" || row?.status === "unknown";
+  });
+  // Persist pending/stale coverage before running commands so readers do not see an old green.
+  if (JSON.stringify(prev) !== JSON.stringify(reconciled)) await deps.writeState(reconciled);
+  if (targets.length === 0) return emptyOutcome(t("upgrade.reason.unchanged"), reconciled);
 
   let agents: ListedAgent[] = [];
   try {
@@ -310,20 +429,20 @@ export async function runUpgradeCheck(deps: UpgradeDeps, opts: { force: boolean 
   }
   const removed = (deps.removedProjects ?? readRemovedProjects)();
   const from = prev?.version ?? null;
-  const results: PluginCompatResult[] = [];
+  const results = [...reconciled.results];
   const notifications: UpgradeOutcome["notifications"] = [];
-  for (const plugin of deps.plugins) {
-    // A project that left Paseo has nobody to tell.
+  for (const plugin of targets) {
+    const index = results.findIndex(row => row.id === plugin.id);
+    // Unreadable metadata is unverified; keep previous failure evidence until a check can run.
+    if (!plugin.identity || plugin.hasCompatScript === null) continue;
     const supervisorId = removed.has(plugin.project) ? null : resolveSupervisor(agents, plugin, supervisors);
-    let has = false;
-    try {
-      has = await deps.hasCompatScript(plugin.dir);
-    } catch (error) {
-      logSwallowed(`upgrade-check hasCompatScript ${plugin.id}`, error);
-      has = false;
-    }
-    if (!has) {
-      results.push({
+    if (!plugin.hasCompatScript) {
+      const old = results[index];
+      if (old.status === "fail" || old.status === "timeout") {
+        results[index] = { ...old, stale: true };
+        continue;
+      }
+      results[index] = {
         id: plugin.id,
         label: plugin.label,
         status: "missing",
@@ -331,7 +450,8 @@ export async function runUpgradeCheck(deps: UpgradeDeps, opts: { force: boolean 
         at: now,
         supervisorId,
         notified: false,
-      });
+        identity: plugin.identity,
+      };
       continue;
     }
     let run: { ok: boolean; timedOut: boolean; output: string };
@@ -354,7 +474,7 @@ export async function runUpgradeCheck(deps: UpgradeDeps, opts: { force: boolean 
         notified = false;
       }
     }
-    results.push({
+    results[index] = {
       id: plugin.id,
       label: plugin.label,
       status,
@@ -362,13 +482,14 @@ export async function runUpgradeCheck(deps: UpgradeDeps, opts: { force: boolean 
       at: now,
       supervisorId,
       notified,
-    });
+      identity: plugin.identity,
+    };
   }
   const state: CompatState = { version, recordedAt: now, checkedAt: now, results };
   await deps.writeState(state);
   return {
     ran: true,
-    reason: opts.force ? t("upgrade.reason.manual") : t("upgrade.reason.changed"),
+    reason: opts.force ? t("upgrade.reason.manual") : changed ? t("upgrade.reason.changed") : t("upgrade.reason.pluginsChanged"),
     state,
     alerts: alertsFromState(state),
     notifications,

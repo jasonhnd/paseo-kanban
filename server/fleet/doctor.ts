@@ -39,6 +39,7 @@ import { kanbanSource } from "./kanban-source";
 import { nvmBinDirs } from "./node-paths";
 import { type DataDirChoice, dataDirChoice, kanbanDataDir, kanbanRoot } from "./paths";
 import { BIN, CONFIG, HOME, PASEO_DIR, type RunOutcome, runOutcome, STATE_DIR, tilde } from "./util";
+import { type CompatContext, currentCompatContext, readCompatSnapshot } from "./upgrade-check";
 
 const LOG_TAIL_BYTES = 16 * 1024 * 1024;
 const CMD_TIMEOUT_MS = 30_000;
@@ -76,6 +77,8 @@ export interface DoctorDeps {
   readText?: (path: string) => Promise<string | null>;
   /** Size and modification time of a regular file, or null when there is none. */
   statFile?: (path: string) => Promise<{ size: number; mtimeMs: number } | null>;
+  /** Current host/plugin identities, inspected without executing compatibility scripts. */
+  compatContext?: () => Promise<CompatContext>;
 }
 
 export function productionDoctorDeps(): DoctorDeps {
@@ -132,6 +135,7 @@ export function productionDoctorDeps(): DoctorDeps {
     },
     readText: readTextFile,
     statFile: statRegularFile,
+    compatContext: currentCompatContext,
   };
 }
 
@@ -374,7 +378,11 @@ export async function runDoctor(deps: DoctorDeps = productionDoctorDeps()): Prom
       if (!rows) return makeItem({ id: "schedules", title: t("doctor.checks.schedules.title"), summary: t("doctor.server.schedulesUnreadableSummary"), evidence: ["paseo schedule ls --json"], findings: [{ key: "schedules:unreadable", status: "yellow", text: t("doctor.server.schedulesUnreadable") }] });
       return checkSchedules(rows);
     }),
-    guard("compat", t("doctor.checks.compat.title"), async () => checkCompat(await deps.readJson(join(deps.stateDir, "compat-state.json")), deps.now(), tilde(join(deps.stateDir, "compat-state.json")))),
+    guard("compat", t("doctor.checks.compat.title"), async () => {
+      const raw = await deps.readJson(join(deps.stateDir, "compat-state.json"));
+      const state = deps.compatContext ? await readCompatSnapshot(raw, deps.compatContext) : raw;
+      return checkCompat(state, deps.now(), tilde(join(deps.stateDir, "compat-state.json")));
+    }),
     guard("coupons", t("doctor.checks.coupons.title"), async () => checkCoupons(await deps.readJson(join(deps.stateDir, "reset-coupons.json")), await deps.readJson(join(deps.stateDir, "plans.json")), deps.now(), [tilde(join(deps.stateDir, "reset-coupons.json")), tilde(join(deps.stateDir, "plans.json"))])),
     guard("data-dir", "Data directory", async () => checkDataDir(viewOfDataDir(deps))),
     guard("migration", "Migration check", async () => checkMigration(await migrationView(deps), deps.now())),

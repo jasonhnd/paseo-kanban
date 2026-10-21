@@ -384,14 +384,20 @@ export function checkCompat(state: unknown, now: number, path: string): DoctorIt
     const id = str(row.id) ?? "?";
     const status = str(row.status) ?? "?";
     const conclusion = str(row.conclusion);
-    const label = t("doctor.checks.compat.row", { label: str(row.label) ?? id, status, conclusion: conclusion ? t("doctor.checks.compat.rowConclusion", { conclusion }) : "" });
-    return finding(`compat:${id}`, status === "pass" ? "green" : "red", label);
+    const failed = status === "fail" || status === "timeout";
+    const verified = status === "pass" && row.stale !== true;
+    const detail = row.stale === true ? t("doctor.checks.compat.stale") : !failed && !verified ? t("upgrade.conclusion.unverified") : "";
+    const label = t("doctor.checks.compat.row", { label: str(row.label) ?? id, status, conclusion: conclusion ? t("doctor.checks.compat.rowConclusion", { conclusion }) : "" }) + (detail ? ` — ${detail}` : "");
+    return finding(`compat:${id}`, failed ? "red" : verified ? "green" : "yellow", label);
   });
   const recordedAt = Date.parse(isRecord(state) ? str(state.recordedAt) ?? "" : "");
   const when = Number.isNaN(recordedAt) ? t("doctor.checks.compat.whenUnknown") : t("doctor.checks.compat.ago", { age: ageText(Math.max(0, now - recordedAt) / MIN_MS) });
   const failed = findings.filter((row) => row.status === "red").length;
   const version = (isRecord(state) ? str(state.version) : null) ?? "?";
-  return makeItem({ ...base, summary: failed === 0 ? t("doctor.checks.compat.summaryOk", { version, when }) : t("doctor.checks.compat.summaryFailed", { count: failed, version, when }), findings });
+  const unverified = findings.filter(row => row.status === "yellow").length;
+  const summary = failed > 0 ? t("doctor.checks.compat.summaryFailed", { count: failed, version, when })
+    : unverified > 0 ? t("doctor.checks.compat.summaryUnverified", { count: unverified, version, when }) : t("doctor.checks.compat.summaryOk", { version, when });
+  return makeItem({ ...base, summary, findings });
 }
 
 // ---- h. reset coupons
