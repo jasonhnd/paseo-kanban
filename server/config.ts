@@ -14,6 +14,7 @@ import {
   type ConfigFileRead,
 } from "./config-file";
 import { withConfigLock } from "./config-lock";
+import { revokeLeaderMcpTokens } from "./tokens";
 import { doctorSettings, type DoctorSettings } from "./config-doctor";
 import { KanbanError } from "./errors";
 import { dataDir } from "./paths";
@@ -41,6 +42,8 @@ export interface ProjectWorkspace {
   workspacePath?: string;
   defaultWorkspace: WorkspaceMode;
   baseBranch: string;
+  /** Additional local or remote-tracking branches whose ancestry proves card work has landed. */
+  integrationBranches?: string[];
   /** How many long-lived lanes this project may use. Default 1. Changing the count does not open lanes. */
   worktreeLanes: number;
   /**
@@ -288,6 +291,27 @@ function branchNameOk(value: string): boolean {
   return isBaseBranch(value);
 }
 
+/** Git branch/ref syntax, without revision expressions, tags or other ref namespaces. */
+function integrationBranchNameOk(value: string): boolean {
+  let name = value;
+  if (name.startsWith("refs/heads/")) name = name.slice("refs/heads/".length);
+  else if (name.startsWith("refs/remotes/")) {
+    name = name.slice("refs/remotes/".length);
+    if (!name.includes("/")) return false;
+  } else if (name.startsWith("refs/")) return false;
+  return name.length > 0 && name !== "HEAD" && !name.startsWith("-") &&
+    !/[\u0000-\u0020\u007f~^:?*\[\\]/.test(name) && !name.includes("..") && !name.includes("@{") && !name.endsWith(".") &&
+    name.split("/").every(part => part.length > 0 && !part.startsWith(".") && !part.endsWith(".lock"));
+}
+
+function integrationBranches(value: unknown, project: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some(name => typeof name !== "string" || !integrationBranchNameOk(name))) {
+    throw new ConfigFileError(t("config.badIntegrationBranches", { field: `projects.${project}.integrationBranches` }));
+  }
+  return [...new Set(value as string[])];
+}
+
 function laneCount(value: unknown): number {
   if (typeof value === "number" && Number.isInteger(value) && value >= 1) return Math.min(value, 32);
   return 1;
@@ -305,6 +329,7 @@ function projectMap(value: unknown): Record<string, ProjectWorkspace> {
     const row = item as {
       defaultWorkspace?: unknown;
       baseBranch?: unknown;
+      integrationBranches?: unknown;
       worktreeLanes?: unknown;
       lanesEnabled?: unknown;
       parallel?: unknown;
@@ -315,7 +340,9 @@ function projectMap(value: unknown): Record<string, ProjectWorkspace> {
       workspacePath?: unknown;
       workspace?: unknown;
     };
-    const mode = row.defaultWorkspace === "worktree" || row.defaultWorkspace === "dir" ? row.defaultWorkspace : null;
+    const integrations = integrationBranches(row.integrationBranches, key);
+    const mode = row.defaultWorkspace === "worktree" || row.defaultWorkspace === "dir" ? row.defaultWorkspace :
+      row.defaultWorkspace === undefined && integrations !== undefined ? "dir" : null;
     if (!mode) continue;
     const base = typeof row.baseBranch === "string" ? row.baseBranch.trim() : "";
     const code = typeof row.code === "string" ? row.code.trim().toUpperCase() : "";
@@ -323,6 +350,7 @@ function projectMap(value: unknown): Record<string, ProjectWorkspace> {
     next[key] = {
       defaultWorkspace: mode,
       baseBranch: branchNameOk(base) ? base : "main",
+      ...(integrations !== undefined ? { integrationBranches: integrations } : {}),
       worktreeLanes: laneCount(row.worktreeLanes),
       lanesEnabled: lanesEnabledValue(row.lanesEnabled),
       parallel: row.parallel !== false,
@@ -472,7 +500,15 @@ function describeProblem(path: string, read: Exclude<ConfigFileRead, { state: "o
 export function configFileProblem(): ConfigProblem | null {
   const path = configPath();
   const read = readConfigFile(path);
-  if (read.state === "ok") return null;
+  if (read.state === "ok") {
+    try {
+      parseConfig(read.raw);
+      return null;
+    } catch (err) {
+      if (!(err instanceof ConfigFileError)) throw err;
+      return describeProblem(path, { state: "broken", detail: err.message });
+    }
+  }
   if (read.state === "missing" && !configuredBefore(path)) return null;
   return describeProblem(path, read);
 }
@@ -687,7 +723,9 @@ export function setProjectAutoStart(project: string, enabled: boolean): KanbanCo
 export function setSupervisorAgentId(agentId: string | null): KanbanConfig {
   return withConfigLock(() => {
     const config = loadConfigForWrite();
-    config.supervisorAgentId = agentId && agentId.trim() ? agentId.trim() : null;
+    const next = agentId?.trim() || null;
+    if (config.supervisorAgentId !== next) revokeLeaderMcpTokens(config.supervisorAgentId);
+    config.supervisorAgentId = next;
     saveConfig(config);
     return config;
   });
@@ -716,6 +754,7 @@ export function projectWorkspace(project: string, config = loadConfig()): Projec
   return {
     defaultWorkspace: stored.defaultWorkspace === "worktree" ? "dir" : stored.defaultWorkspace,
     baseBranch: stored.baseBranch,
+    ...(stored.integrationBranches !== undefined ? { integrationBranches: [...stored.integrationBranches] } : {}),
     worktreeLanes: stored.worktreeLanes,
     lanesEnabled: stored.lanesEnabled === true,
     parallel: stored.parallel !== false,
@@ -764,6 +803,7 @@ export function setProjectWorkspace(
   patch: {
     defaultWorkspace?: WorkspaceMode;
     baseBranch?: string;
+    integrationBranches?: string[];
     worktreeLanes?: number;
     lanesEnabled?: boolean;
     parallel?: boolean;
@@ -782,12 +822,14 @@ export function setProjectWorkspace(
     if (mode !== "dir" && mode !== "worktree") throw new KanbanError("invalid", t("config.workspaceOnlyDir"));
     const base = (patch.baseBranch ?? current.baseBranch).trim();
     if (!branchNameOk(base)) throw new KanbanError("invalid", t("config.badBaseBranch"));
+    const integrations = integrationBranches(patch.integrationBranches === undefined ? current.integrationBranches : patch.integrationBranches, name);
     const lanes = patch.worktreeLanes ?? current.worktreeLanes;
     if (!Number.isInteger(lanes) || lanes < 1 || lanes > 32) throw new KanbanError("invalid", t("config.badLaneCount"));
     const lanesEnabled = patch.lanesEnabled ?? current.lanesEnabled;
     const parallel = patch.parallel ?? current.parallel !== false;
     const alwaysTemp = patch.alwaysTemp ?? current.alwaysTemp === true;
     const next: ProjectWorkspace = { defaultWorkspace: mode, baseBranch: base, worktreeLanes: lanes, lanesEnabled, parallel };
+    if (integrations !== undefined) next.integrationBranches = integrations;
     if (stored?.code) next.code = stored.code;
     if (stored?.workspacePath) next.workspacePath = stored.workspacePath;
     if (alwaysTemp) next.alwaysTemp = true;
@@ -820,6 +862,7 @@ export function setProjectCode(project: string, code: string): KanbanConfig {
         defaultWorkspace: stored?.defaultWorkspace ?? "dir",
         ...(stored?.workspacePath ? { workspacePath: stored.workspacePath } : {}),
         baseBranch: current.baseBranch,
+        ...(current.integrationBranches !== undefined ? { integrationBranches: [...current.integrationBranches] } : {}),
         worktreeLanes: current.worktreeLanes,
         lanesEnabled: current.lanesEnabled,
         parallel: current.parallel !== false,
@@ -875,8 +918,11 @@ export function setProjectSupervisor(project: string, agentId: string | null): K
   return withConfigLock(() => {
     const config = loadConfigForWrite();
     const name = resolveSupervisorProject(project, config);
-    if (!agentId || !agentId.trim()) delete config.supervisors[name];
-    else config.supervisors[name] = agentId.trim();
+    const previous = projectSupervisor(name, config);
+    const next = agentId?.trim() || null;
+    if (previous !== next) revokeLeaderMcpTokens(previous);
+    if (!next) delete config.supervisors[name];
+    else config.supervisors[name] = next;
     saveConfig(config);
     return config;
   });

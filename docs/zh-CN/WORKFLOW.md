@@ -36,11 +36,37 @@ L1：清楚的小改；L2：集中常规改动；L3：跨文件或调查；L4：
 5. 执行只在分配目录干活，每完成一步提交，交接含 files、verification、risks；列本机测试/构建命令和结果，明确未做的真实验证。
 6. 审查核对改动和证据后通过或返工；leader 对用户需求逐项核对后验收。审查通过不等于最终验收；反复打回要复核范围和简报。
 
-产物验收必须写明：`accept <卡号> --artifact <提交|文件|pull-request>`（证据是 pull request 时还要 `--reason`）。它记下提交、树和证据，不把卡的分支合并或变基到本地基准。已有 pull request 或 GitHub 合同只是跳过本地合回；证据仍须对上这张卡的分支尖端，别的提交会被拒绝。没有临时分支的卡，以工作区里当前检出的提交为准，包括游离的 HEAD。记录的分支可以是空的。读不到这个提交就拒绝，别的提交也拒绝。卡上已经绑定 pull request 时，产物地址必须是同一个所有人、仓库和编号，这个核对不访问网络。没有绑定 pull request 时，仍要给出明确的 pull request 和理由。仓库没有远程不会把普通验收改成这个模式。pull request 产物必须使用小写 `https://github.com/`；`https://GITHUB.COM/` 会被拒绝。所有人和仓库的比较不区分大小写。leader 权限、待验收状态，以及需要审查时的通过结论，仍然有效。普通验收在仓库没有远程时仍会把临时分支合回本地。
+产物验收必须写明：`accept <卡号> --artifact <提交|文件|pull-request>`（证据是 pull request 时还要 `--reason`）。它记下提交、树和证据，不把卡的分支合并或变基到本地基准。已有 pull request 或 GitHub 合同只是跳过本地合回；证据仍须对上这张卡的分支尖端，别的提交会被拒绝。没有临时分支的卡，以工作区里当前检出的提交为准，包括游离的 HEAD。记录的分支可以是空的。读不到这个提交就拒绝，别的提交也拒绝。卡上已经绑定 pull request 时，产物地址必须是同一个所有人、仓库和编号，这个核对不访问网络。没有绑定 pull request 时，仍要给出明确的 pull request 和理由。仓库没有远程不会把普通验收改成这个模式。leader 权限、待验收状态，以及需要审查时的通过结论，仍然有效。普通验收在仓库没有远程时仍会把临时分支合回本地。
 
 7. 合并或发版另交已授权操作，首卡演示无需这些。核对完成状态与干净工作区，等待管理的会话/workspace 清理完毕。
 
 启动会话将看板标记（Kanban server/agent-env.ts 的 BOARD_AGENT_ENV）设为 1，同时传 KANBAN_ROLE=supervisor。仅标签在支持的 host 上不触发协议；只传前者默认为执行。创建、协议送达、登记须分别确认。可见会话消息恢复不能称补写 system prompt。
+
+## 清理时使用整合分支
+
+如果已验收卡片的成果先落进整合分支，再进入项目的基准分支，可在 `kanban.config.json` 对应项目中配置 `integrationBranches`：
+
+```json
+{
+  "projects": {
+    "demo": {
+      "defaultWorkspace": "dir",
+      "baseBranch": "main",
+      "worktreeLanes": 1,
+      "lanesEnabled": false,
+      "integrationBranches": ["pre"]
+    }
+  }
+}
+```
+
+短名 `pre` 会检查 `refs/heads/pre`，以及 `refs/remotes/origin/pre` 等远端跟踪分支。也可写远端名 `origin/pre`，或用 `refs/heads/pre`、`refs/remotes/upstream/pre` 精确指定 ref。每项必须是非空、合法的 Git 分支名，不接受标签或其他 ref 命名空间；不存在的分支会跳过。整合分支只读取本地 ref，不执行 fetch，因此本地整合分支无需推送。
+
+卡分支尖端与配置的整合分支尖端相同，或是其祖先时，清理会视为成果已落地。这一依据也允许删除卡片自己的分支；未提交文件及原有归属检查仍会阻止不安全的清理。Doctor 在报告历史 `not_merged` 清理失败前使用同一包含关系判断，其他清理错误仍照常报告。
+
+车道卡同样使用这一配置：`git branch -d` 拒绝删卡分支时，清理会重新确认包含关系后再允许强制删除。长期保留的车道目录、车道分支和 Paseo workspace 均不删除；Doctor 也会用同一组整合 ref 复核历史 `skip_lane` 合并失败。
+
+不配置 `integrationBranches`，或设为 `[]`，会保留原有基准分支和 PR 判断。配置整合分支不等于授权合并、推送或丢弃未合并成果；卡分支尖端不在任何允许目的地中时，仍不能通过合并检查。
 
 ## 等待与决定
 
@@ -67,3 +93,5 @@ node "$BOARD_INSTALL/bin/paseo-kanban.mjs" resume-cleanup DEMO_0001 --discard-un
 `cleanup_discard_authorized` 记录 leader、精确 tip、比较基准和修正后的提交清单。该回执表示授权，清理尚未完成。正常清理将在合适的 tick 执行，共享 workspace、活跃 agent 检查照常生效；归档 workspace、删除 worktree，并只删除已批准的本地分支 tip。分支删除成功后，`cleanup_discarded` 记录 leader 和同一份审计清单。空清单表示其他引用保留了所有提交，自有分支／副本仍可移除。不删除远端分支或 tag。
 
 副本仍存在时，出现新提交、本地／比较基准变化或未提交改动会暂停移除副本。检查该副本后，若仍打算丢弃，再显式加参数授权。副本删除后，基准前进不影响删除已批准的 tip。若分支 tip 不同或已在其他 worktree 中检出，则保留分支、撤销授权，记录 `keep_branch` 和 `temp_workspace_cleaned`（`keptBranch: true`），并唤醒登记的项目 leader（必要时回退到 Kanban leader）。删分支的临时错误继续使用正常退避和 12 次上限；达到上限同样保留、撤销并通知。不要求对已删除的副本重新授权。撤销最新授权后不能重新启用更旧授权。重建后的 workspace 代次不能复用旧授权。不加参数时，原有合并检查和保留分支规则继续生效。
+
+产物验收的 PR 地址须使用小写 `https://github.com/` 前缀；owner/repository 仍按大小写不敏感核对。

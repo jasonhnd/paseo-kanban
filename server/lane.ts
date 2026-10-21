@@ -6,6 +6,7 @@ import { projectWorkspace } from "./config";
 import { getDb } from "./db";
 import { KanbanError } from "./errors";
 import { deleteSquashedBranch, resolveWorktreeBase, runGit, type GitRunner } from "./git";
+import { integrationBranchContaining } from "./integration-branches";
 import { pickWorkspace, samePath, type ListedWorkspace } from "./placement";
 import { prHeadOid, prMergeState, readContract } from "./pr";
 import { cardMark } from "./card-ref";
@@ -311,6 +312,14 @@ function remoteHasOrigin(stdout: string): boolean {
 }
 
 async function laneMerged(task: TaskRow, binding: LaneBinding, run: GitRunner): Promise<"go" | "not_merged" | { error: string }> {
+  const integrations = projectWorkspace(task.project).integrationBranches ?? [];
+  if (integrations.length) {
+    const listed = await run(binding.root, ["branch", "--list", binding.branch]);
+    if (listed.code !== 0) return { error: failure(listed, t("lane.gitFailed", { command: "git branch --list" })) };
+    if (!listed.stdout.trim()) return "go";
+  }
+  const integrated = await integrationBranchContaining(binding.root, binding.branch, integrations, run);
+  if (integrated) return "ref" in integrated ? "go" : integrated;
   const contract = readContract(task.contract_json);
   if (contract.pr) {
     const merge = await prMergeState(contract.pr);
@@ -344,14 +353,20 @@ async function deleteLaneBranch(task: TaskRow, binding: LaneBinding, run: GitRun
   const deleted = await run(binding.root, ["branch", "-d", binding.branch]);
   if (deleted.code === 0) return null;
   const plain = failure(deleted, t("lane.gitFailed", { command: "git branch -d" }));
-  const pr = readContract(task.contract_json).pr;
-  if (!pr) return `${plain}${t("lane.noForce", { reason: t("lane.noPr") })}`;
-  const merge = await prMergeState(pr);
-  if (merge.error || !merge.merged) return `${plain}${t("lane.noForce", { reason: merge.error || t("lane.prNotMerged") })}`;
-  const head = await prHeadOid(pr);
-  if ("error" in head) return `${plain}${t("lane.noForce", { reason: head.error })}`;
-  const local = await run(binding.root, ["rev-parse", "--verify", `refs/heads/${binding.branch}`]);
-  if (local.code !== 0 || local.stdout.trim().toLowerCase() !== head.oid) return `${plain}${t("lane.noForce", { reason: t("lane.localAhead") })}`;
+  // Checkout and the lane lock can separate this delete from the earlier merge gate.
+  // Prove the current tip is still contained before allowing a forced delete.
+  const integrated = await integrationBranchContaining(binding.root, binding.branch, projectWorkspace(task.project).integrationBranches ?? [], run);
+  if (integrated && "error" in integrated) return `${plain}${t("lane.noForce", { reason: integrated.error })}`;
+  if (!integrated) {
+    const pr = readContract(task.contract_json).pr;
+    if (!pr) return `${plain}${t("lane.noForce", { reason: t("lane.noPr") })}`;
+    const merge = await prMergeState(pr);
+    if (merge.error || !merge.merged) return `${plain}${t("lane.noForce", { reason: merge.error || t("lane.prNotMerged") })}`;
+    const head = await prHeadOid(pr);
+    if ("error" in head) return `${plain}${t("lane.noForce", { reason: head.error })}`;
+    const local = await run(binding.root, ["rev-parse", "--verify", `refs/heads/${binding.branch}`]);
+    if (local.code !== 0 || local.stdout.trim().toLowerCase() !== head.oid) return `${plain}${t("lane.noForce", { reason: t("lane.localAhead") })}`;
+  }
   const forced = await deleteSquashedBranch(binding.root, task.id, binding.branch, force);
   if (forced.code !== 0) return failure(forced, t("lane.gitFailed", { command: "git branch -D" }));
   return null;

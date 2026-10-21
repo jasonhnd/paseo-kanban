@@ -13,7 +13,7 @@ import { isAgentAlive } from "./alive";
 import { deliverWake, hasWakeSender } from "./bus";
 import { cardMarkOf } from "./card-ref";
 import { CARD_WORK_DIR } from "./card-tmp";
-import { DEFAULT_ARCHIVE_DEADLINE_MS, doctorSettings, kanbanLeaderForAlarm, loadConfigForReport, type DoctorSettings } from "./config";
+import { DEFAULT_ARCHIVE_DEADLINE_MS, doctorSettings, kanbanLeaderForAlarm, loadConfigForReport, projectWorkspace, type DoctorSettings } from "./config";
 import { checkConfigFile, checkDataDir, checkProjectCodes } from "./doctor-config";
 import { checkMigration } from "./doctor-migration";
 import { getReadOnlyDb } from "./db";
@@ -28,6 +28,9 @@ import { dataDir } from "./paths";
 import { stableBinFinding } from "./stable-bin";
 import { samePath } from "./placement";
 import { currentCleanupSql } from "./cleanup-state";
+import { integrationBranchContaining } from "./integration-branches";
+import { runGit } from "./git";
+import { recordedPlaceholderError, recordedPlaceholderPaths } from "./placeholder-cleanup";
 import { capacityAlertSuppressId, capacityFindings, markCapacityLeaderAlerted, refreshCapacityGuard } from "./capacity-guard";
 
 export const DOCTOR_REPORT_FILE = "doctor-report.json";
@@ -867,7 +870,7 @@ export async function runDoctor(input: DoctorRunInput = {}): Promise<DoctorRepor
       const decisionSource = readOpenDecisions(input.decisionsPath);
       // Reuse the board's matcher without reading or resolving any leader agent records.
       const decisions = decisionSource.items.map((item) => ({ ...item, leader: { agentId: null, reason: null } }));
-      if (checkCards(tasks, events, scan, sources, settings, now, add, decisions)) complete.add("card");
+      if (await checkCards(tasks, events, scan, sources, settings, now, add, decisions, budget)) complete.add("card");
     }
     if (!expired()) {
       const boardChecked = checkBoard(sources.board, settings, now, add);
@@ -1395,19 +1398,34 @@ function checkDirectories(sources: DoctorSources, tasks: DocTask[], add: (findin
           ?? agent.title?.match(/\b[A-Z][A-Z0-9]*_\d+\b/i)?.[0];
         return code ? [code] : [];
       }))];
+      let knownTask: DocTask | undefined;
+      let removalError: string | null = null;
+      try {
+        const db = getReadOnlyDb();
+        const paths = recordedPlaceholderPaths(db);
+        const owners = paths.get(resolve(dir));
+        if (owners?.size) {
+          const taskId = [...owners][0]!;
+          if (owners.size === 1) knownTask = tasks.find(task => task.id === taskId);
+          removalError = recordedPlaceholderError({ directory: dir, taskId, paths, db,
+            worktrees: dirs.worktrees, worktreesRoot: dirs.root });
+        }
+      } catch {
+        // Without readable ownership records retain the ordinary orphan warning.
+      }
       const leftover: DoctorFinding = {
         id: `dir:placeholder:${resolve(dir)}`,
         severity: retained.length > 0 ? "yellow" : "red",
         check: "directory",
-        project: null,
-        card: cards.length === 1 ? cards[0] : null,
-        taskId: null,
+        project: knownTask?.project ?? null,
+        card: knownTask ? markOf(knownTask) : cards.length === 1 ? cards[0] : null,
+        taskId: knownTask?.id ?? null,
         object: dir,
         symptom: retained.length > 0 ? t("doctor.dir.placeholder.retained") : t("doctor.dir.placeholder.gone"),
-        evidence: placeholder.join(t("common.listSep")),
+        evidence: [placeholder.join(t("common.listSep")), removalError].filter(Boolean).join("\n"),
         suggestion: retained.length > 0
           ? t("doctor.dir.placeholder.purge", { commands: cards.length > 0 ? cards.map((card) => ` purge-agents ${card}`).join(t("common.semicolon")) : t("doctor.dir.placeholder.purgeAny") })
-          : t("doctor.dir.placeholder.delete"),
+          : knownTask || removalError ? t("doctor.cleanup.suggestion") : t("doctor.dir.placeholder.delete"),
       };
       RELATED_CARDS.set(leftover, cards);
       add(leftover);
@@ -1575,7 +1593,7 @@ function checkAgents(
   return !source.error;
 }
 
-function checkCards(
+async function checkCards(
   tasks: DocTask[],
   events: DocEvent[],
   scan: DoctorScan,
@@ -1584,7 +1602,8 @@ function checkCards(
   now: number,
   add: (finding: DoctorFinding) => void,
   decisions: readonly DecisionView[],
-): boolean {
+  budget: () => number,
+): Promise<boolean> {
   const agents = sources.agents?.agents;
   function addTimeout(finding: DoctorFinding): void {
     const matches = cardDecisions(finding.card ?? "", decisions);
@@ -1731,6 +1750,26 @@ function checkCards(
         const base = Number.isFinite(retryAt) ? retryAt : Date.parse(event.at);
         if (!Number.isFinite(base)) continue;
         if (now - base < settings.cleanupStaleHours * 3_600_000) continue;
+        // Old not_merged rows can predate an integration merge. Reuse cleanup's
+        // read-only proof, scoped to the recorded workspace; other failures still count.
+        if (data.reason === "not_merged" && (data.action === "skip_worktree" || data.action === "skip_lane")) {
+          const bindingKind = data.action === "skip_lane" ? "lane_bound" : "worktree_created";
+          const created = taskEvents(scan, task.id).findLast(row => row.kind === bindingKind);
+          const owned = created ? parseData(created.data_json) : {};
+          const branch = typeof data.branch === "string" ? data.branch : owned.branch;
+          const names = projectWorkspace(task.project, loadConfigForReport()).integrationBranches ?? [];
+          if (names.length && typeof owned.root === "string" && typeof owned.directory === "string" &&
+              typeof data.directory === "string" && samePath(data.directory, owned.directory) && typeof branch === "string" && ownsBranch(task, branch)) {
+            const wait = budget();
+            if (wait <= 0) return false;
+            try {
+              const integrated = await withTimeout(integrationBranchContaining(owned.root, branch, names, runGit), wait);
+              if (integrated && "ref" in integrated) continue;
+            } catch {
+              // Unknown containment leaves the original failure visible.
+            }
+          }
+        }
         const reason = cleanupFailureReason(data);
         add({
           id: `card:cleanup:${task.id}:${key}`,

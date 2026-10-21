@@ -47,6 +47,32 @@ Artifact acceptance is explicit: `accept <card> --artifact <commit|file|pull-req
 
 The leader launch sets the board activation marker (`BOARD_AGENT_ENV` in Kanban's `server/agent-env.ts`) to `1` and sends `KANBAN_ROLE=supervisor` at creation. Labels alone do not trigger the protocol on the supported host; the first variable alone defaults to executor. Creation, protocol delivery and registration are separate checks. Recovery as a visible session message is not a retroactive system prompt.
 
+## Integration branches for cleanup
+
+When accepted card work lands on an integration branch before the project's base branch, add `integrationBranches` to that project's entry in `kanban.config.json`:
+
+```json
+{
+  "projects": {
+    "demo": {
+      "defaultWorkspace": "dir",
+      "baseBranch": "main",
+      "worktreeLanes": 1,
+      "lanesEnabled": false,
+      "integrationBranches": ["pre"]
+    }
+  }
+}
+```
+
+A short name such as `pre` checks `refs/heads/pre` and remote-tracking branches such as `refs/remotes/origin/pre`. Use `origin/pre` for a remote name, or `refs/heads/pre` / `refs/remotes/upstream/pre` to select an exact ref. Entries must be nonempty, valid Git branch names; tags and other ref namespaces are rejected. Missing branches are ignored. Integration refs are read locally without fetching, so a local integration branch need not be pushed.
+
+Cleanup treats the card tip as landed when it equals or is an ancestor of a configured integration ref. This proof also permits removal of the card's own branch; dirty files and the existing ownership checks still prevent unsafe cleanup. Doctor uses the same containment check before reporting an old `not_merged` cleanup failure. Other cleanup errors remain visible.
+
+This also applies to lane cards: cleanup rechecks containment before forcing deletion of the card branch when `git branch -d` refuses. The long-lived lane directory, lane branch and Paseo workspace stay in place. Doctor rechecks historical `skip_lane` merge failures using the same integration refs.
+
+Omitting `integrationBranches`, or setting it to `[]`, preserves the existing base-branch and PR rules. Configuring an integration branch does not authorize merging, pushing or discarding unmerged work. A tip not contained in any accepted destination still fails the merge gate.
+
 ## Waiting and decisions
 
 Report ready deliverables even when another PR or external check is pending; describe it in `handoff.waitingOn`. Use a human-needed block for missing authorization or a decision only the user can make. Keep independent work moving.

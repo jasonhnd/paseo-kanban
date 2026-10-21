@@ -15,6 +15,8 @@ import { cleanupGeneration, cleanupMark, trackCleanupWork } from "./cleanup-stat
 import { tempCleaned } from "./temp-mark";
 import { branchOwnedByCard } from "./workspace";
 import { readOnlyBranchName } from "./readonly-worktree";
+import { projectWorkspace } from "./config";
+import { integrationBranchContaining } from "./integration-branches";
 
 export interface OwnedWorktree {
   directory: string;
@@ -157,6 +159,10 @@ async function mergedEnough(task: TaskRow, owned: OwnedWorktree, run: GitRunner,
   // Someone already removed the copy. A recorded PR must not be asked first: gh failing would
   // keep reporting not_merged after the directory and the branch are both gone.
   if (!branchHere && directoryState(owned.directory) === "missing") return { kind: "gone" };
+  if (branchHere) {
+    const integrated = await integrationBranchContaining(owned.root, owned.branch, projectWorkspace(task.project).integrationBranches ?? [], run);
+    if (integrated) return "ref" in integrated ? { kind: "go" } : { kind: "error", error: integrated.error };
+  }
   const contract = readContract(task.contract_json);
   const remotes = await run(owned.root, ["remote"]);
   if (remotes.code !== 0) return { kind: "error", error: failure(remotes, t("worktreeGc.gitFailed", { command: "git remote" })) };
@@ -247,6 +253,11 @@ async function originContainedBasis(
  * deleteSquashedBranch checks the branch name once more.
  */
 async function forceDelete(task: TaskRow, owned: OwnedWorktree, run: GitRunner): Promise<{ basis: string } | { reason: string }> {
+  // Recheck the current tip before deletion; a prior directory-removal proof is not enough.
+  const integrated = await integrationBranchContaining(owned.root, owned.branch, projectWorkspace(task.project).integrationBranches ?? [], run);
+  if (integrated) return "ref" in integrated
+    ? { basis: t("worktreeGc.basis.inIntegration", { ref: integrated.ref }) }
+    : { reason: integrated.error };
   const localBase = await ancestorOf(owned, headRef(owned.base), run);
   if ("yes" in localBase && localBase.yes) return { basis: t("worktreeGc.basis.inBase", { base: owned.base }) };
   const remote = await originContainedBasis(owned, run);

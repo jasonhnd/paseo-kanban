@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { translate, t } from "../shared/i18n";
 import { invalidateAgentIndex } from "./agent-index";
 import { existsSync, lstatSync, readdirSync, rmSync, rmdirSync, unlinkSync } from "./perf-fs";
@@ -22,6 +22,8 @@ import { branchFailureKind, branchAlreadyGone, createdWorktree, deleteOwnedBranc
 import { readWorktreeCreated, correctedFromDirectories, reconcileRecordedDirectory } from "./worktree-record";
 import { cleanupGeneration, cleanupMark, currentCleanupSql } from "./cleanup-state";
 import { removeArchivedClaudeProjects } from "./native-sessions";
+import { paseoWorktreesRoot } from "./paths";
+import { barePlaceholderError, recordedPlaceholderError, recordedPlaceholderPaths } from "./placeholder-cleanup";
 import { deleteDiscardedBranch, discardAuthorization, discardCopyMissing, discardStillValid, revokeDiscardAuthorization } from "./cleanup-discard";
 
 function failure(result: { stderr: string; stdout: string }, fallback: string): string {
@@ -566,17 +568,63 @@ async function purgeOpenedAgents(
  */
 function removeBarePlaceholder(directory: string): string | null {
   try {
-    if (!lstatSync(directory).isDirectory()) return t("tempWorkspace.placeholder.notDirectory");
-    const others = readdirSync(directory).filter((name) => name !== PLACEHOLDER_NAME);
-    if (others.length > 0) return t("tempWorkspace.placeholder.otherFiles", { files: others.slice(0, 5).join(t("common.listSep")), more: others.length > 5 ? t("tempWorkspace.placeholder.more") : "" });
+    const blocked = barePlaceholderError(directory);
+    if (blocked) return blocked;
     const readme = join(directory, PLACEHOLDER_NAME);
-    if (!lstatSync(readme).isFile()) return t("tempWorkspace.placeholder.readmeNotFile");
     unlinkSync(readme);
     rmdirSync(directory);
   } catch (err) {
     return t("tempWorkspace.placeholder.removeFailedWith", { error: err instanceof Error ? err.message : String(err) });
   }
   return existsSync(directory) ? t("tempWorkspace.placeholder.removeFailed") : null;
+}
+
+/** Earlier attempts are never ordinary worktree cleanup targets: only proven, bare placeholders. */
+async function dropHistoricalPlaceholders(input: {
+  taskId: number; current?: string; run: GitRunner; worktreesRoot?: string;
+  events: CleanupRecord[]; now: Date; record: RecordCleanup; canContinue: () => boolean;
+}): Promise<"settled" | "pending"> {
+  const db = getDb();
+  const paths = recordedPlaceholderPaths(db);
+  const candidates = [...paths].filter(([path, owners]) => owners.has(input.taskId) &&
+    (!input.current || resolve(input.current) !== path));
+  const worktrees: string[] = [];
+  let listed = false;
+  for (const [directory] of candidates) {
+    if (!input.canContinue()) return "pending";
+    const probe = directoryProbe(directory);
+    if ("state" in probe && probe.state === "absent") continue;
+    if (!retryReady(input.events, "drop_directory", directory, input.now)) return "pending";
+    let error = "error" in probe ? probe.error : null;
+    if (!error && !listed) {
+      // Check every recorded repository, including attempts made before the current copy.
+      const roots = db.prepare("SELECT data_json FROM events WHERE task_id = ? AND kind IN ('worktree_created', 'temp_workspace')")
+        .all(input.taskId) as Array<{ data_json: string }>;
+      const unique = new Set<string>();
+      for (const row of roots) {
+        try { const root = JSON.parse(row.data_json)?.root; if (typeof root === "string" && root) unique.add(root); }
+        catch { /* A malformed event supplies no repository. */ }
+      }
+      if (!unique.size) error = t("tempWorkspace.settle.unowned");
+      for (const root of unique) {
+        const result = await input.run(root, ["worktree", "list", "--porcelain"]);
+        if (!input.canContinue()) return "pending";
+        if (result.code !== 0) { error = failure(result, t("tempWorkspace.drop.listUnreadable")); break; }
+        worktrees.push(...result.stdout.split("\n").filter(line => line.startsWith("worktree ")).map(line => line.slice(9)));
+      }
+      listed = true;
+    }
+    error ??= recordedPlaceholderError({ directory, taskId: input.taskId, paths: recordedPlaceholderPaths(db), worktrees,
+      worktreesRoot: input.worktreesRoot ?? paseoWorktreesRoot(), db });
+    error ??= placeholderBlocksRemoval(directory, input.taskId);
+    if (!input.canContinue()) return "pending";
+    error ??= removeBarePlaceholder(directory);
+    if (error) return defer(input.events, "drop_directory", directory, input.now, input.record, {
+      action: "drop_directory", directory, ok: false, outcome: "error", error,
+    });
+    input.record({ action: "drop_directory", directory, ok: true, reason: "historical_placeholder" });
+  }
+  return "settled";
 }
 
 /** Recheck cwd users even if an earlier cleanup round already purged the card's agents. */
@@ -725,6 +773,9 @@ export async function settleTempWorkspace(input: {
   if (holdForSharedWorkspace(task, events, record)) return "pending";
   const owned = ownedWorktree(task.id, created, input.worktreesRoot);
   if (!created) {
+    const dropped = await dropHistoricalPlaceholders({ taskId: task.id, run, worktreesRoot: input.worktreesRoot,
+      events, now: input.now, record, canContinue: () => cleanupGeneration(task.id) === boundary && getTask(task.id).status === task.status });
+    if (dropped === "pending") return "pending";
     appendEvent(task.id, "temp_workspace_cleaned", null, null, "kanban", {
       cleanupGeneration: boundary,
       directory: null,
@@ -1085,6 +1136,9 @@ export async function settleTempWorkspace(input: {
     });
   }
   if (!canContinue()) return "pending";
+  const historical = await dropHistoricalPlaceholders({ taskId: task.id, current: owned.directory, run,
+    worktreesRoot: input.worktreesRoot, events, now: input.now, record, canContinue });
+  if (historical === "pending") return "pending";
   const recordedSha = artifactAcceptanceSha(task.id);
   if (!discard && recordedSha && !recorded(events, "delete_branch") && !(await artifactCommitInBase(owned.root, recordedSha, owned.base, run))) {
     keepBranch = true;
