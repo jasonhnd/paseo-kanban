@@ -539,7 +539,7 @@ export async function readGrokScreenVia(
     error = describeError(e);
   } finally {
     if (!reading && opened) await io.fail?.(lastFrame, error ?? msgNoPct()).catch(() => {});
-    if (opened) await io.close().catch(() => {});
+    await io.close().catch(() => {});
   }
 
   const failed = reading ?? emptyReading(readAt, error ?? msgNoPct(), false);

@@ -230,20 +230,6 @@ export function isUsageAgentCommand(command: string): boolean {
   return true;
 }
 
-async function indexJsPids(): Promise<number[]> {
-  const out = await captureOutput("ps", ["-ax", "-o", "pid=,command="]);
-  const pids: number[] = [];
-  for (const line of out.split("\n")) {
-    const trimmed = line.trim();
-    const cut = trimmed.indexOf(" ");
-    if (cut <= 0) continue;
-    const pid = Number(trimmed.slice(0, cut));
-    const command = trimmed.slice(cut + 1);
-    if (pid > 1 && pid !== process.pid && isUsageAgentCommand(command)) pids.push(pid);
-  }
-  return pids;
-}
-
 export const MSG_STATUS_OUT = "cursor-agent status: Not logged in";
 export function msgStatusUnknown(): string {
   return t("cursor.usage.statusUnknown");
@@ -359,7 +345,7 @@ export async function readCursorScreenVia(
       await sleep(200);
       await io.stuff("\x03").catch(() => {});
     }
-    if (opened) await io.close().catch(() => {});
+    await io.close().catch(() => {});
   }
 
   const failed = reading ?? emptyReading(readAt, error ?? t("cursor.usage.screenNotRead"), false, { source: null });
@@ -379,23 +365,19 @@ async function noteIfLoginLost(io: ScreenIo, reading: CursorUsageReading): Promi
 
 /** Screen session for one read. Keys are sent only by `readCursorScreenVia`. Close never types. `bin` is a test seam for a fake `screen`. */
 export function liveScreenIo(cwd: string, bin?: string): ScreenIo {
-  let beforeAgents = new Set<number>();
   const session = createScreenSession({
     session: SESSION,
     dir: join(cwd, "cursor-usage-run"),
     cwd,
     launch: CURSOR_AGENT_BIN,
     bin,
-    beforeLaunch: async () => {
-      beforeAgents = new Set(await indexJsPids());
-    },
   });
   return {
     login: () => cursorAgentLogin(),
     open: () => session.open(),
     readFrame: () => session.readFrame(),
     stuff: (keys) => session.stuff(keys),
-    close: () => session.close(async () => (await indexJsPids()).filter((pid) => !beforeAgents.has(pid))),
+    close: () => session.close(),
     notifyLoginLost: () => defaultNotifyLoginLost(),
   };
 }

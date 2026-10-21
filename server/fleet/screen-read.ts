@@ -3,7 +3,7 @@
 // Both start a TUI inside `/usr/bin/screen`, poll its frame, type at most one command, and then stop
 // only the processes this read started. Nothing in here types a key by itself: the callers decide.
 import { platformCapabilities } from "./platform";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { t } from "../../shared/fleet/i18n";
@@ -11,7 +11,7 @@ import { t } from "../../shared/fleet/i18n";
 export const SCREEN_BIN = "/usr/bin/screen";
 const COMMAND_TIMEOUT_MS = 5_000;
 const LAUNCH_TIMEOUT_MS = 15_000;
-const SESSION_TREE_DEPTH = 5;
+const KILL_WAIT_MS = 1_000;
 const KILL_GRACE_MS = 400;
 const POLL_MS = 1_000;
 const FAILURE_LINES = 39;
@@ -119,53 +119,126 @@ export function captureOutput(cmd: string, args: string[], opts: CaptureOptions 
   });
 }
 
-/** Pids of the screen session called `session` and everything it started, captured before quit so none are left behind. */
-export async function screenSessionPids(session: string, bin: string = SCREEN_BIN): Promise<number[]> {
-  const env = agentLaunchEnv();
-  const listed = await captureOutput(bin, ["-ls"], { timeoutMs: COMMAND_TIMEOUT_MS, env });
-  const leader = listed.match(new RegExp(`(\\d+)\\.${session}(?:\\s|$)`));
-  if (!leader) return [];
-  const root = Number(leader[1]);
+interface ScreenRef {
+  id: string;
+  pid: number;
+  dead: boolean;
+}
+
+interface SessionTree {
+  pids: number[];
+  groups: number[];
+}
+
+/** Unlike captureOutput, cleanup must distinguish a failed lookup from an empty result. */
+function cleanupOutput(cmd: string, args: string[], env: NodeJS.ProcessEnv): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, { env, timeout: COMMAND_TIMEOUT_MS, killSignal: "SIGKILL", maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => {
+      // macOS screen also returns 1 for a valid -ls/-wipe listing with live sockets.
+      const listing = ["-ls", "-wipe"].includes(args[0]) && error?.code === 1
+        && (/No Sockets found/i.test(stdout) || /^\s*\d+\.\S+\s+\(/m.test(stdout));
+      const gone = error?.code === 1 && /No screen session found/i.test(stdout);
+      if (error && !listing && !gone) {
+        reject(new Error(`Screen cleanup command ${args[0]} failed (${error.killed ? "timeout" : error.code ?? "unknown error"})`));
+      } else resolve(stdout);
+    });
+  });
+}
+
+async function screenSessions(session: string, bin: string, env: NodeJS.ProcessEnv): Promise<ScreenRef[]> {
+  const listed = await cleanupOutput(bin, ["-ls"], env);
+  return listed.split("\n").flatMap((line): ScreenRef[] => {
+    const match = /^\s*(\d+)\.([^\s]+)\s+\(([^)]+)\)/.exec(line);
+    if (!match || match[2] !== session) return [];
+    const pid = Number(match[1]);
+    const dead = /dead/i.test(match[3]);
+    if (!Number.isSafeInteger(pid) || pid <= 1 || !dead && pid === process.pid) throw new Error("Invalid screen session PID");
+    return [{ id: `${pid}.${match[2]}`, pid, dead }];
+  });
+}
+
+/** One bounded process-table snapshot, with no arbitrary depth or per-child command timeout. */
+async function sessionTree(root: number, env: NodeJS.ProcessEnv): Promise<SessionTree> {
+  const out = await cleanupOutput("/bin/ps", ["-ax", "-o", "pid=,ppid=,pgid="], env);
+  const rows = out.split("\n").flatMap((line) => {
+    const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s*$/.exec(line);
+    return match ? [{ pid: Number(match[1]), parent: Number(match[2]), group: Number(match[3]) }] : [];
+  });
   const seen = new Set<number>([root]);
-  let frontier = [root];
-  for (let depth = 0; depth < SESSION_TREE_DEPTH && frontier.length > 0; depth++) {
-    const next: number[] = [];
-    for (const pid of frontier) {
-      const kids = (await captureOutput("pgrep", ["-P", String(pid)], { timeoutMs: COMMAND_TIMEOUT_MS, env }))
-        .split("\n")
-        .map((s) => Number(s.trim()))
-        .filter((n) => n > 1 && !seen.has(n));
-      for (const kid of kids) {
-        seen.add(kid);
-        next.push(kid);
-      }
-    }
-    frontier = next;
+  const pids = [root];
+  const children = new Map<number, number[]>();
+  for (const row of rows) {
+    const siblings = children.get(row.parent) ?? [];
+    siblings.push(row.pid);
+    children.set(row.parent, siblings);
   }
-  return [...seen];
+  for (let index = 0; index < pids.length; index++) {
+    for (const pid of children.get(pids[index]) ?? []) {
+      if (pid <= 1 || pid === process.pid || seen.has(pid)) continue;
+      seen.add(pid);
+      pids.push(pid);
+    }
+  }
+  const ownGroup = rows.find((row) => row.pid === process.pid)?.group;
+  const rootGroup = rows.find((row) => row.pid === root)?.group;
+  // A window's process group also contains children forked during shutdown. Only groups
+  // whose leader belongs to this tree qualify; never signal the screen or plugin group.
+  const groups = rows.filter((row) => seen.has(row.pid) && row.pid === row.group
+    && row.group !== rootGroup && row.group !== ownGroup).map((row) => row.group);
+  return { pids, groups };
+}
+
+/** Exact session name only; dead socket PIDs are never used as process identities. */
+export async function screenSessionPids(session: string, bin: string = SCREEN_BIN, baseEnv?: NodeJS.ProcessEnv): Promise<number[]> {
+  const env = agentLaunchEnv(baseEnv);
+  const live = (await screenSessions(session, bin, env)).filter((ref) => !ref.dead);
+  if (live.length > 1) throw new Error("Ambiguous screen session name");
+  return live[0] ? (await sessionTree(live[0].pid, env)).pids : [];
 }
 
 export interface KillDeps {
   kill: (pid: number, signal: NodeJS.Signals | 0) => void;
   sleep: (ms: number) => Promise<void>;
   self?: number;
+  log?: (message: string) => void;
 }
 
-const defaultKillDeps: KillDeps = { kill: (pid, signal) => process.kill(pid, signal), sleep };
+const cleanupLog = (message: string): void => console.error(`[afc] screen cleanup: ${message}`);
+const defaultKillDeps: KillDeps = { kill: (pid, signal) => process.kill(pid, signal), sleep, log: cleanupLog };
 
-/** SIGTERM the pids, then SIGKILL anything still alive. Never types into the TUI. Pid 1 and this process are skipped. */
-export async function finishScreenSession(pids: number[], deps: KillDeps = defaultKillDeps): Promise<void> {
+/** TERM first, then KILL surviving targets, and bound the final wait. groups must be owned window groups. */
+export async function finishScreenSession(pids: number[], deps: KillDeps = defaultKillDeps, groups: number[] = []): Promise<void> {
   const self = deps.self ?? process.pid;
-  const mine = [...new Set(pids)].filter((pid) => pid > 1 && pid !== self);
-  for (const pid of mine) {
-    try { deps.kill(pid, "SIGTERM"); } catch { /* already gone */ }
-  }
+  const safePid = (pid: number) => Number.isSafeInteger(pid) && pid > 1 && pid !== self;
+  const mine = [...new Set(pids)].filter(safePid).reverse();
+  const targets = [...mine, ...[...new Set(groups)].filter(safePid).map((pid) => -pid)];
+  const log = deps.log ?? cleanupLog;
+  const signal = (pid: number, sig: NodeJS.Signals | 0): boolean => {
+    try { deps.kill(pid, sig); return true; }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ESRCH") return false;
+      log(`Could not send ${sig} to process target ${pid} (${code ?? "unknown error"})`);
+      return true;
+    }
+  };
+  const alive = () => targets.filter((pid) => signal(pid, 0));
+  const running = alive();
+  if (!running.length) return;
+  for (const pid of running) signal(pid, "SIGTERM");
   await deps.sleep(KILL_GRACE_MS);
-  for (const pid of mine) {
-    try {
-      deps.kill(pid, 0);
-      deps.kill(pid, "SIGKILL");
-    } catch { /* already gone */ }
+  const remaining = alive();
+  if (!remaining.length) return;
+  log(`Escalating ${remaining.length} process target(s) to SIGKILL`);
+  for (const pid of remaining) signal(pid, "SIGKILL");
+  for (let waited = 0; waited < KILL_WAIT_MS; waited += 50) {
+    if (!alive().length) return;
+    await deps.sleep(50);
+  }
+  if (alive().length) {
+    const message = "Process targets remain after the SIGKILL deadline";
+    log(message);
+    throw new Error(message);
   }
 }
 
@@ -230,35 +303,68 @@ export interface ScreenSessionOptions {
   /** The program to run inside the session. */
   launch: string;
   bin?: string;
+  /** Optional environment for an isolated screen socket directory and fake CLI. */
+  env?: NodeJS.ProcessEnv;
   /** Name used in screen error text. Defaults to the binary path. */
   label?: string;
   /** Decides whether a hardcopy can be trusted. Default: not blank. An unusable one falls back to the stream log. */
   usable?: (frame: string) => boolean;
-  /** Runs after the old session is quit and before the new one starts. */
-  beforeLaunch?: () => Promise<void>;
 }
 
 export interface ScreenSession {
   open(): Promise<void>;
   readFrame(): Promise<string>;
   stuff(keys: string): Promise<void>;
-  /** Quit the session and stop it plus anything it started and any `extraPids`. Sends no keys. */
-  close(extraPids?: () => Promise<number[]>): Promise<void>;
+  /** Stop the owned process tree before quitting the exact session, then remove its dead socket. */
+  close(): Promise<void>;
 }
 
 /** The screen plumbing both readers share. Keys are sent only through `stuff`, which only the reader calls. */
 export function createScreenSession(opts: ScreenSessionOptions): ScreenSession {
   const bin = opts.bin ?? SCREEN_BIN;
+  const env = agentLaunchEnv(opts.env);
   const logPath = join(opts.dir, "screen.log");
   const shot = join(opts.dir, "shot.txt");
   const rc = join(opts.dir, "screenrc");
   const usable = opts.usable ?? ((frame: string) => Boolean(frame.trim()));
   const ctl = (args: string[], timeoutMs: number, cwd?: string) =>
-    runProcess(bin, args, timeoutMs, { cwd, env: agentLaunchEnv(), label: opts.label });
-  const quit = () => ctl(["-S", opts.session, "-X", "quit"], COMMAND_TIMEOUT_MS).catch(() => {});
+    runProcess(bin, args, timeoutMs, { cwd, env, label: opts.label });
+  const cleanup = async (): Promise<void> => {
+    try {
+      const refs = await screenSessions(opts.session, bin, env);
+      if (!refs.length) return;
+      if (refs.filter((ref) => !ref.dead).length > 1) throw new Error("Ambiguous screen session name");
+      for (const ref of refs) {
+        try {
+          if (!ref.dead) {
+            // Keep the terminal alive until the CLI tree is gone. Quitting first sends HUP
+            // and can orphan a raw-mode CLI that ignores it. An inspection failure leaves
+            // the terminal intact rather than turning an unknown tree into orphaned work.
+            const tree = await sessionTree(ref.pid, env);
+            await finishScreenSession(tree.pids.filter((pid) => pid !== ref.pid), defaultKillDeps, tree.groups);
+            try { await cleanupOutput(bin, ["-S", ref.id, "-X", "quit"], env); }
+            catch (error) { cleanupLog(describeError(error)); }
+            // A hung or failed control command cannot leave the owned screen server alive.
+            await finishScreenSession([ref.pid]);
+          }
+        } finally {
+          // Full PID.name matcher only: never run a global wipe or use a dead socket's PID.
+          await cleanupOutput(bin, ["-wipe", ref.id], env);
+        }
+      }
+      const remaining = await screenSessions(opts.session, bin, env);
+      if (remaining.some((ref) => refs.some((old) => old.id === ref.id))) {
+        throw new Error("Screen session remains after cleanup");
+      }
+    } catch (error) {
+      cleanupLog(describeError(error));
+      throw error;
+    }
+  };
   return {
     open: async () => {
       if (!opts.bin && !platformCapabilities().screen) throw new Error(t("screen.unavailable"));
+      await cleanup();
       await rm(opts.dir, { recursive: true, force: true }).catch(() => {});
       await mkdir(opts.dir, { recursive: true });
       await writeFile(
@@ -266,9 +372,13 @@ export function createScreenSession(opts: ScreenSessionOptions): ScreenSession {
         ["logfile " + logPath, "deflog on", "logfile flush 1", "height 50", "width 160", "startup_message off", ""].join("\n"),
         "utf8",
       );
-      await quit();
-      await opts.beforeLaunch?.();
-      await ctl(["-c", rc, "-dmS", opts.session, opts.launch], LAUNCH_TIMEOUT_MS, opts.cwd);
+      try {
+        await ctl(["-c", rc, "-dmS", opts.session, opts.launch], LAUNCH_TIMEOUT_MS, opts.cwd);
+      } catch (error) {
+        // The launcher may fail or time out after the daemon and CLI have already started.
+        await cleanup().catch(() => {});
+        throw error;
+      }
     },
     readFrame: async () => {
       await ctl(["-S", opts.session, "-p", "0", "-X", "hardcopy", shot], COMMAND_TIMEOUT_MS).catch(() => {});
@@ -277,11 +387,6 @@ export function createScreenSession(opts: ScreenSessionOptions): ScreenSession {
       return readFile(logPath, "utf8").catch(() => "");
     },
     stuff: (keys) => ctl(["-S", opts.session, "-p", "0", "-X", "stuff", keys], COMMAND_TIMEOUT_MS),
-    close: async (extraPids) => {
-      const tree = await screenSessionPids(opts.session, bin);
-      await quit();
-      const more = extraPids ? await extraPids() : [];
-      await finishScreenSession([...tree, ...more]);
-    },
+    close: cleanup,
   };
 }
