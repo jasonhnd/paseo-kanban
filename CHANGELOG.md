@@ -18,8 +18,8 @@ Local candidate based on public rc.22 (`c19e3ec020575fe8332ba63a7e830b1d01892c41
 
 ### Fixed
 
-- Recover missing pending landing branches only with retained-tip evidence or audited leader authorization; scope receipts and retries to the latest attempt. Fixes [issue #19](https://github.com/jasonhnd/paseo-kanban/issues/19).
-- Permit assigned independent review approval, promote queued deliveries after linked approval and refuse duplicate or premature review reservations. Legacy review recovery requires an audited profile choice. Fixes [issue #20](https://github.com/jasonhnd/paseo-kanban/issues/20) and [issue #21](https://github.com/jasonhnd/paseo-kanban/issues/21).
+- Recover missing pending landing branches only with retained-tip evidence or audited leader authorization; scope receipts and retries to the latest attempt.
+- Permit assigned independent review approval, promote queued deliveries after linked approval and refuse duplicate or premature review reservations. Legacy review recovery requires an audited profile choice. Fixes [issue #19](https://github.com/jasonhnd/paseo-kanban/issues/19), [issue #20](https://github.com/jasonhnd/paseo-kanban/issues/20) and [issue #21](https://github.com/jasonhnd/paseo-kanban/issues/21).
 - Authorize narrow delegated operations cleanup with live, expiring, card-bound credentials and a final reference recheck. Fixes [issue #2](https://github.com/jasonhnd/paseo-kanban/issues/2).
 - Protect rework startup from host archive races, refuse unsafe rebuilds and reconstruct missing branches only from verified delivery commits. Fixes [issue #22](https://github.com/jasonhnd/paseo-kanban/issues/22).
 - Refuse fast/priority profiles at every dispatch entry, including explicit selection and cloud execution. Profiles must use standard speed.
