@@ -613,9 +613,12 @@ export async function deletePaseoAgent(agentId: string, exec: (cmd: string, args
   await exec(PASEO_BIN, ["agent", "delete", agentId, "--json"]);
 }
 
-async function deleteAgentRecord(agentId: string, readAgent?: NativeAgentReader): Promise<"purged" | "kept"> {
+async function deleteAgentRecord(agentId: string, readAgent?: NativeAgentReader, authorize?: () => void): Promise<"purged" | "kept"> {
+  authorize?.();
   let nativeCards: number[] = [];
   try { nativeCards = await prepareNativeSessionsForPurge(agentId, readAgent); } catch (err) { logLine(`native session lookup failed ${agentId}: ${String(err)}`); }
+  // Native metadata reads yield. A delegated worker or target card may have ended/reopened meanwhile.
+  authorize?.();
   try {
     await (hooks.deleteAgent ?? deletePaseoAgent)(agentId);
   } catch (err) {
@@ -628,7 +631,7 @@ async function deleteAgentRecord(agentId: string, readAgent?: NativeAgentReader)
   return "purged";
 }
 
-export async function purgeAgent(agent: CwdAgent, readAgent?: NativeAgentReader): Promise<"purged" | "kept"> {
+export async function purgeAgent(agent: CwdAgent, readAgent?: NativeAgentReader, authorize?: () => void): Promise<"purged" | "kept"> {
   const decision = purgeDecision(agent);
   if (!decision.ok) return "kept";
   const record = hooks.recordPurge ?? defaultRecordPurge;
@@ -639,7 +642,7 @@ export async function purgeAgent(agent: CwdAgent, readAgent?: NativeAgentReader)
     logLine(`writing notes failed, not deleting ${agent.id}: ${err instanceof Error ? err.message : err}`);
     return "kept";
   }
-  return deleteAgentRecord(agent.id, readAgent);
+  return deleteAgentRecord(agent.id, readAgent, authorize);
 }
 
 export type AgentRunState = "busy" | "idle" | "gone" | "unknown";
@@ -1221,27 +1224,40 @@ export interface PurgePlanLine {
   reason: string;
 }
 
-export async function purgeCardAgents(taskId: number, options?: { dryRun?: boolean }): Promise<{ text: string; deleted: string[]; lines: PurgePlanLine[] }> {
+export async function purgeCardAgents(taskId: number, options?: { dryRun?: boolean; authorize?: () => void }): Promise<{ text: string; deleted: string[]; lines: PurgePlanLine[] }> {
+  options?.authorize?.();
   const task = getTask(taskId);
   if (!finished(task.status)) {
     throw new KanbanError("invalid", t("missingCwd.purge.notFinished", { card: cardMark(taskId), status: statusLabel(task.status) }));
   }
   const ids = new Set(agentsOpenedBy(task));
-  const readAgent = createNativeAgentReader();
+  const readNative = createNativeAgentReader();
+  const readAgent: NativeAgentReader = async id => {
+    const agent = await readNative(id);
+    options?.authorize?.();
+    return agent;
+  };
   const lines: PurgePlanLine[] = [];
   const deleted: string[] = [];
   for (const agentId of [...ids].sort()) {
+    options?.authorize?.();
     const agent = findCwdAgent(agentId);
     if (!agent) {
       lines.push({ agentId, action: "skip", reason: t("missingCwd.purge.gone") });
       continue;
     }
+    const authorizeDelete = options?.authorize ? () => {
+      options.authorize!();
+      // Also recheck unfinished references after native I/O, including the notes-already-written path.
+      const decision = purgeDecision(agent);
+      if (!decision.ok) throw new KanbanError("forbidden", decision.reason);
+    } : undefined;
     if (alreadyPurged(taskId, agentId)) {
       if (options?.dryRun) {
         lines.push({ agentId, action: "delete", reason: t("missingCwd.purge.notesWritten") });
         continue;
       }
-      const outcome = await deleteAgentRecord(agentId, readAgent);
+      const outcome = await deleteAgentRecord(agentId, readAgent, authorizeDelete);
       if (outcome === "purged") {
         deleted.push(agentId);
         lines.push({ agentId, action: "delete", reason: t("missingCwd.purge.notesWritten") });
@@ -1261,7 +1277,7 @@ export async function purgeCardAgents(taskId: number, options?: { dryRun?: boole
       lines.push({ agentId, action: "delete", reason: "dry-run" });
       continue;
     }
-    const outcome = await purgeAgent(agent, readAgent);
+    const outcome = await purgeAgent(agent, readAgent, authorizeDelete);
     if (outcome === "purged") {
       deleted.push(agentId);
       lines.push({ agentId, action: "delete", reason: t("missingCwd.purge.deleted") });

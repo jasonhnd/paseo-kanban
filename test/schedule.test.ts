@@ -1060,6 +1060,7 @@ describe("scheduler", () => {
           branches.push(`${options.baseBranch}:${options.branchName}`);
           const path = join(repo, String(branches.length));
           mkdirSync(path, { recursive: true });
+          mkdirSync(join(path, ".git"));
           return { directory: path };
         },
       },

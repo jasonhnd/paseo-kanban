@@ -110,7 +110,8 @@ describe("stalled running cards", () => {
     assert.match(nudge.text, /bin\/paseo-kanban complete/);
     assert.doesNotMatch(nudge.text, /paseo-kanban\.mjs/);
     assert.match(nudge.text, /PASEO_AGENT_ID/);
-    assert.match(nudge.text, new RegExp("\\u5982\\u679c\\u4f60\\u5728\\u7b49\\u540e\\u53f0\\u7ed3\\u679c\\uff0c\\u8bf7\\u73b0\\u5728\\u8bfb\\u53d6\\u7ed3\\u679c\\uff0c\\u4e0d\\u8981\\u518d\\u6b21\\u7ed3\\u675f\\u56de\\u5408"));
+    assert.match(nudge.text, /wait-bg/);
+    assert.match(nudge.text, /wait\/sleep/);
     assert.equal(nudge.text.includes(cliFallback()), true);
     assert.doesNotMatch(nudge.text, new RegExp(localePattern(zhCNPart("stall.nudge.quiet", 44, 46)) + localePattern(zhCNPart("compat.skip.kanbanEnv", 14, 16)) + localePattern(zhCNPart("tempWorkspace.drop.placeholderAgentsDeleted", 2, 5)) + "KANBAN_TOKEN"));
 

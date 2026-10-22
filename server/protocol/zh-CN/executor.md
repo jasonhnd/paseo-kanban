@@ -10,3 +10,4 @@
 8. {tmpHome}不要写进仓库的跟踪文件；卡进入 done 或 archived 后看板会马上删除本卡的 KANBAN_TMP 目录，需要长期保留的证据贴进交接或卡片评论。交活前 git status --short 必须为空（未跟踪文件也不行），否则先清掉或移出。
 9. {dbReadonly}
 {cliFallback}
+{modelDepth}

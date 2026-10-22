@@ -20,6 +20,17 @@ export interface Profile {
   modeId?: string;
   thinkingOptionId?: string;
   featureValues?: Record<string, unknown>;
+  /** Recognized for admission even when a host stores overrides outside featureValues. */
+  serviceTier?: string;
+  service_tier?: string;
+  fast?: boolean | string;
+  fast_mode?: boolean | string;
+  fastMode?: boolean | string;
+  config?: unknown;
+  args?: unknown;
+  cliArgs?: unknown;
+  extraArgs?: unknown;
+  command?: unknown;
   notes?: string;
 }
 

@@ -59,6 +59,7 @@ try {
       async createWorktree(options) {
         const directory = join(data.dataDir, "trees", data.name);
         mkdirSync(directory, { recursive: true });
+        mkdirSync(join(directory, ".git"));
         send({ type: "worktree", name: data.name, directory, branch: options.branchName });
         await waitForRelease();
         return { directory, workspaceId: `ws-${data.name}`, name: options.title ?? data.name };

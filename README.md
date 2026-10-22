@@ -30,6 +30,10 @@ On macOS, press **⌘K** (Ctrl+K on Windows/Linux) and search **Open project boa
 
 Prior RC commit/tag identities and rejection history are retained in the [changelog](CHANGELOG.md) and [release record](docs/RELEASE.md).
 
+All dispatched profiles must use standard speed, across every family and role. Fast/priority settings are refused even for explicit profile selection or when `families` is empty. Admission recognizes `fast`, `fast_mode`, `fastMode`, `service_tier` and `serviceTier` at profile level and inside `featureValues`, as well as structured configuration and command-argument overrides. Disable those settings in the host profile before dispatch; Kanban rejects the profile instead of rewriting its launch configuration. The legacy `noFast` field cannot enable fast mode.
+
+Disposable cloud execution is disabled by default. It requires the project switch and a `cloud` card tag, and supports public `paseo-clear-chat` executor cards using Codex or Grok. See [cloud execution](docs/CLOUD-RUNNER.md), [running-card limits](docs/RUN-BUDGET.md) and [background waits](docs/WORKFLOW.md).
+
 ## Requirements
 
 - Paseo **daemon and app** in `>=0.11.0 <0.13.0`, with global plugins and this plugin enabled. **0.11.2 and 0.12.0** passed isolated plugin load, scheduler tick, MCP ping and CLI create/show checks for this candidate; the declared range does not certify every patch or client.

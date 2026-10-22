@@ -4,6 +4,7 @@ import { providerBanned } from "./provider-policy";
 import { ROLE_ORDER } from "./board";
 import { PROFILE_SLOTS, resolveProfileToken } from "./dispatch-slots";
 import { mergeDispatchOverrides, validDispatchOverrides, type ThinkingCatalog, type DispatchWarning } from "./dispatch-overrides";
+import { gptExecutionEffort } from "./executor-effort";
 import { isLeaderTitle } from "./leader-title";
 import { actualModel, differentReviewModels } from "./review-model";
 import { t, tAll, type MessageKey } from "./i18n";
@@ -422,12 +423,12 @@ export function orderMatrixEntries(
     .map(({ entry, paused }) => (paused ? { ...entry, paused: true } : entry));
 }
 
-function mapLists(node: unknown, fn: (list: MatrixEntry[]) => MatrixEntry[]): unknown {
-  if (isEntryList(node)) return fn(node);
-  if (Array.isArray(node)) return node.map((item) => mapLists(item, fn));
+function mapLists(node: unknown, fn: (list: MatrixEntry[], tier?: string) => MatrixEntry[], tier?: string): unknown {
+  if (isEntryList(node)) return fn(node, tier);
+  if (Array.isArray(node)) return node.map((item) => mapLists(item, fn, tier));
   if (node && typeof node === "object") {
     const out: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(node)) out[key] = mapLists(value, fn);
+    for (const [key, value] of Object.entries(node)) out[key] = mapLists(value, fn, /^L[1-4]$/.test(key) ? key : tier);
     return out;
   }
   return node;
@@ -530,6 +531,12 @@ export function applyDispatchMatrix(
     copy.priority = { order: [...order], until, ...(mode ? { mode } : {}) };
   }
   copy.roles = mapLists(copy.roles, (list) => orderMatrixEntries(list, options.profiles, options.pools, options.knownNames, options.onUnresolvedSlot, options.bannedProviders)) as DispatchMatrix["roles"];
+  // A matrix has no per-card max authorization. Legacy max overrides are capped before publication.
+  const byName = new Map(options.profiles.map(profile => [profile.name, profile]));
+  for (const role of Object.keys(copy.roles)) {
+    copy.roles[role] = mapLists(copy.roles[role], (list, tier) => list.map(entry => ({ ...entry,
+      effort: gptExecutionEffort({ ...byName.get(entry.profile), role, tier, effort: entry.effort ?? null }) })));
+  }
   if (Object.hasOwn(copy.roles, "reviewer")) copy.roles.reviewer = reviewerModelMatrix(copy, options.profiles, options.pools, options.knownNames, options.bannedProviders ?? []);
   return copy;
 }

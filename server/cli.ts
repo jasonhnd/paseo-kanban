@@ -20,6 +20,7 @@ import { handoverLeader } from "./handover";
 import { assertSafeAgentId } from "./agent-id";
 import { assertCliCommandAllowed, assertDiscardCleanupScope, assertNotLeaderAgent, assertProjectScope, assertSupervisorScope, isKanbanLeader, resolveCliIdentity, resolveCompactIdentity } from "./identity";
 import { authorizeDiscard } from "./cleanup-discard";
+import { settleMissingLand } from "./missing-land";
 import { superviseProject } from "./leader-registry";
 import { exportLeaderMcpCredential } from "./leader-mcp-credential";
 import { auditView, launcherFrom } from "./paseo";
@@ -27,6 +28,7 @@ import type { AgentPresence } from "./presence";
 import { livePresence } from "./live-presence";
 import { nativeSessionsCommand } from "./native-sessions";
 import { purgeCardAgents } from "./missing-cwd";
+import { assertOpsCleanupTarget, isOpsCleanupWorker } from "./ops-cleanup";
 import { requestRebuiltCleanup } from "./cleanup";
 import { resumeCleanup } from "./archive-book";
 import { rebindTask } from "./rebind";
@@ -36,6 +38,7 @@ import { identityFromToken, type Identity } from "./tokens";
 import { formatResult, handleTool } from "./tools";
 import { openReadonlyDb } from "./db";
 import { auditWrite, withWriteTransport } from "./write-source";
+import { registerBackgroundWait } from "./background-wait";
 
 /** The command-line help: server/protocol/<language>/cli-help.md. */
 export function kanbanHelp(): string {
@@ -52,6 +55,7 @@ const COMMANDS: Record<string, { flags: readonly string[]; positionals: "none" |
   comment: { flags: ["id", "text"], positionals: "rest" },
   complete: { flags: ["id", "summary", "handoff", "on-behalf"], positionals: "one" },
   block: { flags: ["id", "reason", "kind", "until"], positionals: "one" },
+  "wait-bg": { flags: ["card", "log"], positionals: "one" },
   approve: { flags: ["id", "summary"], positionals: "one" },
   "request-changes": { flags: ["id", "reason", "findings"], positionals: "one" },
   create: { flags: ["project", "title", "role", "workspace", "profile", "brief", "brief-file", "parents", "parent", "contract", "max-retries", "tag", "effort", "tier", "reviews", "decision"], positionals: "none" },
@@ -63,11 +67,11 @@ const COMMANDS: Record<string, { flags: readonly string[]; positionals: "none" |
   unlink: { flags: ["id", "parent", "parents"], positionals: "one" },
   "grant-read": { flags: ["id", "scope"], positionals: "one" },
   "revoke-read": { flags: ["id"], positionals: "one" },
-  unblock: { flags: ["id"], positionals: "one" },
+  unblock: { flags: ["id", "run-budget", "reason"], positionals: "one" },
   "wait-user": { flags: ["id", "decision"], positionals: "one" },
   unwait: { flags: ["id"], positionals: "one" },
   accept: { flags: ["id", "artifact", "reason"], positionals: "one" },
-  start: { flags: ["id", "force"], positionals: "one" },
+  start: { flags: ["id", "force", "profile", "reason"], positionals: "one" },
   archive: { flags: ["id"], positionals: "one" },
   register: { flags: ["project", "title", "brief", "role", "profile", "provider", "model", "thinking", "agent", "family", "workspace", "idempotency"], positionals: "none" },
   supervise: { flags: ["project"], positionals: "none" },
@@ -76,7 +80,7 @@ const COMMANDS: Record<string, { flags: readonly string[]; positionals: "none" |
   project: { flags: ["project", "workspace", "base", "lanes", "allow-lanes", "parallel", "always-temp", "wait-parent-pr", "code"], positionals: "none" },
   rebind: { flags: ["id", "agent"], positionals: "one" },
   "purge-agents": { flags: ["id", "dry-run"], positionals: "one" },
-  "resume-cleanup": { flags: ["id", "discard-unmerged"], positionals: "one" },
+  "resume-cleanup": { flags: ["id", "discard-unmerged", "settle-missing-land", "reason"], positionals: "one" },
   "native-sessions": { flags: ["sweep", "dry-run", "apply", "restore", "restore-manifest", "reset-failed", "reconcile-codex", "reconcile-claude", "include-tmp-sessions", "project", "limit", "offset"], positionals: "none" },
   "compact-events": { flags: ["dry-run", "apply", "days"], positionals: "none" },
   vacuum: { flags: ["dry-run", "apply"], positionals: "none" },
@@ -231,6 +235,9 @@ async function runKanbanInternal(
 
 async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEnv, identity: Identity, hooks?: KanbanHooks): Promise<unknown> {
   assertCliCommandAllowed(identity, parsed.cmd);
+  if (parsed.cmd === "wait-bg") {
+    return registerBackgroundWait(resolveTaskId(parsed.flag("card") ?? ""), parsed.positionals[0] ?? "", parsed.flag("log"), identity);
+  }
   if (parsed.cmd === "mcp-credential") return exportLeaderMcpCredential(identity, env, parsed.flag("out") ?? "");
   if (parsed.cmd === "supervise") {
     const project = parsed.flag("project")?.trim() ?? "";
@@ -344,24 +351,42 @@ async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEn
     return rebindTask(taskId, agentId, presence);
   }
   if (parsed.cmd === "purge-agents") {
-    if (identity.role !== "supervisor") throw new KanbanError("forbidden", t("cli.onlyLeader.purge"));
+    const opsCleanup = isOpsCleanupWorker(identity);
+    if (identity.role !== "supervisor" && !opsCleanup) throw new KanbanError("forbidden", t("cli.onlyLeader.purge"));
     const taskId = resolveTaskId(parsed.positionals[0] ?? parsed.flag("id") ?? "");
-    assertSupervisorScope(identity, getTask(taskId), t("cli.action.purge"));
+    const task = getTask(taskId);
+    if (opsCleanup) assertOpsCleanupTarget(task);
+    else assertSupervisorScope(identity, task, t("cli.action.purge"));
     const dryRun = parsed.flag("dry-run") === "true";
-    const result = await purgeCardAgents(taskId, { dryRun });
+    const authorize = opsCleanup ? () => {
+      if (!isOpsCleanupWorker(identity)) throw new KanbanError("forbidden", t("cli.onlyLeader.purge"));
+      assertOpsCleanupTarget(getTask(taskId));
+    } : undefined;
+    const result = await purgeCardAgents(taskId, { dryRun, authorize });
     return { text: result.text, deleted: result.deleted, dryRun };
   }
   if (parsed.cmd === "resume-cleanup") {
     // Guest tokens may resolve through the agent's current leader registration.
     // Preserve the original card binding when deciding cleanup authority.
     const cardToken = env.KANBAN_TOKEN?.trim() ? identityFromToken(env.KANBAN_TOKEN.trim()).taskId != null : false;
-    if (identity.role !== "supervisor" || identity.taskId != null || cardToken) throw new KanbanError("forbidden", t("cli.onlyLeader.resumeCleanup"));
+    const opsCleanup = isOpsCleanupWorker(identity);
+    if (!opsCleanup && (identity.role !== "supervisor" || identity.taskId != null || cardToken)) throw new KanbanError("forbidden", t("cli.onlyLeader.resumeCleanup"));
     const taskId = resolveTaskId(parsed.positionals[0] ?? parsed.flag("id") ?? "");
     const discard = parsed.flag("discard-unmerged");
     if (discard !== undefined && discard !== "true") throw new KanbanError("invalid", t("cleanupDiscard.flag"));
+    const settle = parsed.flag("settle-missing-land");
+    const reason = parsed.flag("reason");
+    if ((settle !== undefined && settle !== "true") || (settle && (discard || !reason?.trim())) || (!settle && reason !== undefined)) {
+      throw new KanbanError("invalid", t("missingLand.flag"));
+    }
     const task = getTask(taskId);
-    if (discard) assertDiscardCleanupScope(identity, task);
-    assertSupervisorScope(identity, task, t("cli.action.resumeCleanup"), { resumeCleanup: true });
+    if (discard || settle) assertDiscardCleanupScope(identity, task, settle ? t("missingLand.onlyLeader") : undefined);
+    if (opsCleanup) assertOpsCleanupTarget(task);
+    else assertSupervisorScope(identity, task, t("cli.action.resumeCleanup"), { resumeCleanup: true });
+    if (settle) {
+      await settleMissingLand(taskId, identity.agentId!, reason!);
+      return { text: t("missingLand.settled"), settled: true, resumed: 0, execution: "periodic" };
+    }
     const grant = discard ? await authorizeDiscard(taskId, identity.agentId!) : null;
     const resumedSteps = resumeCleanup(taskId);
     const requestId = resumedSteps === 0 ? requestRebuiltCleanup(taskId) : null;
@@ -386,13 +411,19 @@ async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEn
     if (identity.role !== "supervisor") throw new KanbanError("forbidden", t("cli.onlyLeader.start"));
     assertSupervisorScope(identity, getTask(id()), t("cli.action.start"));
     const force = parsed.flag("force") === "true";
-    if (hooks?.launcher) return await startTask(id(), hooks.launcher, "supervisor", { ...hooks.startReaders, force });
+    const profile = parsed.flag("profile");
+    const reason = parsed.flag("reason");
+    if ((profile !== undefined || reason !== undefined) && (!profile?.trim() || !reason?.trim())) {
+      throw new KanbanError("invalid", t("reviewRecovery.arguments"));
+    }
+    const reviewRecovery = profile && reason ? { profile, reason, leaderAgentId: identity.agentId } : undefined;
+    if (hooks?.launcher) return await startTask(id(), hooks.launcher, "supervisor", { ...hooks.startReaders, force, reviewRecovery });
     const url = env.PASEO_URL ?? process.env.PASEO_URL ?? "ws://127.0.0.1:6767/ws";
     const client = createPaseoClient({ url, reconnect: { enabled: false } });
     await client.connect();
     try {
       await refreshPaseoProjects(client);
-      return await startTask(id(), launcherFrom(client), "supervisor", { force });
+      return await startTask(id(), launcherFrom(client), "supervisor", { force, reviewRecovery });
     } finally {
       await client.close();
     }
@@ -423,6 +454,7 @@ async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEn
     findings: parsed.flag("findings"),
     kind: parsed.flag("kind"),
     until: parsed.flag("until"),
+    runBudget: parsed.flag("run-budget") === undefined ? undefined : JSON.parse(parsed.flag("run-budget")!),
     parent: parsed.flag("parent"),
     parents: parentIdsFromFlags(parsed),
     text: parsed.flag("text") ?? parsed.positionals.slice(1).join(" "),

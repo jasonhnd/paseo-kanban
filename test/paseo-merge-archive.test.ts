@@ -30,6 +30,8 @@ import type { ListedWorkspace } from "../server/placement";
 import type { Profile } from "../server/profiles";
 import { addComment, appendEvent, createTask, getTask } from "../server/store";
 import { readWorktreeCreated } from "../server/worktree-record";
+import { leaderReworkTask, pendingReworkReplacement } from "../server/flow";
+import { runTick } from "./helpers/compat-schedule";
 
 const dir = mkdtempSync(join(realpathSync(tmpdir()), "merge-archive-"));
 process.env.KANBAN_DATA_DIR = dir;
@@ -189,6 +191,58 @@ async function runningCard(name: string) {
 }
 
 describe("Paseo auto-archive-on-merge vs. an unfinished card (TEST_0268)", () => {
+  for (const timing of ["second-list", "create-await", "after-create"] as const) {
+    it(`recovers leader rework archived at ${timing} without losing its branch, pending marker or fresh path`, async () => {
+      const { box, task, first, root, tip } = await runningCard(`rework-race-${timing}`);
+      getDb().prepare("UPDATE tasks SET status = 'acceptance' WHERE id = ?").run(task.id);
+      box.agents[0]!.archived = true;
+      await leaderReworkTask(task.id, "Preserve the submitted tip", { presence: () => "archived" });
+      const list = box.listWorkspaces!;
+      const create = box.create;
+      let lists = 0;
+      let generation = "";
+      box.listWorkspaces = async () => {
+        if (timing === "second-list" && ++lists === 2) box.beginArchive(first.workspaceId!);
+        return list();
+      };
+      box.create = async options => {
+        generation = options.labels?.kanban_start_generation ?? "";
+        const agent = await create(options);
+        if (timing === "create-await") box.beginArchive(first.workspaceId!);
+        return agent;
+      };
+      box.inspectStartup = async (agentId, workspaceId) => ({
+        archived: box.agents.find(agent => agent.id === agentId)!.archived,
+        busy: false, generation, workspaceId, merged: true,
+        timelineComplete: true, toolCalls: 0, pullRequestUrl: "https://github.com/o/r/pull/22",
+      });
+      await startTask(task.id, box, "test", pick);
+      if (timing === "after-create") {
+        box.beginArchive(first.workspaceId!);
+        await runTick({ launcher: box, profiles: [], config: {
+          autoStart: { [task.project]: false }, supervisors: {}, supervisorAgentId: null,
+          concurrency: { global: 20, roles: {}, pools: {} },
+        }, agentState: () => "archived" });
+      }
+      assert.equal(getTask(task.id).status, "ready");
+      assert.equal(getTask(task.id).blocked_kind, null);
+      assert.ok(pendingReworkReplacement(task.id));
+      assert.equal(box.cwds.length, timing === "second-list" ? 1 : 2);
+      if (timing !== "second-list") assert.equal(events(task.id, "rework_startup_retry").length, 1);
+      box.finishArchive(first.workspaceId!);
+      const starts = await Promise.allSettled([startTask(task.id, box, "test", pick), startTask(task.id, box, "test", pick)]);
+      assert.equal(starts.filter(result => result.status === "fulfilled").length, 1);
+      const rebuilt = readWorktreeCreated(task.id)!;
+      assert.equal(getTask(task.id).status, "running");
+      assert.equal(rebuilt.branch, first.branch);
+      assert.equal(git(root, "rev-parse", first.branch!), tip);
+      assert.notEqual(rebuilt.directory, first.directory);
+      assert.match(rebuilt.directory!, /-r1$/);
+      assert.equal(getTask(task.id).paseo_workspace_id, rebuilt.workspaceId);
+      assert.equal(box.cwds.length, timing === "second-list" ? 2 : 3, "concurrent retries open only one agent");
+    });
+  }
+
   it("DEMO_0003: after agent_gone, no agent opens in the workspace Paseo is archiving; the card resumes in a rebuilt copy Paseo does not re-archive", async () => {
     const { box, task, first, tip, root } = await runningCard("demo-0003");
     // 05:15:03.86 Paseo marks the workspace archiving and archives its agent; the agent.archived hook reclaims.
@@ -368,6 +422,8 @@ describe("an independent review borrowing a card's copy (TEST_0268)", () => {
     const card = await runningCard(name);
     const review = createTask({ project: name, title: "sample", role: "reviewer", workspacePath: reviewPath ? reviewPath(card.first, card.root) : card.root, reviewOf: card.task.id });
     getDb().prepare("UPDATE tasks SET status = 'in_review', agent_id = NULL WHERE id = ?").run(card.task.id);
+    // Preserve the real ordering: the manual reservation predates the later inline queue.
+    appendEvent(card.task.id, "complete", "running", "in_review", "executor");
     return { ...card, review };
   }
 

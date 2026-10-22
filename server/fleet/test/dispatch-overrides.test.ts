@@ -13,7 +13,7 @@ function slots(node: unknown): string[] {
   return node && typeof node === "object" ? Object.values(node).flatMap(slots) : [];
 }
 export const demoProfiles: DispatchProfile[] = [...new Set(slots(base.roles))].map(slot => ({
-  name: `Demo ${slot}`, dispatchId: slot, role: slot.split(".")[0], provider: slot.includes("gpt") ? "codex" : "demo", model: slot === "reviewer.gpt-6-sol" ? "gpt-6-sol" : slot.includes("gpt") ? "gpt-6.1-sol" : `demo-${slot}`,
+  name: `Demo ${slot}`, dispatchId: slot, role: slot.split(".")[0], provider: slot.includes("gpt") ? "codex" : "demo", model: slot.includes("gpt-6-luna") ? "gpt-6-luna" : slot === "reviewer.gpt-6-sol" ? "gpt-6-sol" : slot.includes("gpt") ? "gpt-6.1-sol" : `demo-${slot}`,
 }));
 export const demoThinking = Object.fromEntries(demoProfiles.map(profile => [profile.name, ["low", "medium", "high", "xhigh", "ultra"]]));
 export const migrationOverrides = {
@@ -33,11 +33,11 @@ test("no overrides reproduce the shipped defaults and do not mutate the input", 
   const { reviewer, ...otherActual } = build().roles;
   assert.deepEqual(otherActual, otherDefaults);
   assert.deepEqual(build({}), build());
-  assert.deepEqual((reviewer as ReviewerModelMatrix).byExecutorModel["gpt-6.1-sol"].L4.map(row => row.profile), ["Demo reviewer.fable", "Demo reviewer.grok", "Demo reviewer.gpt-6-sol"]);
+  assert.deepEqual((reviewer as ReviewerModelMatrix).byExecutorModel["gpt-6.1-sol"].L4.map(row => row.profile), ["Demo reviewer.gpt-6-luna", "Demo reviewer.fable", "Demo reviewer.grok", "Demo reviewer.gpt-6-sol"]);
   assert.equal((reviewer as ReviewerModelMatrix).byExecutorModel["gpt-6-sol"].L4.some(row => row.profile === "Demo reviewer.gpt-6-sol"), false);
   assert.equal(base.generatedAt, undefined);
   const executor = base.roles.executor as Record<string, Array<{ effort: string }>>;
-  assert.deepEqual([executor.L1[0].effort, executor.L2[0].effort, executor.L3[1].effort], ["low", "medium", "high"]);
+  assert.deepEqual([executor.L1[0].effort, executor.L2[0].effort, executor.L3[0].effort], ["medium", "medium", "high"]);
 });
 
 test("migration restores elevated efforts in every eligible reviewer model branch", () => {
@@ -59,7 +59,7 @@ test("bad entries are isolated, unsupported efforts warn, and GPT ultra cannot b
     "executor.gpt-6.1-sol": { effort: "ultra", order: 2 }, "executor.sonnet": { effort: "future" }, "missing.slot": { effort: "high" }, "executor": { order: -1 },
   }, L5: {}, L3: "invalid" }, unknown: {} }, value => warnings.push(value));
   const executor = result.roles.executor as Record<string, Array<{ profile: string; effort: string }>>;
-  assert.equal(executor.L1.find(row => row.profile === "Demo executor.gpt-6.1-sol")?.effort, "low");
+  assert.equal(executor.L1.find(row => row.profile === "Demo executor.gpt-6.1-sol")?.effort, "medium");
   assert.equal(executor.L1.find(row => row.profile === "Demo executor.sonnet")?.effort, "low");
   assert.equal(executor.L2[0].effort, "high");
   assert.equal(warnings.length, 7);
@@ -146,9 +146,9 @@ test("unknown capabilities retain default efforts while valid order edits surviv
   const overrides = { executor: { L1: { "executor.gpt-6.1-sol": { effort: "high", order: 3 } } } };
   const unknown = applyDispatchMatrix(base, { ...options, thinkingCatalog: {}, dispatchOverrides: overrides, onOverrideWarning: message => warnings.push(message) });
   const list = (unknown.roles.executor as Record<string, Array<{ profile: string; effort: string }>>).L1;
-  assert.equal(list.find(row => row.profile === "Demo executor.gpt-6.1-sol")?.effort, "low");
+  assert.equal(list.find(row => row.profile === "Demo executor.gpt-6.1-sol")?.effort, "medium");
   assert.equal(list[0].profile, "Demo executor.gpt-6.1-sol");
-  assert.equal(list[1].profile, "Demo executor.sonnet");
+  assert.equal(list[1].profile, "Demo executor.gpt-6-luna");
   assert.match(warnings[0], /unsupported thinking option/);
   const profiles = demoProfiles.map(profile => ({ ...profile, thinkingOptionId: "ultra" }));
   assert.deepEqual(applyDispatchMatrix(base, { ...options, profiles, dispatchOverrides: { executor: { L1: { "executor.gpt-6.1-sol": { effort: null } } } } }), build());
@@ -156,22 +156,23 @@ test("unknown capabilities retain default efforts while valid order edits surviv
   assert.deepEqual(applyDispatchMatrix(subset, { ...options, dispatchOverrides: { reader: { L1: { reader: { order: 1 } } } } }), applyDispatchMatrix(subset, options));
 });
 
-test("previous main fixture and migrated defaults produce identical normalized matrices", () => {
+test("legacy elevated overrides retain common profile efforts while capability defaults change order and add Luna", () => {
   // Snapshot of the elevated defaults in main at 416de178, kept exclusively for migration verification.
   const previous: DispatchMatrix = JSON.parse(readFileSync(new URL("fixtures/previous-main-defaults.json", import.meta.url), "utf8"));
   const expected = applyDispatchMatrix(previous, options);
   const actual = build(migrationOverrides);
-  const dropNew = (value: unknown): unknown => Array.isArray(value)
-    ? value.filter(row => !(row && typeof row === "object" && (row as { profile?: string }).profile === "Demo reviewer.gpt-6-sol")).map(dropNew)
-    : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([key, row]) => [key, dropNew(row)])) : value;
-  const normalize = (value: unknown): unknown => Array.isArray(value) ? value.map(normalize)
-    : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== "generatedAt").sort(([a], [b]) => a.localeCompare(b)).map(([key, row]) => [key, normalize(row)])) : value;
-  assert.deepEqual(normalize(dropNew(actual)), normalize(dropNew(expected)));
+  for (const role of ["executor", "reader", "decision", "batch"]) {
+    const oldLists = expected.roles[role] as Record<string, MatrixEntry[]>;
+    const newLists = actual.roles[role] as Record<string, MatrixEntry[]>;
+    for (const [tier, rows] of Object.entries(oldLists)) for (const row of rows) {
+      assert.equal(newLists[tier].find(next => next.profile === row.profile)?.effort, row.effort, `${role}/${tier}/${row.profile}`);
+    }
+  }
   const reviewer = actual.roles.reviewer as ReviewerModelMatrix;
   for (const [model, tiers] of Object.entries(reviewer.byExecutorModel)) for (const tier of ["L1", "L2", "L3", "L4"]) {
     const row = tiers[tier]?.find(entry => entry.profile === "Demo reviewer.gpt-6-sol");
     if (model === "gpt-6-sol") assert.equal(row, undefined);
-    else assert.equal(row?.effort, "xhigh");
+    else assert.equal(row?.effort, "high");
   }
 });
 
@@ -209,7 +210,8 @@ test("explicit positions sort before implicit positions, keep stable ties, and d
   } } };
   const list = (build(overrides).roles.executor as Record<string, MatrixEntry[]>).L1;
   assert.deepEqual(list.slice(0, 2).map(row => row.profile), ["Demo executor.sonnet", "Demo executor"]);
-  assert.equal(list[2].profile, "Demo executor.gpt-6.1-sol");
+  assert.equal(list[2].profile, "Demo executor.gpt-6-luna");
+  assert.equal(list[3].profile, "Demo executor.gpt-6.1-sol");
   assert.equal(list[2].order, undefined);
   const reversed = build({ executor: { L1: { "executor.sonnet": { order: 20 }, executor: { order: 10 } } } });
   assert.equal((reversed.roles.executor as Record<string, MatrixEntry[]>).L1[0].profile, "Demo executor");

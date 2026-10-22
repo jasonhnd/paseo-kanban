@@ -1,6 +1,7 @@
 import { parentIdsFromArgs } from "./argv";
 import { cardMark, projectNameForCode, resolveTaskId } from "./card-ref";
 import { changeReadGrant, hasProjectRead } from "./read-grants";
+import { isOpsCleanupWorker } from "./ops-cleanup";
 import { formatRelated, isRelatedView, projectReadView, relatedView } from "./related-view";
 import { parseCardRef } from "../shared/card-code";
 import { getDb } from "./db";
@@ -97,7 +98,7 @@ export function toolDefs(language: Language = getLanguage()): McpTool[] {
   { name: "kanban_create", description: text("kanban_create.description"), inputSchema: { type: "object", properties: { project: { type: "string" }, title: { type: "string" }, brief: { type: "string" }, role: { type: "string" }, workspace: { type: "string" }, profile: { type: "string" }, parents: { type: "array", items: CARD_REF, description: text("kanban_create.param.parents") }, reviews: { ...CARD_REF, description: text("kanban_create.param.reviews") }, contract: { type: "string" }, maxRetries: { type: "number" }, tags: { type: "array", items: { type: "string" }, description: text("kanban_create.param.tags") }, effort: { type: "string", description: text("kanban_create.param.effort") }, tier: { type: "string", description: text("kanban_create.param.tier") }, decision: { type: "string", description: text("kanban_create.param.decision") } }, required: ["project", "title", "role"] } },
   { name: "kanban_link", description: text("kanban_link.description"), inputSchema: { type: "object", properties: { id: CARD_REF, parent: CARD_REF }, required: ["id", "parent"] } },
   { name: "kanban_unlink", description: text("kanban_unlink.description"), inputSchema: { type: "object", properties: { id: CARD_REF, parent: CARD_REF, parents: { type: "array", items: CARD_REF } }, required: ["id"], anyOf: [{ required: ["parent"] }, { required: ["parents"] }] } },
-  { name: "kanban_unblock", description: text("kanban_unblock.description"), inputSchema: { type: "object", properties: { id: CARD_REF }, required: ["id"] } },
+  { name: "kanban_unblock", description: text("kanban_unblock.description"), inputSchema: { type: "object", properties: { id: CARD_REF, runBudget: { type: "object", properties: Object.fromEntries(["maxDurationMs", "maxTurns", "maxTokens", "maxConsecutiveWaits"].map(key => [key, { type: "integer", minimum: 1 }])), additionalProperties: false }, reason: { type: "string" } }, required: ["id"] } },
   { name: "kanban_wait_user", description: text("kanban_wait_user.description"), inputSchema: { type: "object", properties: { id: CARD_REF, decision: { type: "string", description: text("kanban_wait_user.param.decision") } }, required: ["id", "decision"] } },
   { name: "kanban_unwait", description: text("kanban_unwait.description"), inputSchema: { type: "object", properties: { id: CARD_REF }, required: ["id"] } },
   { name: "kanban_rework", description: text("kanban_rework.description"), inputSchema: { type: "object", properties: { id: CARD_REF, reason: { type: "string" }, agent: { type: "string" }, countRound: { type: "boolean" } }, required: ["id", "reason"] } },
@@ -195,10 +196,13 @@ function workerList(identity: Identity, args: Record<string, unknown>): { projec
   const own = identity.taskId != null ? getTask(identity.taskId) : null;
   const project = own?.project;
   if (!project) return { projects: [], tasks: [] };
-  if (own && hasProjectRead(own) && typeof args.project === "string" && args.project && args.project !== project && projectNameForCode(args.project) !== project) {
+  const opsCleanup = isOpsCleanupWorker(identity);
+  if (!opsCleanup && own && hasProjectRead(own) && typeof args.project === "string" && args.project && args.project !== project && projectNameForCode(args.project) !== project) {
     throw new KanbanError("forbidden", t("readGrants.listOwnProject"));
   }
-  const tasks = listBoard(project, { includeRemoved: true }).tasks.map((card) => ({
+  const requestedProject = typeof args.project === "string" && args.project ? args.project : undefined;
+  const board = listBoard(opsCleanup ? (requestedProject ? projectNameForCode(requestedProject) ?? requestedProject : undefined) : project, { includeRemoved: true });
+  const tasks = board.tasks.map((card) => ({
     id: card.id,
     code: card.code,
     project: card.project,
@@ -207,9 +211,10 @@ function workerList(identity: Identity, args: Record<string, unknown>): { projec
     status: card.status,
     blockedKind: card.blockedKind,
     scheduledUntil: card.scheduledUntil,
+    ...(card.reviewStatus ? { reviewStatus: card.reviewStatus } : {}),
     tier: card.tier,
   }));
-  return { projects: [project], tasks };
+  return { projects: opsCleanup ? board.projects : [project], tasks };
 }
 
 const AGENT_BOUND = new Set(["kanban_complete", "kanban_block", "kanban_approve", "kanban_request_changes"]);
@@ -264,6 +269,7 @@ function taskId(identity: Identity, args: Record<string, unknown>, access: "read
   if (!requested || Number.isNaN(requested)) throw new KanbanError("invalid", t("tools.needCard"));
   if (identity.taskId != null && identity.taskId !== requested) {
     if (access === "read") {
+      if (isOpsCleanupWorker(identity)) return requested;
       const own = getTask(identity.taskId);
       if (hasProjectRead(own)) {
         if (getTask(requested).project === own.project) return requested;
@@ -325,7 +331,7 @@ async function handleAuthenticatedTool(name: string, args: Record<string, unknow
       const detail = getDetail(id);
       if (identity.taskId != null && identity.taskId !== id) {
         const own = getTask(identity.taskId);
-        return hasProjectRead(own) && detail.task.project === own.project ? projectReadView(detail) : relatedView(detail);
+        return isOpsCleanupWorker(identity) || (hasProjectRead(own) && detail.task.project === own.project) ? projectReadView(detail) : relatedView(detail);
       }
       return detail;
     }
@@ -368,7 +374,7 @@ async function handleAuthenticatedTool(name: string, args: Record<string, unknow
     case "kanban_block":
       return blockTask(taskId(identity, args), String(args.kind ?? ""), String(args.reason ?? ""), identity.role, { until: args.until });
     case "kanban_approve":
-      return approveTask(taskId(identity, args), String(args.summary ?? ""), identity.role);
+      return approveTask(taskId(identity, args), String(args.summary ?? ""), identity.role, identity.agentId);
     case "kanban_request_changes":
       return requestChanges(taskId(identity, args), String(args.reason ?? ""), String(args.findings ?? ""), identity.role);
     case "kanban_create": {
@@ -410,7 +416,7 @@ async function handleAuthenticatedTool(name: string, args: Record<string, unknow
     case "kanban_unblock": {
       const id = taskId(identity, args);
       assertSupervisorScope(identity, getTask(id), t("tools.action.unblock"), { unblock: true });
-      return unblockTask(id, identity.role);
+      return unblockTask(id, identity.role, args.runBudget === undefined ? undefined : { runBudget: args.runBudget, reason: args.reason, grantedBy: identity.agentId });
     }
     case "kanban_wait_user": {
       const id = taskId(identity, args);
@@ -504,20 +510,20 @@ export function formatResult(data: unknown): string {
     const waiting = (data as { wait_decision?: string | null }).wait_decision;
     const status = t("tools.result.status", { status: statusLabel(task.status) });
     const scheduled = data as { blocked_kind?: string | null; scheduled_until?: string | null };
-    const wait = task.status === "blocked" && scheduled.blocked_kind === "scheduled" && scheduled.scheduled_until
+    const wait = task.status === "blocked" && scheduled.blocked_kind === "background" ? t("common.paren", { text: t("background.label") }) : task.status === "blocked" && scheduled.blocked_kind === "scheduled" && scheduled.scheduled_until
       ? t("common.paren", { text: scheduledWaitLabel(scheduled.scheduled_until) }) : waiting ? t("common.paren", { text: waitUserHold(waiting) }) : "";
     const project = task.project ? `\n${t("tools.result.project", { project: task.project })}` : "";
     return `${label} ${task.title}\n${status}${wait}${project}${landed}${warningText}`;
   }
   if (data && typeof data === "object" && Array.isArray((data as { tasks?: unknown }).tasks)) {
-    const tasks = (data as { tasks: Array<{ id: number; code?: string; title: string; status: string; project?: string; waitDecision?: string | null; blockedKind?: string | null; scheduledUntil?: string | null }> }).tasks;
+    const tasks = (data as { tasks: Array<{ id: number; code?: string; title: string; status: string; project?: string; waitDecision?: string | null; blockedKind?: string | null; scheduledUntil?: string | null; reviewStatus?: string | null }> }).tasks;
     if (tasks.length === 0) return t("tools.result.noCards");
     return tasks
       .map((task) => {
         const label = task.code || cardMark(task.id);
-        const state = task.status === "blocked" && task.blockedKind === "scheduled" && task.scheduledUntil
+        const state = task.status === "blocked" && task.blockedKind === "background" ? t("background.label") : task.status === "blocked" && task.blockedKind === "scheduled" && task.scheduledUntil
           ? scheduledWaitLabel(task.scheduledUntil) : task.waitDecision ? `${statusLabel(task.status)}${t("common.comma")}${waitUserHold(task.waitDecision)}` : statusLabel(task.status);
-        return `${label} ${task.title}${t("common.paren", { text: state })}${task.project ? ` · ${task.project}` : ""}`;
+        return `${label} ${task.title}${t("common.paren", { text: state })}${task.project ? ` · ${task.project}` : ""}${task.reviewStatus ? ` · ${task.reviewStatus}` : ""}`;
       })
       .join("\n");
   }

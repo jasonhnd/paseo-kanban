@@ -1,3 +1,5 @@
+import { approveTask, leaderReworkTask } from "../server/flow";
+import { KanbanError } from "../server/errors";
 import { setLanguage } from "../shared/i18n";
 import assert from "node:assert/strict";
 import type { PaseoApi } from "@getpaseo/client";
@@ -10,7 +12,7 @@ import { DEFAULT_CONCURRENCY, saveConfig, type KanbanConfig } from "../server/co
 import { cardMark } from "../server/card-ref";
 import { startTask } from "./helpers/compat-dispatch";
 import { executionFamily } from "../server/execution-family";
-import { resolveReviewTarget } from "../server/review-target";
+import { resolveReviewTarget, deliveryRun } from "../server/review-target";
 import { closeDb, getDb } from "../server/db";
 import { setWakeSender } from "../server/bus";
 import { launcherFrom } from "../server/paseo";
@@ -18,7 +20,7 @@ import type { Profile } from "../server/profiles";
 import type { DispatchMatrix } from "../server/matrix";
 import { resetReconcileForTests } from "../server/schedule";
 import { runTick } from "./helpers/compat-schedule";
-import { createTask, getTask, type TaskRow } from "../server/store";
+import { blockTask, createTask, getTask, getDetail, type TaskRow } from "../server/store";
 import { setAgentAliveCheck, resetAgentAliveCheck } from "../server/wake";
 
 import { loadAcceptanceReviewWaits } from "../server/acceptance-review-wait";
@@ -80,7 +82,9 @@ async function review(task: TaskRow, profile?: string): Promise<TaskRow> {
 function handler(available = profiles) {
   const calls: Array<{ provider: string; family: string | null }> = [];
   const sends: string[] = [];
-  const create = async (input: { config: { provider: string } }) => {
+  const prompts: string[] = [];
+  const create = async (input: { config: { provider: string }; prompt?: string }) => {
+    prompts.push(input.prompt ?? "");
     const selected = available.find(p => `${p.provider}/${p.model}` === input.config.provider);
     calls.push({ provider: input.config.provider, family: selected ? executionFamily(selected) : null });
     return { id: `anonymous-review-${++serial}`, workspaceId: "anonymous-workspace" };
@@ -95,7 +99,7 @@ function handler(available = profiles) {
       create: async () => ({ id: "anonymous-workspace", directory: work, current: () => ({ workspaceDirectory: work, name: "anonymous" }) }),
     },
   } as unknown as PaseoApi;
-  return { calls, sends, launcher: launcherFrom(api) };
+  return { calls, sends, prompts, launcher: launcherFrom(api) };
 }
 function occupyFable() {
   const busy = createTask({ project: "occupied", title: "Anonymous occupied reviewer", role: "reviewer", workspacePath: work });
@@ -618,4 +622,220 @@ it("does not treat a whitespace-only legacy inline family as execution evidence"
   await startTask(card.id, h.launcher, "scheduler", { profiles, chosen: fable });
   assert.equal(h.calls.length, 0);
   assert.equal(getTask(card.id).status, "blocked");
+});
+
+function legacyDelivery(inline = false, absentRun = false) {
+  const task = absentRun
+    ? createTask({ project: "anonymous", title: "Imported delivery", role: inline ? "executor" : "batch", workspacePath: work })
+    : target(inline ? "executor" : "batch");
+  getDb().prepare("UPDATE runs SET model = NULL WHERE task_id = ? AND role = ?").run(task.id, task.role);
+  getDb().prepare("UPDATE tasks SET status = ? WHERE id = ?").run(inline ? "in_review" : "acceptance", task.id);
+  appendEvent(task.id, "complete", "running", inline ? "in_review" : "acceptance", "executor");
+  return getTask(task.id);
+}
+const recoveryReason = "Imported delivery has no reliable historical model; leader selected an independent reviewer after checking the available evidence.";
+const recoveryArgs = (id: number, profile = fable.name) => ["start", String(id), "--profile", profile, "--reason", recoveryReason];
+function authorizationCount(id: number) {
+  return (getDb().prepare("SELECT COUNT(*) AS n FROM events WHERE task_id = ? AND kind = 'review_profile_authorized'").get(id) as { n: number }).n;
+}
+
+for (const scenario of ["missing-model", "missing-run", "inline", "blocked-reviewer"] as const) {
+  it(`lets a leader recover ${scenario} review through the actual CLI and reach a verdict without rerunning execution`, async () => {
+    const inline = scenario === "inline" || scenario === "blocked-reviewer";
+    const delivery = legacyDelivery(inline, scenario === "missing-run");
+    const card = inline ? delivery : await review(delivery, fable.name);
+    const h = handler();
+    if (scenario === "blocked-reviewer") {
+      const oldRun = run(card, gpt, "reviewer", "old-legacy-reviewer");
+      getDb().prepare("UPDATE runs SET ended_at = NULL, end_kind = NULL WHERE id = ?").run(oldRun);
+      getDb().prepare("UPDATE tasks SET status = 'reviewing', agent_id = 'old-legacy-reviewer' WHERE id = ?").run(card.id);
+      const evidence = resolveReviewTarget(getTask(card.id), true);
+      assert.ok(evidence && !evidence.ok);
+      blockTask(card.id, "needs_human", evidence.reason, "reviewer");
+    } else {
+      await runKanban(["start", String(card.id)], {}, { launcher: h.launcher });
+    }
+    assert.equal(getTask(card.id).status, "blocked");
+    const blocked = getDetail(card.id).task;
+    assert.ok(blocked.blockedReason!.includes(`start ${cardMark(card.id)} --profile`));
+    assert.match(blocked.blockedReason!, /--reason/);
+    assert.equal(h.calls.length, 0);
+    const oldWork = deliveryRun(delivery);
+    await runKanban(recoveryArgs(card.id), {}, { launcher: h.launcher });
+    assert.equal(getTask(card.id).status, "reviewing");
+    assert.deepEqual(h.calls.map(row => row.provider), [`${fable.provider}/${fable.model}`]);
+    assert.equal(deliveryRun(delivery)?.id ?? null, oldWork?.id ?? null);
+    assert.equal(deliveryRun(delivery)?.model ?? null, null, "the executor model is not manufactured");
+    const event = getDb().prepare("SELECT data_json FROM events WHERE task_id = ? AND kind = 'started' ORDER BY id DESC LIMIT 1").get(card.id) as { data_json: string };
+    const evidence = JSON.parse(event.data_json).reviewTarget;
+    assert.equal(evidence.source, "leader-profile");
+    assert.equal(evidence.model, null);
+    assert.equal(evidence.authorization.model, fable.model);
+    assert.equal(evidence.authorization.reason, recoveryReason);
+    assert.equal(evidence.authorization.authorizedBy, "supervisor");
+    assert.ok(getDetail(delivery.id).comments.some(note => note.body.includes(recoveryReason)));
+    assert.ok(h.prompts[0].includes("historical executor model remains unknown"));
+    assert.ok(h.prompts[0].includes(recoveryReason));
+    if (scenario === "blocked-reviewer") {
+      const old = getDb().prepare("SELECT ended_at, end_kind FROM runs WHERE agent_id = 'old-legacy-reviewer'").get() as { ended_at: string; end_kind: string };
+      assert.ok(old.ended_at); assert.equal(old.end_kind, "review_profile_replaced");
+    }
+    const approved = await approveTask(card.id, "Reviewed under the recorded legacy exception");
+    assert.equal(approved.status, "acceptance");
+  });
+}
+
+it("requires a profile and a nonempty reason, and never bypasses known-model or ambiguous-binding checks", async () => {
+  const delivery = legacyDelivery();
+  const card = await review(delivery);
+  const h = handler();
+  for (const args of [["--profile", fable.name], ["--reason", recoveryReason], ["--profile", fable.name, "--reason", " "]]) {
+    await assert.rejects(runKanban(["start", String(card.id), ...args], {}, { launcher: h.launcher }), /requires both --profile/);
+  }
+  assert.equal(authorizationCount(card.id), 0);
+  getDb().prepare("UPDATE runs SET model = ? WHERE task_id = ?").run(fable.model!, delivery.id);
+  await assert.rejects(runKanban(recoveryArgs(card.id), {}, { launcher: h.launcher }), /Known execution models still require a different actual reviewer model/);
+  assert.equal(authorizationCount(card.id), 0);
+  getDb().prepare("UPDATE runs SET model = NULL WHERE task_id = ?").run(delivery.id);
+  getDb().prepare("UPDATE tasks SET executor_agent_id = 'unrecorded-takeover' WHERE id = ?").run(delivery.id);
+  await assert.rejects(runKanban(recoveryArgs(card.id), {}, { launcher: h.launcher }), /execution evidence is ambiguous/);
+  assert.equal(authorizationCount(card.id), 0); assert.equal(h.calls.length, 0);
+});
+
+it("refuses scheduler recovery options and foreign leader CLI identities before recording authorization", async () => {
+  const delivery = legacyDelivery();
+  const card = await review(delivery);
+  const h = handler();
+  await assert.rejects(startTask(card.id, h.launcher, "scheduler", { profiles,
+    reviewRecovery: { profile: fable.name, reason: recoveryReason } }), (err: unknown) => err instanceof KanbanError && err.code === "forbidden");
+  saveConfig({ ...config, supervisors: { anonymous: "registered-project-leader", elsewhere: "foreign-project-leader" } });
+  await assert.rejects(runKanban(recoveryArgs(card.id), { PASEO_AGENT_ID: "foreign-project-leader" }, { launcher: h.launcher }),
+    (err: unknown) => err instanceof KanbanError && err.code === "forbidden");
+  assert.equal(authorizationCount(card.id), 0); assert.equal(h.calls.length, 0);
+});
+
+it("keeps an authorized legacy review pinned through quota waits and scheduler retries", async () => {
+  const delivery = legacyDelivery();
+  const card = await review(delivery);
+  const h = handler();
+  writeFileSync(process.env.KANBAN_POOL_STATUS!, JSON.stringify({ generatedAt: new Date().toISOString(), pools: {
+    gpt: { dispatchable: true }, fable: { dispatchable: false, reason: "synthetic quota window" },
+  } }));
+  await runKanban(recoveryArgs(card.id), {}, { launcher: h.launcher });
+  assert.equal(h.calls.length, 0); assert.equal(authorizationCount(card.id), 1);
+  assert.equal(getTask(card.id).status, "ready");
+  await runTick({ profiles, launcher: h.launcher, config, agentState: () => "alive" });
+  assert.equal(h.calls.length, 0, "an available alternate model cannot replace the leader's exact choice");
+  writeFileSync(process.env.KANBAN_POOL_STATUS!, JSON.stringify({ generatedAt: new Date().toISOString(), pools: {
+    gpt: { dispatchable: true }, fable: { dispatchable: true },
+  } }));
+  await runTick({ profiles, launcher: h.launcher, config, agentState: () => "alive" });
+  assert.deepEqual(h.calls.map(row => row.provider), [`${fable.provider}/${fable.model}`]);
+});
+
+it("invalidates authorization after a new unresolved work run instead of automatically selecting a reviewer", async () => {
+  const delivery = legacyDelivery();
+  const card = await review(delivery);
+  const h = handler();
+  writeFileSync(process.env.KANBAN_POOL_STATUS!, JSON.stringify({ generatedAt: new Date().toISOString(), pools: {
+    gpt: { dispatchable: true }, fable: { dispatchable: false },
+  } }));
+  await runKanban(recoveryArgs(card.id), {}, { launcher: h.launcher });
+  run(delivery, { ...batch, model: undefined }, "batch", "new-unknown-executor");
+  const evidence = resolveReviewTarget(getTask(card.id), true);
+  assert.ok(evidence && !evidence.ok);
+  assert.match(evidence.reason, /--profile/);
+  writeFileSync(process.env.KANBAN_POOL_STATUS!, JSON.stringify({ generatedAt: new Date().toISOString(), pools: {
+    gpt: { dispatchable: true }, fable: { dispatchable: true },
+  } }));
+  await runTick({ profiles, launcher: h.launcher, config, agentState: () => "alive" });
+  assert.equal(h.calls.length, 0); assert.equal(getTask(card.id).status, "blocked");
+});
+
+it("rechecks newly recovered same-model execution evidence after an await before opening the reviewer", async () => {
+  const delivery = legacyDelivery();
+  const card = await review(delivery);
+  const h = handler();
+  h.launcher.listModels = async () => {
+    run(delivery, { ...fable, role: "batch" }, "batch", "recovered-executor");
+    return { models: [{ id: fable.model!, thinkingOptions: [{ id: "xhigh" }] }] };
+  };
+  await assert.rejects(runKanban(recoveryArgs(card.id), {}, { launcher: h.launcher }), /review requires a different actual model/);
+  assert.equal(h.calls.length, 0);
+});
+
+it("recovers a legacy standalone review with no reviews link without treating its earlier reviewer model as executor evidence", async () => {
+  const card = createTask({ project: "anonymous", title: "Imported standalone review", role: "reviewer", workspacePath: work });
+  const oldRun = run(card, gpt, "reviewer", "legacy-standalone-reviewer");
+  getDb().prepare("UPDATE runs SET ended_at = NULL, end_kind = NULL WHERE id = ?").run(oldRun);
+  getDb().prepare("UPDATE tasks SET status = 'reviewing', agent_id = 'legacy-standalone-reviewer' WHERE id = ?").run(card.id);
+  blockTask(card.id, "needs_human", "Historical executor model and original work-card association are missing", "reviewer");
+  assert.equal(resolveReviewTarget(getTask(card.id), true), null, "no association is inferred from old reviewer runs");
+  assert.ok(getDetail(card.id).task.blockedReason!.includes(`start ${cardMark(card.id)} --profile`));
+  assert.equal(getTask(card.id).blocked_reason, "Historical executor model and original work-card association are missing");
+  const h = handler();
+  await assert.rejects(runKanban(["start", String(card.id)], {}, { launcher: h.launcher }), /--profile/);
+  await runKanban(recoveryArgs(card.id), {}, { launcher: h.launcher });
+  assert.equal(getTask(card.id).status, "reviewing");
+  assert.equal(getTask(card.id).review_of, null);
+  const evidence = resolveReviewTarget(getTask(card.id), true);
+  assert.ok(evidence?.ok);
+  assert.equal(evidence.source, "leader-profile"); assert.equal(evidence.model, null);
+  assert.equal(evidence.runId, null); assert.equal(evidence.agentId, null);
+  assert.ok(h.prompts[0].includes(recoveryReason));
+  assert.equal((await approveTask(card.id, "Standalone legacy review completed under explicit leader authorization")).status, "acceptance");
+});
+
+it("does not authorize profiles without an actual model or clear unrelated blocks", async () => {
+  const delivery = legacyDelivery(); const card = await review(delivery); const h = handler();
+  writeFileSync(process.env.KANBAN_PASEO_CONFIG!, JSON.stringify({ daemon: { agentProfiles: [batch, gpt, { ...fable, model: undefined }] } }));
+  await assert.rejects(runKanban(recoveryArgs(card.id), {}, { launcher: h.launcher }), /explicit actual model/);
+  assert.equal(authorizationCount(card.id), 0);
+  writeFileSync(process.env.KANBAN_PASEO_CONFIG!, JSON.stringify({ daemon: { agentProfiles: profiles } }));
+  blockTask(card.id, "capability", "Unrelated workspace capability issue", "supervisor");
+  await assert.rejects(runKanban(recoveryArgs(card.id), {}, { launcher: h.launcher }), /other blocks retain their normal recovery path/);
+  assert.equal(getTask(card.id).blocked_reason, "Unrelated workspace capability issue");
+  assert.equal(authorizationCount(card.id), 0); assert.equal(h.calls.length, 0);
+});
+
+it("refuses a changed reviewer model after authorization rather than falling back to another profile", async () => {
+  const delivery = legacyDelivery(); const card = await review(delivery); const h = handler();
+  writeFileSync(process.env.KANBAN_POOL_STATUS!, JSON.stringify({ generatedAt: new Date().toISOString(), pools: {
+    gpt: { dispatchable: true }, fable: { dispatchable: false },
+  } }));
+  await runKanban(recoveryArgs(card.id), {}, { launcher: h.launcher });
+  const changed = { ...fable, model: "changed-review-model" };
+  const available = [batch, gpt, changed];
+  writeFileSync(process.env.KANBAN_PASEO_CONFIG!, JSON.stringify({ daemon: { agentProfiles: available } }));
+  writeFileSync(process.env.KANBAN_POOL_STATUS!, JSON.stringify({ generatedAt: new Date().toISOString(), pools: {
+    gpt: { dispatchable: true }, fable: { dispatchable: true },
+  } }));
+  const next = handler(available);
+  await runTick({ profiles: available, launcher: next.launcher, config, agentState: () => "alive" });
+  assert.equal(next.calls.length, 0);
+  assert.match(getTask(card.id).blocked_reason ?? getTask(card.id).hold_reason ?? "", /no longer matches the leader-authorized profile/);
+});
+
+it("keeps an expired standalone legacy authorization closed after real leader rework and allows explicit reauthorization", async () => {
+  const card = createTask({ project: "anonymous", title: "Standalone legacy delivery check", role: "reviewer", workspacePath: work });
+  const h = handler();
+  await runKanban(recoveryArgs(card.id), {}, { launcher: h.launcher });
+  assert.equal(getTask(card.id).status, "reviewing"); assert.equal(h.calls.length, 1);
+  h.launcher.listWorkspaces = async () => [{ id: "anonymous-workspace", name: "anonymous", directory: work,
+    projectRoot: work, projectId: "anonymous-project", kind: "directory", archived: false }];
+  await leaderReworkTask(card.id, "Review the refreshed artifact and evidence", { presence: () => "missing" });
+  const expired = resolveReviewTarget(getTask(card.id), true);
+  assert.ok(expired && !expired.ok);
+  assert.match(expired.reason, /authorization has expired/);
+  await runTick({ profiles, launcher: h.launcher, config, agentState: () => "alive" });
+  assert.equal(h.calls.length, 1, "expired authorization must not fall back to ordinary standalone routing");
+  // The departed-profile hold can precede routing in a scheduler tick. A normal
+  // leader start still reaches the closed legacy guard and gives its recovery command.
+  await runKanban(["start", String(card.id)], {}, { launcher: h.launcher });
+  assert.equal(getTask(card.id).status, "blocked");
+  assert.match(getTask(card.id).blocked_reason ?? "", /authorization has expired/);
+  await runKanban(recoveryArgs(card.id), {}, { launcher: h.launcher });
+  assert.equal(getTask(card.id).status, "reviewing"); assert.equal(h.calls.length, 2);
+  assert.equal(authorizationCount(card.id), 2);
+  assert.equal((await approveTask(card.id, "Refreshed review under renewed leader authorization")).status, "acceptance");
 });

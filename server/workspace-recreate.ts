@@ -1,12 +1,13 @@
 /// <reference types="node" />
 import { t } from "../shared/i18n";
 import { basename, join } from "node:path";
+import { readdirSync } from "node:fs";
 import { existsSync, statSync } from "./perf-fs";
 import { getDb } from "./db";
 import type { AgentLauncher } from "./dispatch";
 import { KanbanError } from "./errors";
 import { headRef, isProtectedBranch, resolveWorktreeBase, runGit, type GitRunner } from "./git";
-import { directoryState } from "./missing-cwd";
+import { directoryState, PLACEHOLDER_NAME } from "./missing-cwd";
 import { pickWorkspace, samePath } from "./placement";
 import { readOnlyBranchName } from "./readonly-worktree";
 import { appendEvent, getTask, type TaskRow } from "./store";
@@ -17,6 +18,8 @@ import { commitWorktree, discardRecordedWorktree, readWorktreeCreated, type Work
 
 import { holdCleanupCard } from "./cleanup-state";
 import { DEFAULT_ARCHIVE_TIMEOUT_MS, loadConfig } from "./config";
+import { holdsStartClaim } from "./start-claim";
+import { readBranchObserved } from "./branch-observed";
 
 export const RECREATE_FAILED = "workspace_recreate_failed";
 
@@ -108,7 +111,7 @@ async function checkedOutElsewhere(root: string, branch: string, run: GitRunner)
  * The card's temporary workspace directory is gone (Paseo's auto-archive-on-merge, a manual delete, a crash).
  * Rebuild it so the card can start or resume instead of sticking in blocked:
  * - the card branch still exists: a new worktree on that branch, same tip;
- * - the branch is gone: a new worktree from the card base, as at card creation.
+ * - a delivered branch is gone: restore its verified recorded SHA or refuse; only a first attempt may use the base.
  * The copy goes to a path the card has not used (`rebuildSlug`), so Paseo's merge auto-archive does not take it again.
  * The old Paseo workspace record is archived first so two do not stay open.
  * Any failure throws RECREATE_FAILED; the caller blocks the card as needs_human with that message.
@@ -134,6 +137,12 @@ async function recreateWorkspaceLocked(input: Parameters<typeof recreateWorkspac
   const run = input.run ?? runGit;
   const saved: WorktreeRecord | null = input.synthetic ?? readWorktreeCreated(task.id);
   if (!saved?.directory) fail(t("workspaceRecreate.noRecord"));
+  if (task.workspace_kind === "lane") fail("Shared lanes cannot be recreated as a card worktree.");
+  if (!worktreeDirectoryLost(saved)) fail(`The recorded copy is still present: ${saved.directory}. Preserve its files before rebuilding.`);
+  if (existsSync(saved.directory) && statSync(saved.directory).isDirectory() &&
+    readdirSync(saved.directory).some(name => name !== PLACEHOLDER_NAME)) {
+    fail(`The old directory has files of unknown ownership: ${saved.directory}. Preserve them before rebuilding.`);
+  }
   const root = saved.root || task.workspace_path || "";
   if (!root || !existsSync(root) || !statSync(root).isDirectory()) fail(t("workspaceRecreate.noRepo", { path: root || t("workspaceRecreate.notFilled") }));
   if (!launcher.createWorktree) fail(t("workspaceRecreate.noCreateWorktree"));
@@ -146,13 +155,18 @@ async function recreateWorkspaceLocked(input: Parameters<typeof recreateWorkspac
   // Checked before any side effect, so a foreign record archives nothing and frees nothing.
   const refused = branchRefusal(task.id, branch, readOnly, base);
   if (refused) fail(refused);
+  if (samePath(root, saved.directory)) fail(t("workspaceRecreate.isMain"));
+  if (!input.synthetic) {
+    const others = getDb().prepare("SELECT id, workspace_path FROM tasks WHERE id != ? AND status NOT IN ('done', 'archived')").all(task.id) as Array<{ id: number; workspace_path: string | null }>;
+    if (others.some(other => samePath(other.workspace_path, saved.directory))) fail(`The recorded copy is shared: ${saved.directory}. Refusing to recreate it.`);
+  }
   const listed = launcher.listWorkspaces ? await launcher.listWorkspaces() : [];
   const main = pickWorkspace(listed, root);
   const projectId = main?.projectId;
 
   const tip = await branchTip(root, branch, run);
   let startRef: string;
-  let usedRef: "branch" | "base";
+  let usedRef: "branch" | "base" | "delivered";
   if (tip) {
     startRef = tip;
     usedRef = "branch";
@@ -160,11 +174,26 @@ async function recreateWorkspaceLocked(input: Parameters<typeof recreateWorkspac
     startRef = saved.head;
     usedRef = "base";
   } else {
-    const resolved = await resolveWorktreeBase(root, base, run);
-    if ("error" in resolved) fail(t("workspaceRecreate.baseFailed", { base, error: resolved.error }));
-    startRef = resolved.ref;
-    usedRef = "base";
+    const delivered = task.status === "rework" || task.review_round > 0 || task.handoff_json || getDb().prepare(`SELECT 1 FROM events WHERE task_id = ?
+      AND kind IN ('rework_reopen_pending', 'leader_rework', 'request_changes', 'rejected', 'land_conflict') LIMIT 1`).get(task.id);
+    if (delivered) {
+      const observed = readBranchObserved(task.id);
+      if (!observed || observed.branch !== branch || !/^[0-9a-f]{40,64}$/i.test(observed.head)) {
+        fail(`Execution branch ${branch} is missing. No verified delivered SHA is available; refusing base ${base}. Recover the delivered branch/ref before retrying.`);
+      }
+      const resolved = await run(root, ["rev-parse", "--verify", "--quiet", `${observed.head}^{commit}`]);
+      if (resolved.code !== 0 || resolved.stdout.trim() !== observed.head) fail(`Delivered commit ${observed.head} for ${branch} is unavailable. Refusing base ${base}; recover that exact commit before retrying.`);
+      startRef = observed.head;
+      usedRef = "delivered";
+    } else {
+      const resolved = await resolveWorktreeBase(root, base, run);
+      if ("error" in resolved) fail(t("workspaceRecreate.baseFailed", { base, error: resolved.error }));
+      startRef = resolved.ref;
+      usedRef = "base";
+    }
   }
+
+  if (!holdsStartClaim(task.id, claimToken)) fail(t("workspaceRecreate.claimLost"));
 
   const oldWorkspaceId = saved.workspaceId ?? null;
   let archivedOld = false;
@@ -188,7 +217,13 @@ async function recreateWorkspaceLocked(input: Parameters<typeof recreateWorkspac
     if (dropped.code !== 0) fail(t("workspaceRecreate.releaseFailed", { branch, error: (dropped.stderr || dropped.stdout).trim() }));
   }
   const restore = async (): Promise<void> => {
-    if (tip) await run(root, ["update-ref", headRef(branch), tip]);
+    const restoreTip = tip ?? (usedRef === "delivered" ? startRef : null);
+    if (!restoreTip) return;
+    // Do not overwrite a branch another process moved while the host create was in flight.
+    const restored = await run(root, ["update-ref", headRef(branch), restoreTip, ""]);
+    if (restored.code !== 0 && await branchTip(root, branch, run) !== restoreTip) {
+      fail(`Cannot restore ${branch} without overwriting a changed ref. Recoverable tip: ${restoreTip}.`);
+    }
   };
 
   // A borrowed record is another card's path; the review copy keeps Paseo's name from its read-only branch.
@@ -220,6 +255,10 @@ async function recreateWorkspaceLocked(input: Parameters<typeof recreateWorkspac
   if (main && created.workspaceId === main.id) {
     await restore();
     fail(t("workspaceRecreate.isMain"));
+  }
+  if (samePath(directory, saved.directory) || samePath(directory, root) || !existsSync(join(directory, ".git"))) {
+    await restore();
+    fail(`Recreated copy must be a fresh Git worktree, away from ${saved.directory}: ${directory}. Recoverable ref: ${startRef}.`);
   }
 
   // The old record must stop counting before the new one is written, or it would look like a rival copy.

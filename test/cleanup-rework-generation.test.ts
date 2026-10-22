@@ -83,6 +83,7 @@ async function fixture() {
     appendEvent(task.id, "agent_opened", null, null, "synthetic", { agentId }); invalidateAgentIndex();
   }
   bind(initial.directory, initial.workspaceId!);
+  appendEvent(task.id, "branch_observed", null, null, "synthetic", { branch, head: git(root, "rev-parse", branch), pushed: false });
   const ops: CleanupOps = {
     archiveAgent: async id => { purgedAgents.push(id); rmSync(join(agents, "bucket", `${id}.json`), { force: true }); invalidateAgentIndex(); },
     archiveWorkspace: async id => { archived.push(id); workspaces.get(id)!.archived = true; },

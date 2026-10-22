@@ -1,0 +1,54 @@
+{
+  "daemon": {
+    "agentProfiles": [
+      {
+        "id": "role_executor_gpt_luna",
+        "name": "Executor · GPT-6-Luna",
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "role": "candidate",
+        "candidateFor": "executor",
+        "family": "openai",
+        "pool": "codex-pro",
+        "thinkingOptionId": "medium",
+        "dispatchId": "executor.gpt-6-luna",
+        "featureValues": {
+          "plan_mode": false,
+          "service_tier": "default"
+        }
+      },
+      {
+        "id": "role_reviewer_gpt_luna",
+        "name": "Reviewer · GPT-6-Luna",
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "role": "candidate",
+        "candidateFor": "reviewer",
+        "family": "openai",
+        "pool": "codex-pro",
+        "thinkingOptionId": "high",
+        "dispatchId": "reviewer.gpt-6-luna",
+        "featureValues": {
+          "plan_mode": false,
+          "service_tier": "default"
+        }
+      },
+      {
+        "id": "role_batch_gpt_luna_v2",
+        "name": "Batch · GPT-6-Luna",
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "role": "candidate",
+        "candidateFor": "batch",
+        "family": "openai",
+        "pool": "codex-pro",
+        "thinkingOptionId": "medium",
+        "dispatchId": "batch.gpt-6-luna",
+        "featureValues": {
+          "plan_mode": false,
+          "service_tier": "default"
+        }
+      }
+    ]
+  }
+}

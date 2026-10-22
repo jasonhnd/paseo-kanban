@@ -90,8 +90,12 @@ describe("early bind retry", () => {
         bound.client
           ? {
               launcher: {
-                async create() {
+                async create(options) {
+                  assert.equal(options.config.thinkingOptionId, "low", "the wait fixture uses the operations depth");
                   return { id: "early-agent" };
+                },
+                async listModels() {
+                  return { models: [{ id: "grok-4.7", thinkingOptions: [{ id: "low" }] }] };
                 },
                 async send() {},
               },

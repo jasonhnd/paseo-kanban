@@ -8,7 +8,8 @@ import { directoryState } from "./missing-cwd";
 import { readContract } from "./pr";
 import { openPendingLandIds, pendingLand, recordLandPending } from "./land-pending";
 import { addComment, appendEvent, getTask, type TaskRow } from "./store";
-import { notifyLandConflict } from "./wake";
+import { notifyLandConflict, notifyMissingLand } from "./wake";
+import { inspectMissingLand, missingLandTarget, recordMissingLandSettlement } from "./missing-land";
 import { isTempWorkspace } from "./temp-mark";
 import { judgedWorktree } from "./branch-observed";
 import { createdWorktree, ownedWorktree, worktreeOwnershipError, type OwnedWorktree } from "./worktree-gc";
@@ -59,7 +60,7 @@ export type LandResult =
   | { kind: "merged"; commits: string[] }
   | { kind: "refuse"; message: string }
   | { kind: "conflict"; message: string; files: string[]; other: string | null; base: string }
-  | { kind: "pending"; reason: string; branch: string; base: string };
+  | { kind: "pending"; reason: string; branch: string; base: string; head?: string; mainDirty?: boolean };
 
 function otherCard(task: TaskRow, files: string[]): string | null {
   const wanted = new Set(files);
@@ -116,7 +117,9 @@ async function landLocalBranchInner(task: TaskRow, owned: OwnedWorktree, actor: 
   const status = await run(owned.root, ["status", "--porcelain"]);
   if (status.code !== 0) return { kind: "refuse", message: failure(status, t("tempLand.gitFailed", { command: "git status" })) };
   if (status.stdout.trim()) {
-    return { kind: "pending", reason: dirtyReason(owned, status.stdout), branch: owned.branch, base: owned.base };
+    const tip = await run(owned.root, ["rev-parse", "--verify", `${headRef(owned.branch)}^{commit}`]);
+    return { kind: "pending", reason: dirtyReason(owned, status.stdout), branch: owned.branch, base: owned.base, mainDirty: true,
+      ...(tip.code === 0 ? { head: tip.stdout.trim() } : {}) };
   }
   const head = await run(owned.root, ["rev-parse", "--abbrev-ref", "HEAD"]);
   if (head.code !== 0) return { kind: "refuse", message: failure(head, t("tempLand.gitFailed", { command: "git rev-parse" })) };
@@ -184,7 +187,8 @@ async function finish(task: TaskRow, owned: OwnedWorktree, actor: string, before
   const files = await run(owned.root, ["diff", "--name-only", before, "HEAD"]);
   if (files.code !== 0) return { kind: "refuse", message: failure(files, t("tempLand.gitFailed", { command: "git diff" })) };
   const commits = lines(listed.stdout);
-  const already = getDb().prepare("SELECT id FROM events WHERE task_id = ? AND kind = 'landed' LIMIT 1").get(task.id);
+  const already = getDb().prepare(`SELECT id FROM events WHERE task_id = ? AND kind = 'landed'
+    AND id > COALESCE((SELECT MAX(id) FROM events WHERE task_id = ? AND kind = 'land_pending'), 0) LIMIT 1`).get(task.id, task.id);
   if (!already) {
     appendEvent(task.id, "landed", null, task.status, actor, {
       files: lines(files.stdout),
@@ -237,18 +241,38 @@ export async function resumePendingLands(actor = "scheduler"): Promise<void> {
 async function resumeOne(id: number, actor: string): Promise<void> {
   const task = getTask(id);
   if (task.status !== "done" && task.status !== "archived") return;
+  let pending = pendingLand(task.id);
+  if (!pending) return;
   const plan = landPlan(task);
   if (plan.kind !== "land") {
     if (plan.kind === "none") return;
     const reason = plan.kind === "refuse" ? plan.message : plan.reason;
-    recordLandPending(task.id, task.status, actor, { reason, branch: "", base: "" });
+    recordLandPending(task.id, task.status, actor, { ...pending, reason, mainDirty: false }, pending.eventId);
     return;
   }
-  const pending = pendingLand(task.id);
-  if (await conflictEditInProgress(plan.owned.directory, pending?.conflict === true)) return;
+  if (!missingLandTarget(task, pending)) return;
+  const inspection = await inspectMissingLand(plan.owned, pending);
+  if (pendingLand(task.id)?.eventId !== pending.eventId) return;
+  if (inspection.kind === "error") {
+    recordLandPending(task.id, task.status, actor, { ...pending, reason: inspection.detail, mainDirty: false }, pending.eventId);
+    return;
+  }
+  if (inspection.kind === "missing") {
+    if (inspection.retainedBy && recordMissingLandSettlement(task, pending, plan.owned, inspection, actor)) return;
+    const reason = t("missingLand.stopped", { branch: plan.owned.branch, detail: inspection.detail });
+    recordLandPending(task.id, task.status, actor, { ...pending, reason, mainDirty: false, missingBranch: true, conflict: false, files: [] }, pending.eventId);
+    if (!pendingLand(task.id)?.missingBranch) return;
+    notifyMissingLand(task.id, reason + "\n" + t("missingLand.next", { card: cardMark(task.id) }));
+    return;
+  }
+  const wrote = recordLandPending(task.id, task.status, actor, { ...pending, head: inspection.head, missingBranch: false }, pending.eventId);
+  const refreshed = pendingLand(task.id);
+  if (!refreshed || (!wrote && refreshed.eventId !== pending.eventId)) return;
+  pending = refreshed;
+  if (await conflictEditInProgress(plan.owned.directory, pending.conflict)) return;
   const landed = await landLocalBranch(task, plan.owned, actor);
   if (landed.kind === "pending") {
-    recordLandPending(task.id, task.status, actor, { reason: landed.reason, branch: landed.branch, base: landed.base });
+    recordLandPending(task.id, task.status, actor, { reason: landed.reason, branch: landed.branch, base: landed.base, head: landed.head, mainDirty: landed.mainDirty }, pending.eventId);
     return;
   }
   if (landed.kind === "merged") {
@@ -264,7 +288,7 @@ async function resumeOne(id: number, actor: string): Promise<void> {
       base: plan.owned.base,
       conflict: true,
       files: landed.files,
-    });
+    }, pending.eventId);
     if (wrote) addComment(task.id, actor, t("tempLand.conflict.notLanded", { reason }));
     notifyLandConflict(task.id, t("tempLand.conflict.notLanded", { reason }));
     return;
@@ -273,5 +297,5 @@ async function resumeOne(id: number, actor: string): Promise<void> {
     reason: landed.message,
     branch: plan.owned.branch,
     base: plan.owned.base,
-  });
+  }, pending.eventId);
 }

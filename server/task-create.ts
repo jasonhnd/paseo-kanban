@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import { getDb } from "./db";
+import { assertReviewAvailable } from "./review-assignment";
 import { readContract, writeContract } from "./pr";
 import { parseWorkspace, resolveCreateWorkspace } from "./workspace";
 import { mergeCardDependency, mergeCardWarnings, parentsBlockReason, type ParentRef } from "./parents";
@@ -81,6 +82,7 @@ function assertReviewTarget(reviewOf: number | null | undefined, role: string): 
   if (!Number.isInteger(reviewOf) || reviewOf <= 0) throw new KanbanError("invalid", t("taskCreate.error.reviewsId"));
   if (role !== "reviewer") throw new KanbanError("invalid", t("taskCreate.error.reviewsRole"));
   taskById(reviewOf);
+  assertReviewAvailable(reviewOf);
 }
 
 interface InsertedTask {
@@ -182,6 +184,20 @@ function createdRow(
 }
 
 export function createTask(input: CreateInput): TaskRow & { warnings?: string[]; profileHint?: ProfilePriorityHint } {
+  const db = getDb();
+  if (db.isTransaction) return createTaskInTransaction(input);
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const task = createTaskInTransaction(input);
+    db.exec("COMMIT");
+    return task;
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+function createTaskInTransaction(input: CreateInput): TaskRow & { warnings?: string[]; profileHint?: ProfilePriorityHint } {
   const { project, title, role } = createIdentity(input);
   const parents = input.parentIds ?? [];
   const parentRows = parents.map((id) => taskById(id));

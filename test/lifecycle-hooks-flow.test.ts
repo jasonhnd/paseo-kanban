@@ -247,7 +247,8 @@ describe("lifecycle hooks: turn ended", () => {
     await h.hooks.turn(turnEvent(), h.context);
     assert.equal(h.sent.length, 1);
     assert.match(h.sent[0]!, /\u7b2c 2 \u6b21\u63d0\u9192/);
-    assert.match(h.sent[0]!, /\u5982\u679c\u4f60\u5728\u7b49\u540e\u53f0\u7ed3\u679c\uff0c\u8bf7\u73b0\u5728\u8bfb\u53d6\u7ed3\u679c\uff0c\u4e0d\u8981\u518d\u6b21\u7ed3\u675f\u56de\u5408/);
+    assert.match(h.sent[0]!, /wait-bg/);
+    assert.match(h.sent[0]!, /wait\/sleep/);
   });
 
   it("prefixes the stale-MCP note on the reminder", async () => {

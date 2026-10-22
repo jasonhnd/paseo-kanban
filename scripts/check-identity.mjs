@@ -15,7 +15,8 @@ import { pathToFileURL } from "node:url";
 import { defaultListPath, EXIT, loadDenylist, SetupError } from "./check-private.mjs";
 
 /** The only e-mail addresses a commit may carry: the placeholder, GitHub noreply users and bots, GitHub's own web flow. */
-export const ALLOWED_EMAIL = /^(noreply@example\.invalid|[^@\s]+@users\.noreply\.github\.com|noreply@github\.com)$/;
+import { ALLOWED_EMAIL } from "../shared/public-identity.mjs";
+export { ALLOWED_EMAIL };
 
 export function parseArgs(argv) {
   const options = { range: null, history: false, privateList: true, list: null };

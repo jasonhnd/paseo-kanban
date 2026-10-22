@@ -1,3 +1,4 @@
+import { seedLegacyLinkedReview } from "./helpers/legacy-review";
 /// <reference types="node" />
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -140,7 +141,7 @@ it("does not mask needs_human deeper in the review's dependency chain or a cycle
 });
 it("keeps waiting when one of multiple linked reviews is archived, then resumes when the last one ends", async () => {
   const { target, review } = fixture();
-  const second = createTask({ project: 'demo', title: 'second review', role: 'reviewer', reviewOf: target.id, actor: 'scheduler' });
+  const second = seedLegacyLinkedReview({ project: 'demo', title: 'second review', role: 'reviewer', reviewOf: target.id, actor: 'scheduler' });
   activeReview(second.id);
   await scan(32); endReview(review.id);
   await scan(121); assert.equal(sent.length, 0);
@@ -235,7 +236,7 @@ it("chases only due actionable cards in mixed project batches", async () => {
 });
 it("preserves the needs_human review alarm and does not hide it behind a second valid review", async () => {
   const { target, review } = fixture(); await scan(32);
-  const second = createTask({ project: 'demo', title: 'another review', role: 'reviewer', reviewOf: target.id, actor: 'scheduler' });
+  const second = seedLegacyLinkedReview({ project: 'demo', title: 'another review', role: 'reviewer', reviewOf: target.id, actor: 'scheduler' });
   activeReview(second.id);
   blockTask(review.id, 'needs_human', 'fixture authorization needed', 'reviewer');
   assert.equal(sent.length, 1); assert.match(sent[0].text, /fixture authorization needed/);
@@ -357,7 +358,7 @@ it("loads dependency facts in one additional batch regardless of the number of l
   const { target, review } = fixture();
   const parent = createTask({ project: 'demo', title: 'anonymous parent', role: 'batch', actor: 'scheduler' });
   for (let n = 0; n < 30; n++) {
-    const candidate = n === 0 ? review : createTask({ project: 'demo', title: 'anonymous waiting review', role: 'reviewer', reviewOf: target.id, actor: 'scheduler' });
+    const candidate = n === 0 ? review : seedLegacyLinkedReview({ project: 'demo', title: 'anonymous waiting review', role: 'reviewer', reviewOf: target.id, actor: 'scheduler' });
     getDb().prepare("UPDATE tasks SET status = 'waiting' WHERE id = ?").run(candidate.id);
     getDb().prepare("INSERT INTO links(task_id, parent_id) VALUES (?, ?)").run(candidate.id, parent.id);
   }

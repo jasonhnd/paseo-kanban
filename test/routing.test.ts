@@ -126,6 +126,32 @@ const open = snapshot({
 });
 
 describe("routeProfile", () => {
+  for (const selection of ["roster", "override", "matrix", "matrix override"]) {
+    it(`refuses priority profiles through ${selection} with a clear reason`, () => {
+      const chosen = { ...executor, featureValues: { service_tier: "priority" } };
+      const matrix: DispatchMatrix = {
+        version: 1, generatedAt: null, defaultTier: "L2", downgradeWhenTight: [],
+        executor: { L2: [{ profile: chosen.name, effort: null, paused: false }] },
+        reviewerFamilies: { xai: { L2: [{ profile: reviewer.name, effort: null, paused: false }] } }, star: {},
+      };
+      const input: Partial<RouteInput> = {
+        profiles: [chosen, reviewer],
+        ...(selection.includes("override") ? { profileOverride: chosen.id } : {}),
+        ...(selection.includes("matrix") ? { matrix } : {}),
+      };
+      const blocked = route(input);
+      assert.equal(blocked.ok, false);
+      if (!blocked.ok) assert.ok(blocked.reason.includes(zhCN("routing.fastNotAllowed")));
+      assert.equal(route({ ...input, profiles: [executor, reviewer] }).ok, true);
+    });
+  }
+
+  it("does not reserve a priority reviewer for a standard executor", () => {
+    const blocked = route({ profiles: [executor, { ...reviewer, featureValues: { fast: true } }] });
+    assert.equal(blocked.ok, false);
+    if (!blocked.ok) assert.ok(blocked.reason.includes(zhCN("routing.fastNotAllowed")));
+  });
+
   it("skips the executor actual model across family labels and keeps a different model", () => {
     const pick = routeProfile({
       profiles: [{ ...reviewer, id: "same", name: "Reviewer · Same model", family: "anthropic", model: " GROK-4.7 " }, reviewer],
@@ -597,7 +623,7 @@ describe("routeProfile configured model", () => {
       }),
     });
     assert.equal(picked(byMatrix), gptUltra.name);
-    if (byMatrix.ok) assert.equal(byMatrix.effort, "max");
+    if (byMatrix.ok) assert.equal(byMatrix.effort, "medium");
     const stuck = route({
       profiles: [gptUltra, ...withReviewer],
       tier: "L2",

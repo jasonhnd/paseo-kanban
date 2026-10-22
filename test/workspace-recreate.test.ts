@@ -11,6 +11,10 @@ import { setWakeSender } from "../server/bus";
 import { closeDb, getDb } from "../server/db";
 import { type AgentLauncher } from "../server/dispatch";
 import { startTask } from "./helpers/compat-dispatch";
+import { leaderReworkTask } from "../server/flow";
+import { recreateWorkspace } from "../server/workspace-recreate";
+import { acquireStartClaim, releaseStartClaim } from "../server/start-claim";
+import { runGit } from "../server/git";
 import type { ListedWorkspace } from "../server/placement";
 import type { Profile } from "../server/profiles";
 import { appendEvent, createTask, getTask } from "../server/store";
@@ -129,6 +133,111 @@ function events(id: number, kind: string): Array<Record<string, unknown>> {
 }
 
 describe("rebuilding a card's workspace whose directory is gone", () => {
+  it("restores a missing execution branch from its verified delivered SHA, even after the base advances", async () => {
+    const { box, task, first, root, tip } = await lostCard("delivered-sha", { commit: true, dropBranch: true });
+    appendEvent(task.id, "branch_observed", null, null, "executor", { branch: first.branch, head: tip, pushed: false });
+    getDb().prepare("UPDATE tasks SET status = 'acceptance' WHERE id = ?").run(task.id);
+    await leaderReworkTask(task.id, "Restore this exact delivery", { presence: () => "archived" });
+    writeFileSync(join(root, "base-moved.txt"), "new base\n");
+    git(root, "add", "-A"); git(root, "commit", "-qm", "base advanced");
+    assert.notEqual(git(root, "rev-parse", "main"), tip);
+    await startTask(task.id, box, "test", pick);
+    assert.equal(getTask(task.id).status, "running");
+    assert.equal(git(root, "rev-parse", first.branch!), tip);
+    assert.equal(git(box.cwds[0], "rev-parse", "HEAD"), tip);
+    assert.equal(events(task.id, "temp_workspace_recreated")[0].usedRef, "delivered");
+  });
+
+  for (const invalid of ["foreign-delivery", "missing-commit"] as const) {
+    it(`refuses a missing branch with ${invalid} evidence before any host side effect`, async () => {
+      const { box, task, first, tip } = await lostCard(invalid, { commit: true, dropBranch: true });
+      appendEvent(task.id, "branch_observed", null, null, "executor", {
+        branch: invalid === "foreign-delivery" ? `${first.branch}-other` : first.branch,
+        head: invalid === "missing-commit" ? "f".repeat(40) : tip, pushed: false,
+      });
+      getDb().prepare("UPDATE tasks SET status = 'acceptance' WHERE id = ?").run(task.id);
+      await leaderReworkTask(task.id, "Keep the exact delivery", { presence: () => "archived" });
+      await startTask(task.id, box, "test", pick);
+      assert.equal(getTask(task.id).blocked_kind, "needs_human");
+      assert.equal(box.archived.length, 0);
+      assert.equal(box.cwds.length, 0);
+    });
+  }
+
+  it("keeps a verified delivered ref recoverable when host recreation fails", async () => {
+    const { box, task, first, root, tip } = await lostCard("delivered-create-fails", { commit: true, dropBranch: true });
+    appendEvent(task.id, "branch_observed", null, null, "executor", { branch: first.branch, head: tip, pushed: false });
+    getDb().prepare("UPDATE tasks SET status = 'acceptance' WHERE id = ?").run(task.id);
+    await leaderReworkTask(task.id, "Keep the exact delivery", { presence: () => "archived" });
+    box.failCreate = "host failed";
+    await startTask(task.id, box, "test", pick);
+    assert.equal(getTask(task.id).blocked_kind, "needs_human");
+    assert.equal(git(root, "rev-parse", first.branch!), tip);
+    assert.equal(events(task.id, "temp_workspace_recreated").length, 0);
+  });
+  it("refuses a missing execution branch on leader rework instead of silently using the base", async () => {
+    const { box, task, first } = await lostCard("rework-no-branch", { commit: true, dropBranch: true });
+    getDb().prepare("UPDATE tasks SET status = 'acceptance' WHERE id = ?").run(task.id);
+    await leaderReworkTask(task.id, "Keep the submitted commits", { presence: () => "archived" });
+    await startTask(task.id, box, "test", pick);
+    assert.equal(getTask(task.id).status, "blocked");
+    assert.equal(getTask(task.id).blocked_kind, "needs_human");
+    assert.ok(getTask(task.id).blocked_reason?.includes(first.branch!));
+    assert.equal(box.cwds.length, 0);
+    assert.equal(box.archived.length, 0);
+    assert.equal(events(task.id, "temp_workspace_recreated").length, 0);
+  });
+
+  for (const unsafe of ["dirty", "placeholder-dirty", "lane", "shared"] as const) {
+    it(`refuses rebuilding a ${unsafe} copy before archiving or changing its branch`, async () => {
+      const { box, task, first, root, tip } = await lostCard(`unsafe-${unsafe}`, { commit: true });
+      if (unsafe === "dirty" || unsafe === "placeholder-dirty") {
+        mkdirSync(first.directory!, { recursive: true });
+        writeFileSync(join(first.directory!, "unsubmitted.txt"), "must survive\n");
+        if (unsafe === "placeholder-dirty") writeFileSync(join(first.directory!, PLACEHOLDER_NAME), "placeholder\n");
+      } else if (unsafe === "lane") getDb().prepare("UPDATE tasks SET workspace_kind = 'lane' WHERE id = ?").run(task.id);
+      else createTask({ project: task.project, title: "Shared live copy", role: "executor", workspacePath: first.directory });
+      const token = acquireStartClaim(task.id)!;
+      try {
+        await assert.rejects(recreateWorkspace({ task: getTask(task.id), launcher: box, claimToken: token, actor: "test", reason: "lost" }));
+      } finally { releaseStartClaim(task.id, token); }
+      assert.equal(git(root, "rev-parse", first.branch!), tip);
+      assert.equal(box.archived.length, 0);
+      if (unsafe === "dirty" || unsafe === "placeholder-dirty") assert.equal(readFileSync(join(first.directory!, "unsubmitted.txt"), "utf8"), "must survive\n");
+    });
+  }
+
+  it("refuses an exact-tip release if another writer moved the execution branch", async () => {
+    const { box, task, first, root, tip } = await lostCard("moved-tip", { commit: true });
+    writeFileSync(join(root, "new.txt"), "another writer\n");
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "new tip");
+    const moved = git(root, "rev-parse", "HEAD");
+    const token = acquireStartClaim(task.id)!;
+    try {
+      await assert.rejects(recreateWorkspace({ task: getTask(task.id), launcher: box, claimToken: token, actor: "test", reason: "lost",
+        run: async (cwd, args) => {
+          if (args[0] === "update-ref" && args[1] === "-d") git(root, "update-ref", `refs/heads/${first.branch}`, moved, tip);
+          return runGit(cwd, args);
+        },
+      }));
+    } finally { releaseStartClaim(task.id, token); }
+    assert.equal(git(root, "rev-parse", first.branch!), moved);
+    assert.equal(box.cwds.length, 0);
+  });
+
+  it("refuses a branch still checked out elsewhere and leaves the other checkout untouched", async () => {
+    const { box, task, first, root, tip } = await lostCard("elsewhere-tip", { commit: true });
+    const elsewhere = join(dir, "other-live-copy");
+    git(root, "worktree", "prune");
+    git(root, "worktree", "add", "-q", elsewhere, first.branch!);
+    await startTask(task.id, box, "test", pick);
+    assert.equal(getTask(task.id).status, "blocked");
+    assert.equal(git(elsewhere, "rev-parse", "HEAD"), tip);
+    assert.equal(git(root, "rev-parse", first.branch!), tip);
+    assert.equal(box.cwds.length, 0);
+  });
+
   it("start rebuilds on the card branch and keeps its commits", async () => {
     const { box, task, first, tip, root } = await lostCard("branch-kept", { commit: true, temp: true });
     await startTask(task.id, box, "test", pick);

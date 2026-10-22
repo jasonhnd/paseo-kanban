@@ -231,6 +231,7 @@ describe("same-process start", () => {
         creates += 1;
         const directory = join(dir, "trees", `same-process-${creates}`);
         mkdirSync(directory, { recursive: true });
+        mkdirSync(join(directory, ".git"));
         entered();
         await gate;
         return { directory, workspaceId: `ws-${creates}`, name: options.title ?? "t" };

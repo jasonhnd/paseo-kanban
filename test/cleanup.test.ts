@@ -31,6 +31,11 @@ const dir = mkdtempSync(join(tmp, "clean-"));
 process.env.KANBAN_DATA_DIR = dir;
 process.env.KANBAN_AGENTS_DIR = join(dir, "agents");
 mkdirSync(process.env.KANBAN_AGENTS_DIR, { recursive: true });
+const previousWorktreesRoot = process.env.KANBAN_WORKTREES_ROOT;
+// These workspace API fixtures have no real Git checkout. Keep them outside the
+// managed root even when TMPDIR is inside a Paseo card worktree.
+process.env.KANBAN_WORKTREES_ROOT = join(dir, "managed-worktrees");
+mkdirSync(process.env.KANBAN_WORKTREES_ROOT, { recursive: true });
 
 const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" };
 const claudeExec: Profile = { id: "gg", name: "Executor · Claude", role: "executor", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" };
@@ -141,6 +146,7 @@ function inspectLikePaseo(fail: Set<string> = new Set()): NonNullable<CleanupOps
 }
 
 function launcherFor(root: string, tree: string | null, workspaceId: string): AgentLauncher {
+  if (tree) mkdirSync(join(tree, ".git"), { recursive: true });
   return {
     async create(options) {
       return { id: `agent-${workspaceId}-${options.workspaceId ?? "x"}-${Math.random().toString(16).slice(2)}`, workspaceId: options.workspaceId };
@@ -148,6 +154,7 @@ function launcherFor(root: string, tree: string | null, workspaceId: string): Ag
     async send() {},
     async listWorkspaces() {
       return [
+        ...(tree ? [{ id: workspaceId, name: "card-worktree", directory: tree, projectRoot: root, projectId: "parent-project", kind: "worktree", archived: false }] : []),
         {
           id: `main-${root}`,
           name: "main",
@@ -179,6 +186,8 @@ after(() => {
   closeDb();
   rmSync(dir, { recursive: true, force: true });
   delete process.env.KANBAN_AGENTS_DIR;
+  if (previousWorktreesRoot === undefined) delete process.env.KANBAN_WORKTREES_ROOT;
+  else process.env.KANBAN_WORKTREES_ROOT = previousWorktreesRoot;
 });
 
 function armSupervisor(sent: Array<{ id: string; text: string }>): void {

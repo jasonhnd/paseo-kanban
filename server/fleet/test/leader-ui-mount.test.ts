@@ -27,10 +27,10 @@ test("mounted settings save thresholds with revisions and homepage renders the c
   g.__leaderRpc = () => { rpcCalls++; throw new Error("Unexpected host mutation"); };
   let mounted: any;
   const tick = () => new Promise(resolve => setTimeout(resolve, 80));
-  const waitFor = async (condition: () => boolean) => {
+  const waitFor = async (condition: () => boolean, message = "Timed out waiting for settings fields to mount") => {
     const deadline = Date.now() + 10_000;
     while (!condition() && Date.now() < deadline) await tick();
-    assert.ok(condition(), "Timed out waiting for settings fields to mount");
+    assert.ok(condition(), message);
   };
   try {
     const outfile = join(dir, "entry.mjs");
@@ -53,24 +53,28 @@ test("mounted settings save thresholds with revisions and homepage renders the c
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!.call(field(key), value);
       field(key).dispatchEvent(new dom.window.Event("input", { bubbles: true })); await tick();
     };
-    const save = async () => { mounted.container.querySelector(`[aria-label="${t("settings.save")}"]`).click(); await tick(); };
+    const save = async (acknowledgement: string) => {
+      mounted.container.querySelector(`[aria-label="${t("settings.save")}"]`).click();
+      // A fixed render tick does not establish that the asynchronous file replacement finished.
+      await waitFor(() => [...mounted.container.querySelectorAll('[role="alert"]')].some((node: any) => node.textContent.includes(acknowledgement)), "Timed out waiting for settings save acknowledgement");
+    };
     setLanguage("en");
-    await fill("reminderTokens", "100"); await fill("warningTokens", "200"); await save();
+    await fill("reminderTokens", "100"); await fill("warningTokens", "200"); await save(t("settings.saved"));
     assert.deepEqual(readLeaderThresholds(dir), { reminderTokens: 100, warningTokens: 200 });
     assert.ok(mounted.container.textContent.includes(t("settings.saved")));
-    await fill("warningTokens", "50"); await save();
+    await fill("warningTokens", "50"); await save(t("settings.leaderUsage.invalidOrder"));
     assert.ok(mounted.container.querySelector('[role="alert"]'));
     assert.ok(mounted.container.textContent.includes(t("settings.leaderUsage.invalidOrder")));
     assert.deepEqual(readLeaderThresholds(dir), { reminderTokens: 100, warningTokens: 200 });
     const config = await readSettings("config", dir);
     await writeSettings({ file: "config", revision: config.revision, document: { ...config.document, language: "zh-CN" } }, dir);
     setLanguage("en");
-    await fill("warningTokens", "250"); await save();
+    await fill("warningTokens", "250"); await save(t("settings.conflict"));
     assert.ok(mounted.container.textContent.includes(t("settings.conflict")));
     mounted.unmount();
     setLanguage("zh-CN"); mounted = mount("zh-CN");
     await waitFor(() => Boolean(field("reminderTokens") && field("warningTokens")));
-    await fill("warningTokens", "50"); await save();
+    await fill("warningTokens", "50"); await save(t("settings.leaderUsage.invalidOrder"));
     assert.ok(mounted.container.querySelector('[role="alert"]').textContent.includes(t("settings.leaderUsage.invalidOrder")));
     assert.deepEqual(readLeaderThresholds(dir), { reminderTokens: 100, warningTokens: 200 });
     for (const lang of ["en", "zh-CN"] as const) {

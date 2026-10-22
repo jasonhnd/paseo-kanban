@@ -40,7 +40,7 @@ export function dispatchParts(task: Pick<CompactTask, "assignerShort" | "roleLab
 }
 
 /**
- * Two lines: number, title and status badge; then who sent it, to which role, on which model. The role · model segment
+ * Number, title and status badge; then who sent it, to which role, on which model. An assigned review adds its own line. The role · model segment
  * never shrinks (the project name and sender are cut first). The hint (blocked reason, quota wait, drag count) is
  * read aloud with the badge and lives in the detail drawer; only the attention list, which is about the reason a
  * card is there, shows it as a short visible tail on line two.
@@ -95,6 +95,7 @@ export function CompactCard({ s, task, onOpen, note, showProject = false }: {
           <View style={s.compactLine}>{title}</View>
         </>
       )}
+      {task.reviewStatus ? <Text testID="card-review-status" style={s.muted}>{task.reviewStatus}</Text> : null}
       <View testID="card-dispatch" style={[s.compactLine, { gap: 0 }]}>
         <Text testID="card-dispatch-who" numberOfLines={1} style={[s.muted, { flexShrink: 1, minWidth: 0 }]}>
           {showProject ? `${task.project} · ${who}` : who}

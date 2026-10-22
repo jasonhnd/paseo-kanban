@@ -44,10 +44,12 @@ function isSuperGrok(profile: DispatchProfile): boolean {
 
 export const PROFILE_SLOTS: Readonly<Record<string, Slot>> = {
   executor: { label: "dispatch.role.executor", match: primary("executor") },
+  "executor.gpt-6-luna": { label: "dispatch.slot.executorLuna", match: profile => (profile.role === "executor" || serves(profile, "executor")) && profile.provider === "codex" && actualModel(profile.model) === "gpt-6-luna" },
   "executor.gpt-6.1-sol": { label: "dispatch.slot.executorGpt", match: (profile) => serves(profile, "executor") && /gpt-6\.1/i.test(blob(profile)) },
   "executor.sonnet": { label: "dispatch.slot.executorSonnet", match: (profile) => serves(profile, "executor") && claudeMarker(profile) === "sonnet" },
   "executor.opus": { label: "dispatch.slot.executorOpus", match: (profile) => serves(profile, "executor") && claudeMarker(profile) === "opus" },
   reviewer: { label: "dispatch.role.reviewer", match: primary("reviewer") },
+  "reviewer.gpt-6-luna": { label: "dispatch.slot.reviewerLuna", match: profile => (profile.role === "reviewer" || serves(profile, "reviewer")) && profile.provider === "codex" && actualModel(profile.model) === "gpt-6-luna" },
   "reviewer.gpt-6.1-sol": { label: "dispatch.slot.reviewerGpt", match: (profile) => serves(profile, "reviewer") && /gpt-6\.1/i.test(blob(profile)) },
   // Exact model equality. A gpt-6 prefix would also select gpt-6.1-sol.
   "reviewer.gpt-6-sol": { label: "dispatch.slot.reviewerGpt6Sol", match: (profile) => serves(profile, "reviewer") && profile.provider === "codex" && actualModel(profile.model) === "gpt-6-sol" },
@@ -60,6 +62,7 @@ export const PROFILE_SLOTS: Readonly<Record<string, Slot>> = {
   "decision.gpt-6.1-sol": { label: "dispatch.slot.decisionGpt", match: (profile) => serves(profile, "decision") && /gpt-6\.1/i.test(blob(profile)) },
   "decision.grok": { label: "dispatch.slot.decisionGrok", match: (profile) => serves(profile, "decision") && isSuperGrok(profile) },
   batch: { label: "dispatch.role.batch", match: primary("batch") },
+  "batch.gpt-6-luna": { label: "dispatch.slot.batchLuna", match: profile => (profile.role === "batch" || serves(profile, "batch")) && profile.provider === "codex" && actualModel(profile.model) === "gpt-6-luna" },
   "batch.gpt-6.1-sol": { label: "dispatch.slot.batchGpt", match: (profile) => serves(profile, "batch") && /gpt-6\.1/i.test(blob(profile)) },
   "batch.grok": { label: "dispatch.slot.batchGrok", match: (profile) => serves(profile, "batch") && isSuperGrok(profile) },
   "ops.vercel": { label: "dispatch.role.opsVercel", match: primary("ops_vercel") },

@@ -3,6 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { mkdirSync, statSync } from "./perf-fs";
 import { dirname } from "node:path";
 import { isProjectCode } from "../shared/card-code";
+import { configuredOpsProject } from "../shared/fleet/ops-project";
 import {
   CONFIG_PREV_FILE,
   ConfigFileError,
@@ -22,6 +23,8 @@ import { parseProfileRuleOverrides, type ProfileRule } from "./profile-rules";
 import { parseBanned, parseFamilies, type BannedProfiles, type FamilyRule } from "./fleet-rules";
 import { isLanguageSetting, t, type LanguageSetting } from "../shared/i18n";
 import { readExampleConfig } from "./config-example";
+import { parseCloudRunner, type CloudRunnerConfig } from "./cloud-config";
+import { parseRunBudget, type RunBudgetLimits } from "./run-budget-config";
 
 export interface ConcurrencyLimits {
   global: number;
@@ -38,6 +41,10 @@ export function retiredDefaultWorktree(): string {
 
 /** How a project's cards work when the creator does not pin a lane. The effective mode is always dir. */
 export interface ProjectWorkspace {
+  /** Per-project limits override the global run budget one key at a time. */
+  runBudget?: Partial<RunBudgetLimits>;
+  /** Opt-in disposable execution; other roles retain local placement. */
+  cloudRunner?: CloudRunnerConfig;
   /** Project directory used for card scratch, independent of a card's temporary worktree. */
   workspacePath?: string;
   defaultWorkspace: WorkspaceMode;
@@ -76,6 +83,8 @@ export function lanesDisabledMessage(): string {
 }
 
 export interface KanbanConfig {
+  /** Per-running-card resource brake; absent keys use conservative built-in limits. */
+  runBudget?: Partial<RunBudgetLimits>;
   autoStart: Record<string, boolean>;
   /**
    * Interface and agent-text language: "en", "zh-CN" or "system" (the operating system's locale).
@@ -105,6 +114,8 @@ export interface KanbanConfig {
    * Woken only when that project's own supervisor cannot be found.
    */
   supervisorAgentId: string | null;
+  /** Explicit operations cleanup project. An invalid explicit value disables the capability. */
+  opsProject?: string | null;
   /** Fixed loopback port for the board MCP server. Empty reuses data/mcp.port, then any free port. */
   mcpPort?: number | null;
   /** Project name → agent id of the supervisor registered for that project. */
@@ -339,6 +350,8 @@ function projectMap(value: unknown): Record<string, ProjectWorkspace> {
       permissionReadRoots?: unknown;
       workspacePath?: unknown;
       workspace?: unknown;
+      cloudRunner?: unknown;
+      runBudget?: unknown;
     };
     const integrations = integrationBranches(row.integrationBranches, key);
     const mode = row.defaultWorkspace === "worktree" || row.defaultWorkspace === "dir" ? row.defaultWorkspace :
@@ -349,11 +362,13 @@ function projectMap(value: unknown): Record<string, ProjectWorkspace> {
     const workspace = row.workspacePath ?? row.workspace;
     next[key] = {
       defaultWorkspace: mode,
+      ...(row.runBudget !== undefined ? { runBudget: parseRunBudget(row.runBudget) } : {}),
       baseBranch: branchNameOk(base) ? base : "main",
       ...(integrations !== undefined ? { integrationBranches: integrations } : {}),
       worktreeLanes: laneCount(row.worktreeLanes),
       lanesEnabled: lanesEnabledValue(row.lanesEnabled),
       parallel: row.parallel !== false,
+      ...(row.cloudRunner !== undefined ? { cloudRunner: readCloudRunner(key, row.cloudRunner) } : {}),
       ...(row.alwaysTemp === true ? { alwaysTemp: true } : {}),
       ...(row.waitParentPr === false ? { waitParentPr: false } : {}),
       ...(code && isProjectCode(code) ? { code } : {}),
@@ -362,6 +377,11 @@ function projectMap(value: unknown): Record<string, ProjectWorkspace> {
     };
   }
   return next;
+}
+
+function readCloudRunner(project: string, value: unknown): CloudRunnerConfig {
+  try { return parseCloudRunner(project, value); }
+  catch (error) { throw new ConfigFileError(`projects.${project}.cloudRunner: ${error instanceof Error ? error.message : String(error)}`); }
 }
 
 function readDoctor(value: unknown): DoctorSettings {
@@ -523,6 +543,7 @@ export function parseConfig(source: Record<string, unknown>): KanbanConfig {
   }
   return {
     autoStart,
+    ...(raw.runBudget !== undefined ? { runBudget: parseRunBudget(raw.runBudget) } : {}),
     language: parseLanguageSetting(raw.language),
     ...(raw.setupPending === true ? { setupPending: true } : {}),
     disabledPools: poolNames(raw.disabledPools),
@@ -530,6 +551,7 @@ export function parseConfig(source: Record<string, unknown>): KanbanConfig {
     families: parseFamilies(raw.families),
     bannedProviders: parseBanned(raw.bannedProviders),
     supervisorAgentId: typeof raw.supervisorAgentId === "string" && raw.supervisorAgentId.trim() ? raw.supervisorAgentId.trim() : null,
+    ...(Object.hasOwn(source, "opsProject") ? { opsProject: configuredOpsProject(source) } : {}),
     mcpPort: portNumber(raw.mcpPort),
     supervisors: stringMap(raw.supervisors),
     concurrency: {
@@ -758,6 +780,7 @@ export function projectWorkspace(project: string, config = loadConfig()): Projec
     worktreeLanes: stored.worktreeLanes,
     lanesEnabled: stored.lanesEnabled === true,
     parallel: stored.parallel !== false,
+    ...(stored.cloudRunner ? { cloudRunner: structuredClone(stored.cloudRunner) } : {}),
     ...(stored.alwaysTemp === true ? { alwaysTemp: true } : {}),
     ...(stored.waitParentPr === false ? { waitParentPr: false } : {}),
     ...(stored.code ? { code: stored.code } : {}),
@@ -832,6 +855,7 @@ export function setProjectWorkspace(
     if (integrations !== undefined) next.integrationBranches = integrations;
     if (stored?.code) next.code = stored.code;
     if (stored?.workspacePath) next.workspacePath = stored.workspacePath;
+    if (stored?.cloudRunner) next.cloudRunner = structuredClone(stored.cloudRunner);
     if (alwaysTemp) next.alwaysTemp = true;
     if ((patch.waitParentPr ?? current.waitParentPr) === false) next.waitParentPr = false;
     config.projects = {
@@ -861,6 +885,7 @@ export function setProjectCode(project: string, code: string): KanbanConfig {
       [name]: {
         defaultWorkspace: stored?.defaultWorkspace ?? "dir",
         ...(stored?.workspacePath ? { workspacePath: stored.workspacePath } : {}),
+        ...(stored?.cloudRunner ? { cloudRunner: structuredClone(stored.cloudRunner) } : {}),
         baseBranch: current.baseBranch,
         ...(current.integrationBranches !== undefined ? { integrationBranches: [...current.integrationBranches] } : {}),
         worktreeLanes: current.worktreeLanes,

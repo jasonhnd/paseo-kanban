@@ -1,3 +1,4 @@
+import { seedLegacyLinkedReview, startLegacyLinkedReview } from "./helpers/legacy-review";
 import assert from "node:assert/strict";
 import type { PaseoApi } from "@getpaseo/client";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -86,6 +87,13 @@ async function review(target: TaskRow, parents: number[] = []) {
   return await runKanban(["create", "--project", "anonymous", "--title", "Anonymous independent review", "--role", "reviewer", "--workspace", work,
     "--reviews", String(target.id), "--tier", "L4", "--tag", "high-risk", ...(parents.length ? ["--parents", parents.join(",")] : [])], {}) as TaskRow;
 }
+function legacyReview(target: TaskRow, parents: number[] = []) {
+  return seedLegacyLinkedReview({ project: "anonymous", title: "Anonymous independent review", role: "reviewer", workspacePath: work,
+    reviewOf: target.id, tier: "L4", tags: ["high-risk"], parentIds: parents, actor: "supervisor" });
+}
+async function startImportedReview(card: TaskRow, h: ReturnType<typeof handler>) {
+  return startLegacyLinkedReview(card, () => runKanban(["start", String(card.id)], {}, { launcher: h.launcher }));
+}
 const tick = (h: ReturnType<typeof handler>, minutes = 0) => runTick({ profiles, launcher: h.launcher, config, now: date(minutes), agentState: () => "alive" });
 async function checkQuiet(target: TaskRow, minutes = [32, 121, 242]) {
   sent.length = 0; // Preserve command notifications; measure only the two watchers below.
@@ -172,7 +180,7 @@ for (const kind of ['other', 'login_blip'] as const) {
   });
   it(`real ${kind} failure takes priority over another proven queued review`, async () => {
     const target = delivery(); const card = await review(target); const h = handler(); await tick(h); productionRetry(card, kind);
-    const second = await review(target); await runKanban(['start', String(second.id)], {}, { launcher: h.launcher });
+    const second = legacyReview(target); await startImportedReview(second, h);
     sent.length = 0;
     assert.equal(kind === 'login_blip' ? applyLoginBlip(second.id, getTask(second.id).agent_id!, 3) :
       applyFailure(second.id, 'anonymous credential failure', 'credential'), 'block');
@@ -256,7 +264,10 @@ for (const kind of ['other', 'login_blip'] as const) {
     const target = delivery();
     const parent = createTask({ project: 'anonymous', title: 'Anonymous prerequisite', role: 'batch', workspacePath: work, actor: 'scheduler' });
     const h = handler(); await tick(h); productionRetry(parent, kind);
-    for (let n = 0; n < 30; n++) await review(target, [parent.id]);
+    for (let n = 0; n < 30; n++) {
+      if (n === 0) await review(target, [parent.id]);
+      else legacyReview(target, [parent.id]);
+    }
     takePerfSummary();
     round('retry.dependencies', () => assert.equal(loadAcceptanceReviewWaits(target.id).get(target.id)!.reviews.length, 30));
     assert.equal(takePerfSummary()!.loops['retry.dependencies'].io.sql, 2);
@@ -297,8 +308,8 @@ it("does not let another review's historical counted retry cancel a matching act
   const target = delivery(); const first = await review(target); const h = handler(); await tick(h);
   applyFailure(first.id, "synthetic historical retry", "other", new Date());
   await tick(h, 1);
-  const second = await review(target);
-  await runKanban(["start", String(second.id)], {}, { launcher: h.launcher });
+  const second = legacyReview(target);
+  await startImportedReview(second, h);
   assert.equal(getTask(first.id).fail_count, 1); assert.equal(getTask(second.id).status, "reviewing");
   await checkQuiet(target);
 });
@@ -306,7 +317,7 @@ it("does not let an unproven retry string and historical count cancel another ma
   const target = delivery(); const first = await review(target); const h = handler(); await tick(h);
   applyFailure(first.id, "synthetic historical retry", "transient", new Date());
   getDb().prepare("UPDATE tasks SET blocked_kind = 'transient' WHERE id = ?").run(first.id);
-  const second = await review(target); await runKanban(["start", String(second.id)], {}, { launcher: h.launcher });
+  const second = legacyReview(target); await startImportedReview(second, h);
   assert.deepEqual(loadAcceptanceReviewWaits().get(target.id)!.reviews.map(r => r.id), [second.id]);
   await checkQuiet(target);
 });
@@ -348,7 +359,7 @@ it("does not treat an ancestor's historical fail_count as a current dependency f
 
 it("preserves the immediate real needs_human alarm and cancels a second otherwise valid review wait", async () => {
   const target = delivery(); const first = await review(target); const h = handler(); await tick(h);
-  const second = await review(target); await runKanban(["start", String(second.id)], {}, { launcher: h.launcher });
+  const second = legacyReview(target); await startImportedReview(second, h);
   sent.length = 0;
   assert.equal(applyFailure(first.id, "synthetic credential failure", "credential"), "block");
   assert.equal(getTask(first.id).blocked_kind, "needs_human");

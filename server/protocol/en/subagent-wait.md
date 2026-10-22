@@ -1,1 +1,1 @@
-While sub-agents run, stay in this turn until they return (you may post a progress line with kanban_comment first); do not end the turn.
+Collect sub-agent results before completing the card. For a long external command, use the registered background completion mechanism; do not keep the model awake by repeatedly calling wait/sleep.

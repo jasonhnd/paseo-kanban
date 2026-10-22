@@ -1,6 +1,9 @@
 /// <reference types="node" />
+import { assertRunBudgetSettled, resetRunBudget } from "./run-budget-control";
 import { guardCard, safeParse } from "./guard";
 import { getDb } from "./db";
+import { assertReviewAvailable } from "./review-assignment";
+import { linkedApproval, linkedApprovalCurrent, linkedApprovalRequest, pendingLinkedApproval, type LinkedApprovalRequest } from "./linked-review-approval";
 import { parentBlockReason, parentsBlockReason, taskParents } from "./parents";
 import { cardMark } from "./card-ref";
 import { KanbanError } from "./errors";
@@ -75,6 +78,22 @@ function saveContract(id: number, raw: string): void {
   getDb().prepare("UPDATE tasks SET contract_json = ? WHERE id = ?").run(raw, id);
 }
 
+/** Synchronous submission and linked creation must reserve under the same write lock. */
+function reserveAutomaticReview<T>(id: number, submit: () => T): T {
+  const db = getDb();
+  const reserve = () => { assertReviewAvailable(id); return submit(); };
+  if (db.isTransaction) return reserve();
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const next = reserve();
+    db.exec("COMMIT");
+    return next;
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
 /** Advisory only: a dirty or unreadable checkout must not prevent handoff. */
 function completionWorkspaceWarning(task: TaskRow): string | null {
   if (!task.workspace_path) return null;
@@ -137,25 +156,32 @@ export function completeTask(id: number, actorRole: string, summary: string, han
   }
   const actor = onBehalf ? behalfActor : actorRole;
   const behalf = onBehalf ? { onBehalf: true, actorAgentId: behalfActor, note: t("flow.onBehalf.note") } : {};
-  const wait = waitingOn(handoff);
-  if (actorRole === "executor") noteObservedBranch(task, actorRole);
-  const warning = completionWorkspaceWarning(task);
-  const handoffWarnings = completionHandoffWarnings(handoff);
-  const stored = JSON.stringify({ summary: [text, warning].filter(Boolean).join("\n\n"), handoff: handoff ?? null,
-    ...(handoffWarnings.length ? { submissionWarnings: handoffWarnings } : {}),
-    ...(onBehalf ? { completion: { ...behalf, generation: completionGeneration(task), ...(task.status === "blocked" ? { blockedEventId: latestBlockEvent(id) } : {}) } } : {}),
-  });
-  const diagnostics: PrBindingDiagnostics = {};
-  const bound = writeContract(rememberPullRequest(task.contract_json, handoff, text, {
-    project: task.project, workspacePath: task.workspace_path, diagnostics,
-  }));
+  const prepare = () => {
+    const wait = waitingOn(handoff);
+    if (actorRole === "executor") noteObservedBranch(task, actorRole);
+    const warning = completionWorkspaceWarning(task);
+    const handoffWarnings = completionHandoffWarnings(handoff);
+    const stored = JSON.stringify({ summary: [text, warning].filter(Boolean).join("\n\n"), handoff: handoff ?? null,
+      ...(handoffWarnings.length ? { submissionWarnings: handoffWarnings } : {}),
+      ...(onBehalf ? { completion: { ...behalf, generation: completionGeneration(task), ...(task.status === "blocked" ? { blockedEventId: latestBlockEvent(id) } : {}) } } : {}),
+    });
+    const diagnostics: PrBindingDiagnostics = {};
+    const bound = writeContract(rememberPullRequest(task.contract_json, handoff, text, {
+      project: task.project, workspacePath: task.workspace_path, diagnostics,
+    }));
+    return { wait, stored, diagnostics, bound };
+  };
   if (submitsToReview(actorRole) || taskSubmitsToReview(task)) {
-    saveContract(id, bound);
-    const next = move(id, task.status, "in_review", actor, "complete", ", handoff_json = ?", [stored], { summary: text, ...diagnostics, ...(wait ? { waitingOn: wait } : {}), ...behalf });
-    addComment(id, actor, text);
-    finishRun(id, "complete");
-    return next;
+    return reserveAutomaticReview(id, () => {
+      const { wait, stored, diagnostics, bound } = prepare();
+      saveContract(id, bound);
+      const next = move(id, task.status, "in_review", actor, "complete", ", handoff_json = ?", [stored], { summary: text, ...diagnostics, ...(wait ? { waitingOn: wait } : {}), ...behalf });
+      addComment(id, actor, text);
+      finishRun(id, "complete");
+      return next;
+    });
   }
+  const { stored, bound } = prepare();
   saveContract(id, bound);
   if (readContract(bound).kind !== "github") return enterAcceptance(id, task.status, actor, text, stored, behalf);
   getDb().prepare("UPDATE tasks SET handoff_json = ? WHERE id = ?").run(stored, id);
@@ -267,10 +293,15 @@ function returnForChecks(id: number, verdict: Extract<PrVerdict, { kind: "fail" 
   return getTask(id);
 }
 
-async function gateReview(task: TaskRow, actor: string): Promise<TaskRow | null> {
+async function gateReview(task: TaskRow, actor: string, approval: LinkedApprovalRequest | null): Promise<TaskRow | null> {
   const state = readContract(task.contract_json);
   if (state.kind !== "github") return null;
+  const generation = completionGeneration(task);
   const verdict = await evaluateContract(state);
+  const fresh = getTask(task.id);
+  if (fresh.contract_json !== task.contract_json || completionGeneration(fresh) !== generation) {
+    throw new KanbanError("conflict", t("flow.error.statusChanged", { card: cardMark(task.id) }));
+  }
   if (verdict.kind === "pass" || verdict.kind === "skip") {
     saveContract(task.id, writeContract({ ...state, awaiting: false }));
     return null;
@@ -278,7 +309,7 @@ async function gateReview(task: TaskRow, actor: string): Promise<TaskRow | null>
   if (verdict.kind === "wait") {
     saveContract(task.id, writeContract({ ...state, awaiting: true }));
     setHold(task.id, verdict.summary);
-    appendEvent(task.id, "pr_wait", task.status, task.status, actor, { summary: verdict.summary });
+    appendEvent(task.id, "pr_wait", task.status, task.status, actor, { summary: verdict.summary, ...(approval ? { linkedApproval: approval } : {}) });
     return getTask(task.id);
   }
   if (verdict.kind === "fail") return returnForChecks(task.id, verdict, actor);
@@ -287,45 +318,58 @@ async function gateReview(task: TaskRow, actor: string): Promise<TaskRow | null>
   throw new KanbanError("pr_checks", verdict.summary);
 }
 
-/**
- * A linked review does not accept an unclaimed target. in_review still
- * belongs to the leader pass, then accept. Request-changes is the path
- * that sends that target back. This refusal runs before any check gate,
- * and approveNow does not move the target either, including when a poll
- * finishes the review card's own checks.
- */
-function refuseInReviewTarget(review: TaskRow): void {
-  if (review.role !== "reviewer" || review.review_of == null) return;
-  const original = getTask(review.review_of);
-  if (original.status !== "in_review") return;
-  throw new KanbanError("illegal_transition", t("flow.error.unclaimedApprove", { card: cardMark(original.id) }), {
-    id: original.id,
-    from: original.status,
-    to: "acceptance",
-  });
-}
-
-function approveNow(id: number, summary: string, actor: string): TaskRow {
-  const reviewerId = getTask(id).agent_id;
-  const next = move(id, "reviewing", "acceptance", actor, "approve", "", [], { summary });
-  addComment(id, actor, summary || t("flow.comment.approved"));
-  finishRun(id, "approve");
+function approveNow(id: number, summary: string, actor: string, approval: LinkedApprovalRequest | null = null): TaskRow {
+  const db = getDb();
+  const ownsTransaction = !db.isTransaction;
+  if (ownsTransaction) db.exec("BEGIN IMMEDIATE");
+  let next: TaskRow;
+  let passed: { task: TaskRow; actor: string } | undefined;
+  let reviewerId: string | null;
+  try {
+    const task = getTask(id);
+    reviewerId = task.agent_id;
+    if (approval && !linkedApprovalCurrent(task, approval)) throw new KanbanError("forbidden", t("tools.tokenNotCardAgent"));
+    const linked = task.role === "reviewer" && task.review_of != null ? linkedApproval(task, approval) : null;
+    next = move(id, "reviewing", "acceptance", actor, "approve", "", [], { summary });
+    addComment(id, actor, summary || t("flow.comment.approved"));
+    finishRun(id, "approve");
+    if (linked && "evidence" in linked) {
+      const evidence = linked.evidence;
+      const note = t("flow.linkedApproval.passed", { review: evidence.reviewCard, agent: evidence.reviewerAgentId, model: evidence.reviewerModel, summary });
+      recordPassedAcceptance(linked.target, note, evidence.reviewerAgentId, "approve", { summary: note, ...evidence });
+      passed = { task: linked.target, actor: evidence.reviewerAgentId };
+    } else if (linked) {
+      const target = cardMark(task.review_of!);
+      const note = [t("flow.linkedApproval.held", { review: cardMark(id), target, reason: linked.reason }),
+        linked.target?.status === "in_review" ? t("flow.linkedApproval.pass", { target }) : ""].filter(Boolean).join(" ");
+      addComment(id, actor, note);
+      if (linked.target) addComment(linked.target.id, actor, note);
+      appendEvent(id, "linked_review_approval_held", null, "acceptance", actor, { targetId: task.review_of, reason: linked.reason });
+    }
+    if (ownsTransaction) db.exec("COMMIT");
+  } catch (err) {
+    if (ownsTransaction) db.exec("ROLLBACK");
+    throw err;
+  }
   notifyAcceptance(next.id);
-  promoteParents(actor);
+  if (passed) finishPassedAcceptance(passed.task, passed.actor);
+  else promoteParents(actor);
   releaseAgents(id, reviewerId, true);
   return next;
 }
 
-export function approveTask(id: number, summary: string, actor = "reviewer"): TaskRow | Promise<TaskRow> {
+/** Record the own-card verdict; only a bound, independent linked review can advance its queued target. */
+export function approveTask(id: number, summary: string, actor = "reviewer", actorAgentId?: string | null): TaskRow | Promise<TaskRow> {
   const text = summary.trim();
   if (!text) throw new KanbanError("invalid", t("flow.error.noSummary"));
   const task = getTask(id);
   if (task.status !== "reviewing") {
     throw new KanbanError("illegal_transition", t("flow.error.cannotApprove", { status: task.status }), { from: task.status, to: "acceptance" });
   }
-  refuseInReviewTarget(task);
-  if (readContract(task.contract_json).kind !== "github") return approveNow(id, text, actor);
-  return gateReview(task, actor).then((held) => held ?? approveNow(id, text, actor));
+  if (actorAgentId !== undefined && actorAgentId !== task.agent_id) throw new KanbanError("forbidden", t("tools.tokenNotCardAgent"));
+  const approval = linkedApprovalRequest(task, actorAgentId === undefined ? task.agent_id : actorAgentId);
+  if (readContract(task.contract_json).kind !== "github") return approveNow(id, text, actor, approval);
+  return gateReview(task, actor, approval).then((held) => held ?? approveNow(id, text, actor, approval));
 }
 
 function reviewHandoff(reason: string, findings: string): string {
@@ -473,6 +517,7 @@ export async function leaderReworkTask(
   const text = reason.trim();
   if (!text) throw new KanbanError("invalid", t("flow.error.noReworkReason"));
   const task = getTask(id);
+  assertRunBudgetSettled(id);
   // A done card whose queued land hit a conflict can go back to its kept worktree; nothing else leaves done.
   const landConflict = (task.status === "done" || task.status === "archived") && pendingLand(task.id)?.conflict === true;
   if (!LEADER_REWORK_FROM.has(task.status) && !landConflict) throw new KanbanError("illegal_transition", t("flow.error.cannotRuleRework", { status: statusLabel(task.status) }));
@@ -486,6 +531,7 @@ export async function leaderReworkTask(
   // Unknown is not evidence of departure: retain the original executor through daemon reloads.
   const present = !!agentId && !presenceIsGone(presence);
   if (present && archiveInFlight("agent", agentId)) throw new KanbanError("conflict", t("flow.error.executorArchiving"));
+  assertRunBudgetSettled(id);
   const next = reworkAssignment(task, text, agentId ?? null, present);
   const to = next.status;
   const ts = new Date().toISOString();
@@ -497,6 +543,7 @@ export async function leaderReworkTask(
   if (present && agentId) hookObjects.rememberAgent(agentId);
   if (present && agentReleaseRequested(id, agentId)) appendEvent(id, "release_agent_canceled", null, null, actor, { agentId });
   appendEvent(id, "leader_rework", task.status, to, actor, { reason: text, fromStatus: task.status, countRound: options.countRound === true, agentId, presence });
+  resetRunBudget(id);
   if (!present) recordReworkReplacement(task, agentId ?? null, presence, text, actor, ts);
   addComment(id, actor, text);
   closeLeaderRuns(id, "leader_rework", ts);
@@ -521,21 +568,32 @@ export function leaderPassTask(id: number, note: string, actor = "supervisor"): 
   if (!text) throw new KanbanError("invalid", t("flow.error.noRulingReason"));
   const task = getTask(id);
   if (!LEADER_PASS_FROM.has(task.status)) throw new KanbanError("illegal_transition", t("flow.error.cannotRulePass", { status: statusLabel(task.status) }));
+  recordPassedAcceptance(task, text, actor, "leader_pass", { note: text });
+  finishPassedAcceptance(task, actor);
+  return getTask(id);
+}
+
+/** Shared acceptance lifecycle; linked approval does not grant the reviewer the leader's pass API. */
+function recordPassedAcceptance(task: TaskRow, note: string, actor: string, kind: "leader_pass" | "approve", data: Record<string, unknown>): void {
+  const id = task.id;
   const ts = new Date().toISOString();
   const info = getDb().prepare(
     `UPDATE tasks SET status = 'acceptance', ${CLEAR_LEADER_HOLDS}, updated_at = ? WHERE id = ? AND status = ?`,
   ).run(ts, id, task.status);
   if (info.changes !== 1) throw new KanbanError("conflict", t("flow.error.statusChanged", { card: cardMark(id) }));
-  appendEvent(id, "leader_pass", task.status, "acceptance", actor, { note: text });
-  addComment(id, actor, text);
-  closeLeaderRuns(id, "leader_pass", ts);
+  appendEvent(id, kind, task.status, "acceptance", actor, data);
+  addComment(id, actor, note);
+  closeLeaderRuns(id, kind, ts);
+}
+
+function finishPassedAcceptance(task: TaskRow, actor: string): void {
+  const id = task.id;
   // Keep the executor's embedded token usable if acceptance is immediately sent back.
   // It cannot submit from acceptance; the usual current-agent and transition guards still apply.
   if (task.agent_id !== task.executor_agent_id) revokeAgentToken(task.agent_id);
   notifyAcceptance(id);
   promoteParents(actor);
   releaseAgents(id, task.agent_id, true);
-  return getTask(id);
 }
 
 /**
@@ -913,7 +971,7 @@ export async function acceptTask(id: number, actor = "supervisor", options: { ar
   if (plan.kind === "land") {
     const landed = await landLocalBranch(task, plan.owned, actor);
     if (landed.kind === "pending") {
-      recordLandPending(task.id, task.status, actor, { reason: landed.reason, branch: landed.branch, base: landed.base });
+      recordLandPending(task.id, task.status, actor, { reason: landed.reason, branch: landed.branch, base: landed.base, head: landed.head, mainDirty: landed.mainDirty });
       pending = landed.reason;
     } else if (landed.kind === "refuse") throw new KanbanError("conflict", landed.message);
     else if (landed.kind === "conflict") {
@@ -1129,6 +1187,7 @@ export function settleQuietHandoff(
       return "ruling";
     }
     const submitsReview = taskSubmitsToReview(task);
+    if (submitsReview) assertReviewAvailable(task.id);
     // Only work that enters review commits its worktree. Readers and non-Google batch cards save nothing.
     const wip: ReturnType<typeof commitWipSync> =
       submitsReview && task.workspace_path ? commitWipSync(task.workspace_path, task.id) : { committed: false };
@@ -1143,12 +1202,13 @@ export function settleQuietHandoff(
       wipSkipped: wip.skipped ?? null,
     };
     const stored = JSON.stringify({ summary: warning ? `${summary}\n\n${warning}` : summary, handoff });
+    let bound: string | null = null;
     let contractError: string | null = null;
     const diagnostics: PrBindingDiagnostics = {};
     try {
-      saveContract(task.id, writeContract(rememberPullRequest(task.contract_json, handoff, summary, {
+      bound = writeContract(rememberPullRequest(task.contract_json, handoff, summary, {
         project: task.project, workspacePath: task.workspace_path, diagnostics,
-      })));
+      }));
     } catch (err) {
       contractError = err instanceof Error ? err.message : String(err);
     }
@@ -1163,15 +1223,19 @@ export function settleQuietHandoff(
       ...diagnostics,
       source: input?.source ?? "nudge",
     };
-    if (!submitsReview) {
-      appendEvent(task.id, "auto_complete", "running", "running", "scheduler", data);
-      enterAcceptance(task.id, "running", "scheduler", summary, stored);
-      return "auto_completed";
-    }
-    const next = move(task.id, "running", "in_review", "scheduler", "auto_complete", ", handoff_json = ?", [stored], data);
-    addComment(next.id, "scheduler", summary);
-    finishRun(next.id, "auto_complete");
-    return "auto_completed";
+    const submit = () => {
+      if (bound !== null) saveContract(task.id, bound);
+      if (!submitsReview) {
+        appendEvent(task.id, "auto_complete", "running", "running", "scheduler", data);
+        enterAcceptance(task.id, "running", "scheduler", summary, stored);
+      } else {
+        const next = move(task.id, "running", "in_review", "scheduler", "auto_complete", ", handoff_json = ?", [stored], data);
+        addComment(next.id, "scheduler", summary);
+        finishRun(next.id, "auto_complete");
+      }
+      return "auto_completed" as const;
+    };
+    return submitsReview ? reserveAutomaticReview(task.id, submit) : submit();
   } catch (err) {
     console.error("[paseo-kanban] quiet handoff", err instanceof Error ? err.message : err);
     return "skip";
@@ -1280,6 +1344,12 @@ export async function pollAwaitingPr(budgetMs = PR_POLL_BUDGET_MS): Promise<numb
       // resume. A later block is a new decision, not a completed CI wait.
       if (task.status === "blocked" && (!COMPLETERS.has(task.role) || !behalf
         || behalf.blockedEventId == null || behalf.blockedEventId !== latestBlockEvent(task.id))) return;
+      const linkedApproval = task.status === "reviewing" && task.role === "reviewer" && task.review_of != null ? pendingLinkedApproval(task) : null;
+      if (linkedApproval && !linkedApprovalCurrent(task, linkedApproval)) {
+        saveContract(task.id, writeContract({ ...state, awaiting: false }));
+        addComment(task.id, "scheduler", t("flow.linkedApproval.expired"));
+        return;
+      }
       const actor = behalf?.actorAgentId ?? "scheduler";
       pollCursor = task.id;
       const verdict = await evaluateContract(state, undefined, { deadline });
@@ -1290,7 +1360,7 @@ export async function pollAwaitingPr(budgetMs = PR_POLL_BUDGET_MS): Promise<numb
         || (task.status !== "reviewing" && behalf && behalf.generation !== completionGeneration(fresh))) return;
       if (verdict.kind === "pass") {
         saveContract(task.id, writeContract({ ...state, awaiting: false }));
-        if (task.status === "reviewing") approveNow(task.id, verdict.summary, "scheduler");
+        if (task.status === "reviewing") approveNow(task.id, verdict.summary, "scheduler", linkedApproval);
         else {
           const saved = storedSummary(task, verdict.summary);
           enterAcceptance(task.id, task.status, actor, saved.summary, saved.stored,

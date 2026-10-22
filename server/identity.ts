@@ -201,10 +201,10 @@ export function assertSupervisorScope(identity: Identity, task: TaskRow, action:
 }
 
 /** Destructive cleanup needs a registered project/Kanban leader, never a card-bound token or anonymous shell. */
-export function assertDiscardCleanupScope(identity: Identity, task: TaskRow): void {
+export function assertDiscardCleanupScope(identity: Identity, task: TaskRow, message = t("cleanupDiscard.onlyLeader")): void {
   if (identity.role !== "supervisor" || identity.taskId != null || !identity.agentId ||
       (projectSupervisor(task.project) !== identity.agentId && !isKanbanLeader(identity.agentId))) {
-    throw new KanbanError("forbidden", t("cleanupDiscard.onlyLeader"));
+    throw new KanbanError("forbidden", message);
   }
 }
 

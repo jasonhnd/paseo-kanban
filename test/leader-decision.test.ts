@@ -146,18 +146,20 @@ describe("leader adjudication", () => {
     await runKanban(["rework", String(task.id), "--reason", (zhCNPart("nativeSessions.uncarded.seen", 6, 8) + zhCNPart("reviewHold.next.check", 17, 19))], leader, presence("missing"));
     const copy = join(dir, `copy-${task.id}`);
     mkdirSync(copy);
+    mkdirSync(join(copy, ".git"));
     const main = {
       id: "main-ws", name: "<leader>", directory: task.workspace_path, projectRoot: task.workspace_path,
       projectId: "adjudicate", kind: "local_checkout", archived: false,
     };
     const opened: Array<{ cwd: string; workspaceId?: string; prompt?: string }> = [];
     const archived: string[] = [];
+    let copyCreated = false;
     const launcher: AgentLauncher = {
-      async listWorkspaces() { return [main]; },
+      async listWorkspaces() { return [main, ...(copyCreated ? [{ ...main, id: "copy-ws", directory: copy, kind: "worktree" }] : [])]; },
       async create(options) { opened.push(options); return { id: "new-executor", workspaceId: options.workspaceId ?? main.id }; },
       async send() { throw new Error("missing executor must not resume"); },
       async archiveAgent(id) { archived.push(id); },
-      async createWorktree() { return { directory: copy, workspaceId: "copy-ws", name: "copy" }; },
+      async createWorktree() { copyCreated = true; return { directory: copy, workspaceId: "copy-ws", name: "copy" }; },
     };
     await startTask(task.id, launcher, "scheduler", { chosen: executor, profiles: [executor, reviewer], reason: "test" });
     assert.equal(getTask(task.id).status, "running");

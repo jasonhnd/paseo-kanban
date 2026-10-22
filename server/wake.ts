@@ -20,7 +20,7 @@ import { t, type MessageKey } from "../shared/i18n";
 
 export { resetAgentAliveCheck, setAgentAliveCheck };
 
-export type WakeKind = "acceptance" | "blocked" | "children" | "land" | "review_hold";
+export type WakeKind = "run_budget_warning" | "acceptance" | "blocked" | "children" | "land" | "land_missing" | "review_hold";
 
 interface WakeTarget {
   agentId: string;
@@ -159,6 +159,7 @@ interface NoticeData {
   agentId?: string | null;
   fallback?: boolean;
   delivered?: boolean;
+  generation?: string;
 }
 
 /** Wake events of these kinds written since the card entered its current status. */
@@ -181,9 +182,11 @@ function roundNotices(task: TaskRow, kinds: readonly string[]): NoticeData[] {
 /** Events from before delivered was recorded carry no flag and count when they named a receiver. */
 const wasDelivered = (data: NoticeData): boolean => Boolean(data.agentId) && data.delivered !== false;
 
-function fallbackAlready(task: TaskRow, kind: WakeKind): boolean {
-  return roundNotices(task, [`wake_${kind}`]).some((data) => data.fallback === true && wasDelivered(data));
+function fallbackAlready(task: TaskRow, kind: WakeKind, generation?: string): boolean {
+  return roundNotices(task, [`wake_${kind}`]).some((data) => data.fallback === true && wasDelivered(data) && (!generation || data.generation === generation));
 }
+
+export interface NoticeScope { key: string; current: () => boolean }
 
 const noticeInflight = new Set<string>();
 
@@ -192,13 +195,13 @@ const noticeInflight = new Set<string>();
  * process), a refused send, or an async send still in flight leave no "woken" record, so the card
  * stays unattended and the plugin's next retry sends it. A refused send is logged once per round.
  */
-function sendNotice(task: TaskRow, kind: WakeKind, target: WakeTarget, text: string, onDelivered: () => void): void {
+function sendNotice(task: TaskRow, kind: WakeKind, target: WakeTarget, text: string, onDelivered: () => void, scope?: NoticeScope): void {
   if (!hasWakeSender()) {
     markUnattended(task.id, task.status);
     return;
   }
   const round = roundStartId(task);
-  const key = `${task.id}:${kind}:${round}`;
+  const key = `${task.id}:${kind}:${round}:${scope?.key ?? ""}`;
   if (noticeInflight.has(key)) return;
   const record = (delivered: boolean): void => {
     appendEvent(task.id, `wake_${kind}`, null, task.status, "scheduler", {
@@ -208,6 +211,7 @@ function sendNotice(task: TaskRow, kind: WakeKind, target: WakeTarget, text: str
       ...(target.gap ? { gap: target.gap } : {}),
       ...(target.fallbackFrom ? { fallbackFrom: target.fallbackFrom } : {}),
       taskId: task.id,
+      ...(scope ? { generation: scope.key } : {}),
       text: wakeSummary(text),
     });
   };
@@ -215,7 +219,7 @@ function sendNotice(task: TaskRow, kind: WakeKind, target: WakeTarget, text: str
     noticeInflight.delete(key);
     // The card re-entered review (or left it) while this send was in flight: it says nothing about the new round.
     const current = getTask(task.id);
-    if (current.status !== task.status || roundStartId(current) !== round) return;
+    if (current.status !== task.status || roundStartId(current) !== round || scope && !scope.current()) return;
     if (ok) record(true);
     else if (!roundNotices(task, [`wake_${kind}`]).some((data) => data.delivered === false && data.agentId === target.agentId)) record(false);
     if (ok) onDelivered();
@@ -230,15 +234,15 @@ function sendNotice(task: TaskRow, kind: WakeKind, target: WakeTarget, text: str
   void result.then(settle);
 }
 
-function deliverNotice(task: TaskRow, kind: WakeKind, next: string, target: WakeTarget | null, retry: boolean, lead?: string): void {
+function deliverNotice(task: TaskRow, kind: WakeKind, next: string, target: WakeTarget | null, retry: boolean, lead?: string, scope?: NoticeScope): void {
   if (target && !target.fallback) {
     const text = wakeText({ id: task.id, title: task.title, status: task.status, handoff: handoffOf(task), next, lead });
-    sendNotice(task, kind, target, text, () => clearUnattended(task.id));
+    sendNotice(task, kind, target, text, () => clearUnattended(task.id), scope);
     return;
   }
   if (target?.fallback) {
-    if (!fallbackAlready(task, kind)) {
-      sendNotice(task, kind, target, fallbackText(task, next, target.gap ?? t("wake.gap.notFound"), lead), () => {});
+    if (!fallbackAlready(task, kind, scope?.key)) {
+      sendNotice(task, kind, target, fallbackText(task, next, target.gap ?? t("wake.gap.notFound"), lead), () => {}, scope);
     }
     markUnattended(task.id, task.status);
     return;
@@ -249,9 +253,9 @@ function deliverNotice(task: TaskRow, kind: WakeKind, next: string, target: Wake
   markUnattended(task.id, task.status);
 }
 
-export function notifyTask(task: TaskRow, kind: WakeKind, next: string, retry = false, lead?: string): void {
+export function notifyTask(task: TaskRow, kind: WakeKind, next: string, retry = false, lead?: string, scope?: NoticeScope): void {
   if (isProjectDormant(task.project)) return;
-  deliverNotice(task, kind, next, recipientFor(task), retry, lead);
+  deliverNotice(task, kind, next, recipientFor(task), retry, lead, scope);
 }
 
 const reviewHoldInflight = new Set<number>();
@@ -462,8 +466,8 @@ function standaloneReviewNotice(task: TaskRow): { lead: string; next: string } |
   return { lead: summary ? `${lead}\n${summary}` : lead, next: t("wake.review.fixNext") };
 }
 
-function landWoken(taskId: number): boolean {
-  const rows = getDb().prepare(`SELECT data_json FROM events WHERE task_id = ? AND kind = 'wake_land'`).all(taskId) as Array<{
+function landWoken(taskId: number, kind = "land", after = 0): boolean {
+  const rows = getDb().prepare(`SELECT data_json FROM events WHERE task_id = ? AND kind = ? AND id > ?`).all(taskId, `wake_${kind}`, after) as Array<{
     data_json: string;
   }>;
   return rows.some((row) => {
@@ -480,6 +484,13 @@ function landWoken(taskId: number): boolean {
 export function notifyLandConflict(taskId: number, detail: string): void {
   if (landWoken(taskId)) return;
   notifyTask(getTask(taskId), "land", detail);
+}
+
+/** Missing-branch intervention is separate from an earlier conflict notice. */
+export function notifyMissingLand(taskId: number, detail: string): void {
+  const lastPresent = getDb().prepare(`SELECT id FROM events WHERE task_id = ? AND kind = 'land_pending'
+    AND COALESCE(json_extract(data_json, '$.missingBranch'), 0) != 1 ORDER BY id DESC LIMIT 1`).get(taskId) as { id: number } | undefined;
+  if (!landWoken(taskId, "land_missing", lastPresent?.id ?? 0)) notifyTask(getTask(taskId), "land_missing", detail);
 }
 
 /** True once a live receiver took the no-PR wake. Events from before delivered was recorded count when they named a receiver. */

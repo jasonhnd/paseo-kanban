@@ -1,5 +1,7 @@
 /// <reference types="node" />
 import { scheduledWaitLabel } from "../shared/blocked";
+import { legacyReviewRecoveryHint } from "./review-recovery-hint";
+import { loadReviewAssignments, reviewStatusText, type ReviewAssignment } from "./review-assignment";
 import { LEADER_UNRESPONSIVE_TAG } from "./leader-activity";
 import { loadAcceptanceReviewWaits, acceptanceReviewWaitText, type AcceptanceReviewWait } from "./acceptance-review-wait";
 import { awaitingLeaderHold } from "./review-hold";
@@ -63,6 +65,7 @@ export interface BoardCard {
   model: string | null;
   agentId: string | null;
   reviewRound: number;
+  reviewStatus?: string | null;
   blockedAt: string | null;
   scheduledUntil: string | null;
   blockedKind: string | null;
@@ -201,6 +204,7 @@ export interface CardContext {
   /** Agent titles read so far in this build. The same few leaders created most cards, and each card asks twice. */
   agentTitles: Map<string, string | null>;
   reviewWaits: Map<number, AcceptanceReviewWait>;
+  reviewAssignments: Map<number, ReviewAssignment[]>;
 }
 
 
@@ -214,6 +218,7 @@ export function loadCardContext(): CardContext {
     profileModels: profileModels(),
     agentTitles: new Map(),
     reviewWaits: loadAcceptanceReviewWaits(),
+    reviewAssignments: loadReviewAssignments(),
   };
 }
 
@@ -280,10 +285,11 @@ function cardHead(facts: CardFacts) {
       : null,
     executorAgentId: task.executor_agent_id,
     reviewRound: task.review_round,
+    reviewStatus: reviewStatusText(facts.context.reviewAssignments.get(task.id)),
     blockedAt: task.blocked_at,
     scheduledUntil: task.scheduled_until,
     blockedKind: task.blocked_kind,
-    blockedReason: task.blocked_reason,
+    blockedReason: [task.blocked_reason, legacyReviewRecoveryHint(task)].filter(Boolean).join("\n\n") || null,
   };
 }
 
@@ -309,7 +315,7 @@ function cardStatus(facts: CardFacts) {
 function cardFace(facts: CardFacts) {
   const { task, returned, parents, pending, profile, model, started, run, acceptance, reviewOf, defaultTier, downstreamCount, context } = facts;
   return {
-    badge: task.status === "blocked" && task.blocked_kind === "scheduled" && task.scheduled_until
+    badge: task.status === "blocked" && task.blocked_kind === "background" ? t("background.label") : task.status === "blocked" && task.blocked_kind === "scheduled" && task.scheduled_until
       ? scheduledWaitLabel(task.scheduled_until) : context.reviewWaits.has(task.id) ? t('acceptanceReviewWait.badge') : cardBadge({
       status: task.status,
       reviewRound: task.review_round,

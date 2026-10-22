@@ -8,3 +8,5 @@
 6. {progressNote}
 7. 建卡前先用 kanban_supervise 登记本会话。未登记不能建卡。
 {cliFallback}
+{modelDepth}
+{longTaskWait}

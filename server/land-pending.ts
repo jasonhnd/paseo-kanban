@@ -8,6 +8,11 @@ export interface PendingLand {
   base: string;
   conflict: boolean;
   files: string[];
+  /** Exact branch tip captured when this queue was last observed. */
+  head?: string;
+  missingBranch?: boolean;
+  mainDirty?: boolean;
+  eventId?: number;
 }
 
 function readPending(dataJson: string): PendingLand | null {
@@ -18,6 +23,9 @@ function readPending(dataJson: string): PendingLand | null {
       base?: unknown;
       conflict?: unknown;
       files?: unknown;
+      head?: unknown;
+      missingBranch?: unknown;
+      mainDirty?: unknown;
     };
     if (typeof data.reason !== "string" || !data.reason.trim()) return null;
     const files = Array.isArray(data.files) ? data.files.filter((file): file is string => typeof file === "string") : [];
@@ -27,6 +35,9 @@ function readPending(dataJson: string): PendingLand | null {
       base: typeof data.base === "string" ? data.base : "",
       conflict: data.conflict === true,
       files,
+      ...(typeof data.head === "string" && /^[0-9a-f]{40,64}$/i.test(data.head) ? { head: data.head } : {}),
+      ...(data.missingBranch === true ? { missingBranch: true } : {}),
+      ...(data.mainDirty === true ? { mainDirty: true } : {}),
     };
   } catch {
     return null;
@@ -41,15 +52,15 @@ export function describePendingLand(pending: PendingLand): string {
   return t("landPending.conflictFiles", { reason: pending.reason, files: missing.join(t("common.listSep")) });
 }
 
-/** The latest queued land, or null once the branch has been merged. */
+/** The latest queued land, or null after that queue has been merged or explicitly settled. */
 export function pendingLand(taskId: number): PendingLand | null {
-  const landed = getDb().prepare("SELECT 1 AS n FROM events WHERE task_id = ? AND kind = 'landed' LIMIT 1").get(taskId);
-  if (landed) return null;
   const row = getDb()
-    .prepare("SELECT data_json FROM events WHERE task_id = ? AND kind = 'land_pending' ORDER BY id DESC LIMIT 1")
-    .get(taskId) as { data_json: string } | undefined;
+    .prepare("SELECT id, data_json FROM events WHERE task_id = ? AND kind = 'land_pending' ORDER BY id DESC LIMIT 1")
+    .get(taskId) as { id: number; data_json: string } | undefined;
   if (!row) return null;
-  return readPending(row.data_json);
+  if (getDb().prepare("SELECT 1 FROM events WHERE task_id = ? AND id > ? AND kind IN ('landed', 'land_settled') LIMIT 1").get(taskId, row.id)) return null;
+  const pending = readPending(row.data_json);
+  return pending ? { ...pending, eventId: row.id } : null;
 }
 
 export function openPendingLandIds(): number[] {
@@ -65,22 +76,47 @@ export function workspaceHeldForLand(workspaceId: string): boolean {
   return rows.some((row) => pendingLand(row.id) != null);
 }
 
-/** Write a land_pending row when the reason changed. Returns false when the latest row already says this. */
+/** Write only changed evidence. Scheduler writes may be fenced to the queue they inspected. */
 export function recordLandPending(
+  taskId: number, status: string | null, actor: string,
+  input: Parameters<typeof writeLandPending>[3], expectedEventId?: number,
+): boolean {
+  if (expectedEventId === undefined) return writeLandPending(taskId, status, actor, input);
+  const db = getDb();
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    if (pendingLand(taskId)?.eventId !== expectedEventId) {
+      db.exec("ROLLBACK");
+      return false;
+    }
+    const wrote = writeLandPending(taskId, status, actor, input);
+    db.exec("COMMIT");
+    return wrote;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function writeLandPending(
   taskId: number,
   status: string | null,
   actor: string,
-  input: { reason: string; branch: string; base: string; conflict?: boolean; files?: string[] },
+  input: { reason: string; branch: string; base: string; conflict?: boolean; files?: string[]; head?: string; missingBranch?: boolean; mainDirty?: boolean },
 ): boolean {
   const conflict = input.conflict === true;
   const files = input.files ?? [];
   const current = pendingLand(taskId);
+  const head = input.head ?? (current?.branch === input.branch && current?.base === input.base ? current.head : undefined);
   if (
     current &&
     current.reason === input.reason &&
     current.branch === input.branch &&
     current.base === input.base &&
     current.conflict === conflict &&
+    current.head === head &&
+    Boolean(current.missingBranch) === Boolean(input.missingBranch) &&
+    Boolean(current.mainDirty) === Boolean(input.mainDirty) &&
     current.files.join("\0") === files.join("\0")
   ) {
     return false;
@@ -96,6 +132,9 @@ export function recordLandPending(
         reason: input.reason,
         branch: input.branch,
         base: input.base,
+        ...(head ? { head } : {}),
+        ...(input.missingBranch ? { missingBranch: true } : {}),
+        ...(input.mainDirty ? { mainDirty: true } : {}),
         ...(conflict ? { conflict: true, files } : {}),
       }),
     );

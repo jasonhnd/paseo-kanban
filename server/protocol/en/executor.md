@@ -11,3 +11,4 @@ A merge card may depend on a PR card; the board recognises this and will not dea
 8. {tmpHome} Keep them inside that locally ignored directory; the board deletes this card’s KANBAN_TMP directory as soon as the card is done or archived, so paste any evidence worth keeping into the handoff or a card comment. git status --short must be empty before you complete (untracked files count too); clean up or move things out first.
 9. {dbReadonly}
 {cliFallback}
+{modelDepth}

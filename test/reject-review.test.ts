@@ -1,3 +1,4 @@
+import { seedLegacyLinkedReview } from "./helpers/legacy-review";
 /// <reference types="node" />
 import { zhCN, zhCNPart, localePattern } from "./helpers/locale";
 import assert from "node:assert/strict";
@@ -380,7 +381,7 @@ describe("reject and reviewed cards", () => {
     getDb()
       .prepare("UPDATE tasks SET status = 'in_review', review_round = 0, executor_agent_id = 'exec-live', agent_id = 'exec-live', handoff_json = ? WHERE id = ?")
       .run(handoff("Submitted work"), original.id);
-    const review = createTask({
+    const review = seedLegacyLinkedReview({
       project: "queued",
       title: "Manual review",
       role: "reviewer",
@@ -409,7 +410,7 @@ describe("reject and reviewed cards", () => {
     getDb()
       .prepare("UPDATE tasks SET status = 'in_review', review_round = 1, executor_agent_id = 'exec-live', agent_id = 'exec-live' WHERE id = ?")
       .run(original.id);
-    const review = createTask({
+    const review = seedLegacyLinkedReview({
       project: "queued-hold",
       title: "Second manual review",
       role: "reviewer",
@@ -428,12 +429,12 @@ describe("reject and reviewed cards", () => {
     assert.equal(hold.n, 1);
   });
 
-  it("refuses to approve a manual review while its target is still in_review", async () => {
+  it("records approval of a manual review while leaving its in_review target unchanged", async () => {
     const original = createTask({ project: "queued-ok", title: "Taken over", role: "executor", workspacePath: dir, brief: "Submitted work" });
     getDb()
       .prepare("UPDATE tasks SET status = 'in_review', review_round = 0, executor_agent_id = 'exec-live', agent_id = 'exec-live', handoff_json = ? WHERE id = ?")
       .run(handoff("Submitted work"), original.id);
-    const review = createTask({
+    const review = seedLegacyLinkedReview({
       project: "queued-ok",
       title: "Manual review",
       role: "reviewer",
@@ -441,16 +442,10 @@ describe("reject and reviewed cards", () => {
       reviewOf: original.id,
     });
     getDb().prepare("UPDATE tasks SET status = 'reviewing', agent_id = 'reviewer-1' WHERE id = ?").run(review.id);
-    await assert.rejects(
-      async () => {
-        await approveTask(review.id, "Looks right", "reviewer");
-      },
-      (err: unknown) =>
-        err instanceof KanbanError &&
-        err.code === "illegal_transition" &&
-        err.message === zhCN("flow.error.unclaimedApprove", { card: cardMark(original.id) }),
-    );
-    assert.equal(getTask(review.id).status, "reviewing");
+    const approved = await approveTask(review.id, "Looks right", "reviewer");
+    assert.equal(approved.id, review.id);
+    assert.equal(approved.status, "acceptance");
+    assert.equal(getTask(review.id).status, "acceptance");
     const again = getTask(original.id);
     assert.equal(again.status, "in_review");
     assert.equal(again.review_round, 0);
@@ -464,6 +459,7 @@ describe("reject and reviewed cards", () => {
     const pr = "https://github.com/acme/widgets/pull/7";
     const sha = "abc123";
     const calls: string[] = [];
+    let passing = false;
     const runner: GhRunner = async (args) => {
       const line = args.join(" ");
       calls.push(line);
@@ -475,13 +471,13 @@ describe("reject and reviewed cards", () => {
       if (line.includes("/statuses")) return "[]";
       if (line.includes("check-runs")) {
         return JSON.stringify({
-          check_runs: [{ name: "ci", status: "completed", conclusion: "success", html_url: "https://github.com/acme/widgets/runs/1" }],
+          check_runs: [{ name: "ci", status: passing ? "completed" : "in_progress", conclusion: passing ? "success" : null, html_url: "https://github.com/acme/widgets/runs/1" }],
         });
       }
       throw new Error(line);
     };
     const targetContract = JSON.stringify({ kind: "github", repo: "acme/widgets", pr, awaiting: false });
-    const reviewContract = JSON.stringify({ kind: "github", repo: "acme/widgets", pr, awaiting: true });
+    const reviewContract = JSON.stringify({ kind: "github", repo: "acme/widgets", pr, awaiting: false });
     const original = createTask({
       project: "queued-poll",
       title: "GitHub target",
@@ -492,7 +488,7 @@ describe("reject and reviewed cards", () => {
     getDb()
       .prepare("UPDATE tasks SET status = 'in_review', review_round = 0, executor_agent_id = 'exec-live', agent_id = 'exec-live', contract_json = ? WHERE id = ?")
       .run(targetContract, original.id);
-    const review = createTask({
+    const review = seedLegacyLinkedReview({
       project: "queued-poll",
       title: "GitHub manual review",
       role: "reviewer",
@@ -506,15 +502,14 @@ describe("reject and reviewed cards", () => {
     resetCheckCache();
     setGhRunner(runner);
     try {
-      await assert.rejects(
-        async () => {
-          await approveTask(review.id, "Looks right", "reviewer");
-        },
-        (err: unknown) => err instanceof KanbanError && err.code === "illegal_transition",
-      );
-      assert.equal(calls.length, 0);
+      const pending = await approveTask(review.id, "Looks right", "reviewer");
+      assert.equal(pending.status, "reviewing");
+      assert.ok(calls.length > 0);
+      assert.equal(JSON.parse(getTask(review.id).contract_json!).awaiting, true);
       assert.equal(getTask(original.id).status, "in_review");
       assert.equal(getTask(review.id).status, "reviewing");
+      passing = true;
+      resetCheckCache();
       const moved = await pollAwaitingPr();
       assert.ok(moved.includes(review.id));
       assert.ok(calls.length > 0);
@@ -541,7 +536,7 @@ describe("reject and reviewed cards", () => {
       getDb()
         .prepare("UPDATE tasks SET status = ?, review_round = 1, executor_agent_id = 'exec-live', agent_id = 'exec-live' WHERE id = ?")
         .run(status, original.id);
-      const review = createTask({
+      const review = seedLegacyLinkedReview({
         project: `queued-keep-${status}`,
         title: "Manual review",
         role: "reviewer",
@@ -558,16 +553,16 @@ describe("reject and reviewed cards", () => {
     }
   });
 
-  it("does not claim the target when the manual review card is created", () => {
+  it("refuses a duplicate manual review without claiming its queued target", () => {
     const original = createTask({ project: "queued-create", title: "Still queued", role: "executor", workspacePath: dir });
     getDb().prepare("UPDATE tasks SET status = 'in_review', executor_agent_id = 'exec-live' WHERE id = ?").run(original.id);
-    createTask({
+    assert.throws(() => createTask({
       project: "queued-create",
       title: "Manual review",
       role: "reviewer",
       workspacePath: dir,
       reviewOf: original.id,
-    });
+    }), (err: unknown) => err instanceof KanbanError && err.code === "conflict");
     assert.equal(getTask(original.id).status, "in_review");
     assert.equal(getTask(original.id).executor_agent_id, "exec-live");
   });

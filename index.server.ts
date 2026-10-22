@@ -14,8 +14,10 @@ import { installCleanup } from "./server/cleanup";
 import { startTask } from "./server/dispatch";
 import { checkSchedulerIdle, currentSchedulerIdleNote } from "./server/liveness";
 import { bindScheduler } from "./server/loop";
+import { interruptRunBudgetAgent, readRunBudgetObservation } from "./server/run-budget-source";
 import { askPaseoAgent, cleanupOps, launcherFrom, listActivePaseoAgents, listPaseoWorkspaces, readAgentActivity, readAgentEndNote } from "./server/paseo";
 import { createStartupReconciler } from "./server/startup-orphans";
+import { bindCloudRunner } from "./server/cloud-runner";
 import { readAgentPresence, settleCanceledTurn } from "./server/presence";
 import { startEarlyBind } from "./server/early-bind";
 import { cardMark, lookupCard } from "./server/card-ref";
@@ -143,7 +145,8 @@ export default function contribute(server: PluginServerContext) {
   let earlyClient: { close: () => Promise<void> } | null = null;
   let identityClient: PaseoApi | null = null;
   let stopIdentityWatch = () => {};
-  const reconcileStartup = createStartupReconciler({
+  const cloudRunner = bindCloudRunner();
+  const reconcilePaseoStartup = createStartupReconciler({
     listAgents: () => {
       if (!binding.current()) throw new Error("startup reconciliation is not bound to Paseo yet");
       return listActivePaseoAgents(binding.current()!);
@@ -153,6 +156,7 @@ export default function contribute(server: PluginServerContext) {
       return binding.current()!.agents.ref(agentId).archive().then(() => undefined);
     },
   });
+  const reconcileStartup = async () => { await cloudRunner.ready; await reconcilePaseoStartup(); };
   const scheduler = bindScheduler({
     ready: () => {
       if (!binding.current()) return null;
@@ -162,6 +166,8 @@ export default function contribute(server: PluginServerContext) {
         launcher: launcherFrom(paseo, reconcileStartup),
         send: (agentId: string, text: string) => paseo.agents.ref(agentId).send(text),
         agentActivity: (agentId: string) => readAgentActivity(paseo, agentId),
+        agentBudget: (agentId: string) => readRunBudgetObservation(paseo, agentId),
+        interruptAgent: interruptRunBudgetAgent,
       };
     },
   });
@@ -469,6 +475,7 @@ export default function contribute(server: PluginServerContext) {
     stopExports();
     stopIdentityWatch();
     scheduler.release();
+    await cloudRunner.release();
     releaseCleanup();
     earlyBind.stop();
     if (earlyClient) await earlyClient.close().catch(() => undefined);

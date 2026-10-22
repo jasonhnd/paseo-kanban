@@ -51,6 +51,7 @@ function pools(cursor: Partial<ReturnType<typeof openEntry>> = { dispatchable: f
 function fixture(hours?: number) {
   const cwd = join(dir, "original-worktree");
   mkdirSync(cwd);
+  mkdirSync(join(cwd, ".git"));
   writeFileSync(join(cwd, "prior-work.txt"), "existing work");
   const task = createTask({ project: "reassign", title: "Continue rework", role: "executor", workspacePath: cwd, brief: "Fix existing function", profileOverride: original.name });
   getDb().prepare("UPDATE tasks SET status = 'rework', workspace_kind = 'worktree', agent_id = 'old-agent', executor_agent_id = 'old-agent', executor_profile = ?, executor_family = ?, review_round = 1 WHERE id = ?").run(original.name, original.family!, task.id);

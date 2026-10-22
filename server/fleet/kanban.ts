@@ -106,7 +106,7 @@ const COLUMNS: ReadonlyArray<readonly [string, MessageKey]> = [
  */
 function selfClearingRe(): RegExp {
   const keys: MessageKey[] = ["kanban.blockedKind.dependency", "kanban.blockedKind.transient", "kanban.blockedKind.quota"];
-  const words = ["rate_limit", "scheduled", ...keys.flatMap((key) => tAll(key))];
+  const words = ["rate_limit", "scheduled", "background", ...keys.flatMap((key) => tAll(key))];
   return new RegExp(`^(${words.map(escapeRegExp).join("|")})$`, "i");
 }
 

@@ -1,11 +1,14 @@
 /// <reference types="node" />
-import { resolveReviewTarget, reviewFamilyBlock, deliveryRun } from "./review-target";
+import { resolveReviewTarget, reviewFamilyBlock, deliveryRun, authorizeReviewRecovery } from "./review-target";
+import { assertReviewStartAvailable } from "./review-assignment";
+import { legacyReviewRecoveryHint } from "./review-recovery-hint";
 import { BOARD_AGENT_ENV } from "./agent-env";
 import { t } from "../shared/i18n";
 import { parentsBlockReason, refreshStartBlockReason, taskParents } from "./parents";
 import { claimStatus, recordMergeCardDependencies } from "./store";
 import { prepareNativeSession, nativeSessionAfterArchive } from "./native-sessions";
 import { existsSync, statSync } from "./perf-fs";
+import { join } from "node:path";
 import { cleanupFinished, nextRetryAt, readCleanupEvents, retryReady } from "./archive-book";
 import { archiveInFlight } from "./cleanup";
 import { inspectAgentState, type AgentInspector } from "./agent-check";
@@ -37,7 +40,7 @@ import { currentOccupancy, holdsWorkspace, profilePoolRole, recordedExecutorFact
 import { latestReworkFeedback, reworkTakeoverNote, type ReworkReassignment } from "./rework-reassign";
 import { assertTransition } from "./state";
 import { isProjectMain, pickWorkspace, samePath, type ListedWorkspace } from "./placement";
-import { acquireStartClaim, alreadyStarting, releaseStartClaim } from "./start-claim";
+import { acquireStartClaim, alreadyStarting, holdsStartClaim, releaseStartClaim } from "./start-claim";
 import { appendEvent, bindPaseoWorkspace, blockTask, getTask, openExecutorRun, requestAgentReleases, setHold, type TaskRow } from "./store";
 import { bindTokenAgent, deleteToken, issueToken, revokeOtherRoleTokens } from "./tokens";
 import { resolveWorktreeBase, runGit, runGitSync } from "./git";
@@ -53,6 +56,9 @@ import { wakeKanbanSupervisor } from "./wake";
 import { cleanupGeneration, trackCleanupWork } from "./cleanup-state";
 import { RECREATE_FAILED, recreateReviewCopy, recreateWorkspace, worktreeDirectoryLost } from "./workspace-recreate";
 import { PASEO_ARCHIVED, liveWorkspace } from "./paseo-archiving";
+import { recordReworkStartup, recoverReworkStartup, workspaceFateReader, type StartupEvidence } from "./lost-workspace";
+import { cloudExecutionEnabled, launchCloudTask } from "./cloud-runner";
+import { cloudDelivery } from "./cloud-record";
 
 export interface AgentLauncher {
   /** Plugin startup reconciliation must finish before starting or resuming work. */
@@ -99,6 +105,8 @@ export interface AgentLauncher {
   archiveWorkspace?(workspaceId: string): Promise<void>;
   listAgents?(workspaceId: string): Promise<Array<{ id: string; archived: boolean }>>;
   inspectWorkspace?(workspaceId: string): Promise<ListedWorkspace | null>;
+  /** Full canonical timeline and stopped host agent, used only for a bounded rework startup recovery. */
+  inspectStartup?(agentId: string, workspaceId: string): Promise<StartupEvidence | null>;
 }
 
 function assertDirectory(path: string | null): string {
@@ -303,6 +311,33 @@ async function reworkPlacement(task: TaskRow, launcher: AgentLauncher, claimToke
   return { cwd, workspaceId, name: saved?.name ?? task.paseo_workspace_name ?? cwd };
 }
 
+/** Recheck the selected copy, rather than using a later workspace list only to look for main. */
+async function refreshStartPlacement(task: TaskRow, placement: Placement, launcher: AgentLauncher, claimToken: string, actor: string,
+  listed?: ListedWorkspace[]): Promise<Placement | { hold: string }> {
+  const own = readWorktreeCreated(task.id);
+  const ownCopy = own && samePath(own.directory, placement.cwd);
+  const worktree = task.workspace_kind === "worktree" || ownCopy || listed?.some(entry => entry.id === placement.workspaceId && entry.kind === "worktree");
+  if (!worktree) {
+    assertDirectory(placement.cwd);
+    // Directory registration can lag an active-list response. The missing-record/rebuild rule belongs to recorded worktrees.
+    if (!listed?.some(entry => entry.id === placement.workspaceId && entry.archived)) return placement;
+  }
+  const rebuild = () => recreateWorkspace({ task: getTask(task.id), launcher, claimToken, actor, reason: t("dispatch.reworkCopyMissing", { path: placement.cwd }) });
+  if (worktree && (worktreeDirectoryLost({ directory: placement.cwd }) || !existsSync(join(placement.cwd, ".git")))) {
+    if (ownCopy) return rebuild();
+    if (task.review_of) return recreateReviewCopy({ task: getTask(task.id), original: getTask(task.review_of), lostDirectory: placement.cwd, launcher, claimToken, actor });
+    throw new KanbanError("workspace_missing", t("dispatch.cwdMissingNoAgent", { path: placement.cwd }));
+  }
+  assertDirectory(placement.cwd);
+  const live = await liveWorkspace({ taskId: task.id, workspaceId: placement.workspaceId, directory: placement.cwd, launcher, actor, listed });
+  // The directory may disappear during the list await. Rebuild now and reread the binding before create.
+  if ("hold" in live) {
+    if (ownCopy && worktreeDirectoryLost({ directory: placement.cwd })) return rebuild();
+    return live;
+  }
+  return { ...placement, workspaceId: live.workspaceId };
+}
+
 /** A late placement that may wait on Paseo's archive (hold), or block when that archive left the directory behind. */
 async function placeOrStop(
   id: number,
@@ -315,7 +350,7 @@ async function placeOrStop(
     setHold(id, placed.hold);
     return { message: placed.hold };
   } catch (err) {
-    if (!(err instanceof KanbanError) || err.code !== PASEO_ARCHIVED) throw err;
+    if (!(err instanceof KanbanError) || (err.code !== PASEO_ARCHIVED && err.code !== RECREATE_FAILED)) throw err;
     blockTask(id, "needs_human", err.message, actor);
     return { message: err.message };
   }
@@ -403,9 +438,10 @@ async function openCreatedAgent(
   claimedAt: string,
   beforeCreate?: () => void,
 ): Promise<OpenedAgent> {
+  let submitted = false;
   const pending = Promise.resolve().then(() => beforeCreate
-    ? withConfigLock(() => { beforeCreate(); return launcher.create(options); })
-    : launcher.create(options));
+    ? withConfigLock(() => { beforeCreate(); submitted = true; return launcher.create(options); })
+    : (submitted = true, launcher.create(options)));
   const guarded = pending.then(
     (value) => ({ kind: "rpc" as const, value }),
     (err: unknown) => ({ kind: "error" as const, err }),
@@ -445,7 +481,7 @@ async function openCreatedAgent(
     const found = oneMatch();
     if (first !== "timeout" && first.kind === "error") {
       // Admission refusal never sent a create request; it cannot recover a lost response.
-      if (first.err instanceof KanbanError && first.err.code === "policy_changed") throw first.err;
+      if (!submitted) throw first.err;
       const settled = found ?? await pollMatch();
       if (settled) return watchLate(settled);
       throw first.err instanceof Error ? first.err : new Error(String(first.err));
@@ -477,10 +513,11 @@ function claim(id: number, from: Status, to: Status): void {
 }
 
 /** Undo our own claim. If someone else already moved the card on, leave their status alone. */
-function revert(id: number, status: Status, claimed: Status): void {
+function revert(id: number, status: Status, claimed: Status, claimToken?: string): void {
   getDb()
-    .prepare("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ? AND status = ?")
-    .run(status, new Date().toISOString(), id, claimed);
+    .prepare(`UPDATE tasks SET status = ?, updated_at = ? WHERE id = ? AND status = ?
+      ${claimToken ? "AND EXISTS (SELECT 1 FROM start_claims WHERE task_id = tasks.id AND token = ?)" : ""}`)
+    .run(status, new Date().toISOString(), id, claimed, ...(claimToken ? [claimToken] : []));
 }
 
 /** The card left the status we claimed while the agent was being opened, so this start does not count. */
@@ -740,6 +777,11 @@ function openingPrompt(profile: Profile, task: TaskRow, role: string, reassignme
   const comments = commentText(task.id);
   if (comments) parts.push(t("dispatch.prompt.comments", { comments }));
   if (role === "reviewer") {
+    const target = resolveReviewTarget(task, true);
+    if (target?.ok && target.authorization) {
+      const a = target.authorization;
+      parts.push(t("reviewRecovery.prompt", { card: target.card, leader: a.authorizedBy, profile: a.profileName, provider: a.provider, model: a.model, reason: a.reason }));
+    }
     const submission = getDb().prepare(
       "SELECT kind FROM events WHERE task_id = ? AND kind IN ('complete', 'auto_complete') ORDER BY id DESC LIMIT 1",
     ).get(task.review_of ?? task.id) as { kind: string } | undefined;
@@ -842,6 +884,8 @@ export async function startTask(
     chosen?: Profile;
     reason?: string;
     force?: boolean;
+    /** Explicit leader-only recovery for missing historical execution models. */
+    reviewRecovery?: { profile: string; reason: string; leaderAgentId?: string | null };
     /** Depth chosen by matrix routing. Missing means use the card-or-profile rule from #71. */
     effort?: string | null;
     effortSource?: EffortSource;
@@ -880,8 +924,8 @@ export async function startTask(
       }
     }
   }
-  if (task.status === "blocked") throw new KanbanError("blocked", t("dispatch.blocked"));
-  if (task.status === "running" || task.status === "reviewing") throw new KanbanError("conflict", t("dispatch.inProgress"));
+  if (task.status === "blocked" && !options?.reviewRecovery) throw new KanbanError("blocked", [t("dispatch.blocked"), legacyReviewRecoveryHint(task)].filter(Boolean).join("\n\n"));
+  if (task.status === "running" || task.status === "reviewing") throw new KanbanError("conflict", `${t("dispatch.inProgress")} ${cardMark(id)}`);
   if (task.status === "done" || task.status === "archived") throw new KanbanError("illegal_transition", t("dispatch.finished"));
   if (task.status === "acceptance") assertTransition(task.status, "running");
   if (task.wait_decision) throw new KanbanError(WAITING_USER, t("dispatch.waitingUser", { decision: task.wait_decision }));
@@ -894,14 +938,72 @@ export async function startTask(
   if (!claimToken) return { message: alreadyStarting() };
   try {
   task = getTask(id);
-  if (task.status === "running" || task.status === "reviewing") throw new KanbanError("conflict", t("dispatch.inProgress"));
+  if (options?.reviewRecovery) {
+    const recovery = options.reviewRecovery;
+    task = authorizeReviewRecovery(id, recovery.profile, recovery.reason, options.profiles ?? readProfiles(), actor, recovery.leaderAgentId);
+  }
+  if (task.status === "running" || task.status === "reviewing") throw new KanbanError("conflict", `${t("dispatch.inProgress")} ${cardMark(id)}`);
   if (task.status === "done" || task.status === "archived") throw new KanbanError("illegal_transition", t("dispatch.finished"));
-  if (task.status === "blocked") throw new KanbanError("blocked", t("dispatch.blocked"));
+  if (task.status === "blocked") throw new KanbanError("blocked", [t("dispatch.blocked"), legacyReviewRecoveryHint(task)].filter(Boolean).join("\n\n"));
   if (task.status === "waiting") throw new KanbanError("not_ready", t("dispatch.parentsNotDoneStart"));
   if (task.wait_decision) throw new KanbanError(WAITING_USER, t("dispatch.waitingUser", { decision: task.wait_decision }));
   if (task.status === "rework" && awaitingLeaderHold(id)) throw new KanbanError("not_ready", t("dispatch.awaitingLeader"));
+  if (task.status === "ready") {
+    const startupRecovery = await recoverReworkStartup(task, launcher, { actor, claimToken });
+    if (startupRecovery !== "unhandled") return { message: getTask(id).hold_reason ?? alreadyStarting() };
+    task = getTask(id);
+    if (task.status !== "ready") throw new KanbanError("start_lost", alreadyStarting());
+  }
   const capacity = freshStartCapacityReason(task);
   if (capacity) throw new KanbanError("not_ready", capacity);
+  if (cloudExecutionEnabled(task)) {
+    const profiles = options?.profiles ?? readProfiles();
+    const settings = loadConfig();
+    const matrix = options?.readMatrix?.() ?? loadDispatchMatrix();
+    const snapshot = options?.snapshot ?? options?.readSnapshot?.() ?? readPoolSnapshot();
+    const occupancy = currentOccupancy(profiles);
+    const input: RouteInput = {
+      ...options?.routing, profiles, role: "executor", review: false,
+      profileOverride: options?.chosen?.id ?? task.profile_override,
+      byPool: occupancy.byPool, poolLimits: settings.concurrency.pools, snapshot,
+      matrix: matrix.state === "ok" ? matrix.matrix : null,
+      tier: task.tier, cardEffort: effortForOwnRole(task, false),
+      ...cardRouteContext(task, settings.profileRules),
+    };
+    const decision = routeProfile(input);
+    if (!decision.ok) {
+      if (decision.action === "block" && decision.kind !== "quota") blockTask(id, decision.kind, decision.reason, actor);
+      else setHold(id, decision.reason);
+      return { message: decision.reason };
+    }
+    const effort = options?.effortSource ? options.effort ?? decision.profile.thinkingOptionId ?? null
+      : decision.effort ?? task.effort ?? decision.profile.thinkingOptionId ?? null;
+    return await launchCloudTask({ task, profile: decision.profile, profiles, effort, guard: () => {
+      if (!holdsStartClaim(id, claimToken) || getTask(id).status !== task.status) throw new KanbanError("start_lost", alreadyStarting());
+      const stamp = snapshot.policy;
+      if (stamp) {
+        const policy = readPolicy();
+        if (policy.state !== "ok" || policy.snapshot.revision !== stamp.revision || policy.snapshot.policyDigest !== stamp.digest) throw new KanbanError("policy_changed", t("dispatch.policyChanged"));
+      }
+    } });
+  }
+  // Cloud implementations are artifacts in a bare mirror. Local reviewers inspect
+  // a disposable copy at the submitted commit, never the mirror's default HEAD.
+  const cloudSource = (task.status === "in_review" || task.role === "reviewer") ? cloudDelivery(task.review_of ?? task.id) : null;
+  const cloudCopy = cloudSource ? readWorktreeCreated(task.id) : null;
+  if (cloudSource && cloudCopy?.directory && cloudCopy.head !== cloudSource.head) {
+    await dropRival(id, launcher, { directory: cloudCopy.directory, branch: cloudCopy.branch ?? "", root: cloudCopy.root ?? cloudSource.mirror,
+      base: cloudCopy.base ?? cloudSource.base, workspaceId: cloudCopy.workspaceId ?? null, readOnly: cloudCopy.readOnly, head: cloudCopy.head }, false);
+    if (readWorktreeCreated(id)) {
+      const reason = t("cloud.reviewCleanup");
+      setHold(id, reason); return { message: reason };
+    }
+  }
+  if (cloudSource && !readWorktreeCreated(task.id)) {
+    await placeWorktree({ ...task, workspace_path: cloudSource.mirror, workspace_kind: "dir" }, launcher, claimToken,
+      { base: cloudSource.base, holderId: null, actor, readOnly: true, ref: cloudSource.head });
+    task = getTask(id);
+  }
   const allowMain = options?.force === true || !projectAlwaysTemp(task.project);
   const reviewedEarly = task.role === "reviewer" ? reviewedPlacement(task, allowMain) : null;
   const missingWorkspace = reviewedEarly ? null : missingCardWorkspace(task);
@@ -933,6 +1035,7 @@ export async function startTask(
   const lostBorrowed = reviewed && task.review_of && worktreeDirectoryLost({ directory: reviewed.cwd }) ? reviewed.cwd : null;
   const source = reviewSource(task);
   const initialRole = phase === "review" ? "reviewer" : task.role;
+  assertReviewStartAvailable(getTask(id), initialRole === "reviewer");
   const sourceDirectory = source?.workspace_kind === "dir" ? source.workspace_path : task.workspace_path;
   const needsInspection = !reviewed && !holdsWorkspace(initialRole) &&
     task.workspace_kind === "dir" && projectAlwaysTemp(task.project) && options?.force !== true;
@@ -1019,13 +1122,14 @@ export async function startTask(
       }
       appendEvent(id, "review_target_checked", null, null, actor, { reviewTarget: target, reviewerRunId: run?.id ?? null, path: "resume" });
     }
+    assertReviewStartAvailable(getTask(id), task.role === "reviewer");
     claim(id, "rework", "running");
     getDb().prepare("UPDATE tasks SET agent_id = ?, nudge_count = 0 WHERE id = ?").run(task.executor_agent_id, id);
     let forced = false;
     try {
       forced = assertDirectoryFree(getTask(id), task.role, options?.force === true);
     } catch (err) {
-      revert(id, "rework", "running");
+      revert(id, "rework", "running", claimToken);
       throw err;
     }
     const note = latestChangeNote(id);
@@ -1038,7 +1142,7 @@ export async function startTask(
       prepareTaskTmpEnv(getTask(id), actor);
       await launcher.send(task.executor_agent_id, `${intro}\n\n${note}`);
     } catch (err) {
-      revert(id, "rework", "running");
+      revert(id, "rework", "running", claimToken);
       throw new KanbanError("send_failed", err instanceof Error ? err.message : String(err));
     }
     if (getTask(id).status !== "running") throw lostClaim(id, "running");
@@ -1188,6 +1292,12 @@ export async function startTask(
   // copy is reused. An old main-directory card, including leader rework and a takeover,
   // otherwise gets a copy at the commit already in that directory.
   const listed = launcher.listWorkspaces ? await launcher.listWorkspaces() : [];
+  const checked = await placeOrStop(id, actor, () => refreshStartPlacement(getTask(id), placement, launcher, claimToken, actor, listed));
+  if ("message" in checked) return checked;
+  placement = checked;
+  rememberPlacement(id, placement, actor);
+  cwd = placement.cwd;
+  task = getTask(id);
   const main = listed.find((entry) => isProjectMain(entry) && (entry.id === placement.workspaceId || samePath(entry.directory, cwd)));
   const mainDirectory = main?.directory ?? (getTask(id).workspace_kind === "dir" && !reviewed ? cwd : null);
   const separateCopy = getTask(id).workspace_kind === "worktree" && !samePath(cwd, main?.directory);
@@ -1236,6 +1346,8 @@ export async function startTask(
   if (isGoogleProfile(chosen)) config.modeId = "default";
   let openedId: string | null = null;
   let forced = false;
+  let createAttempted = false;
+  let startup = recordReworkStartup(getTask(id), claimToken, from, cwd, placement.workspaceId, replacement, actor);
   try {
     forced = assertDirectoryFree(getTask(id), role, options?.force === true);
     if (reassignment) {
@@ -1249,16 +1361,42 @@ export async function startTask(
     if (getTask(id).status !== to) throw lostClaim(id, to);
     // Re-read after awaited workspace/retirement operations. Scheduler selections and cached
     // route input cannot authorize a reviewer against a target that has changed meanwhile.
+    assertReviewStartAvailable(getTask(id), role === "reviewer");
     reviewTarget = resolveReviewTarget(getTask(id), review);
     const targetBlock = reviewFamilyBlock(chosen, reviewTarget);
     if (targetBlock) throw new KanbanError("not_ready", targetBlock);
     if (reviewTarget) appendEvent(id, "review_target_checked", null, null, actor, { reviewTarget, path: "create" });
+    const finalPlacement = await placeOrStop(id, actor, () => refreshStartPlacement(getTask(id), placement, launcher, claimToken, actor));
+    if ("message" in finalPlacement) {
+      deleteToken(token);
+      revert(id, from, to, claimToken);
+      return finalPlacement;
+    }
+    placement = finalPlacement;
+    cwd = placement.cwd;
+    rememberPlacement(id, placement, actor);
+    task = getTask(id);
+    if (!startup || startup.workspaceId !== placement.workspaceId || !samePath(startup.directory, cwd)) {
+      startup = recordReworkStartup(task, claimToken, from, cwd, placement.workspaceId, replacement, actor);
+    }
+    const finalGuard = () => {
+      recheckPolicy();
+      const current = getTask(id);
+      if (!holdsStartClaim(id, claimToken) || current.status !== to || current.paseo_workspace_id !== task.paseo_workspace_id || current.agent_id !== task.agent_id) {
+        throw new KanbanError("start_lost", alreadyStarting());
+      }
+      assertDirectory(cwd);
+      if (current.workspace_kind === "worktree" && !existsSync(join(cwd, ".git"))) {
+        throw new KanbanError("workspace_missing", t("dispatch.cwdMissingNoAgent", { path: cwd }));
+      }
+      createAttempted = true;
+    };
     const created = await openCreatedAgent(launcher, {
       cwd,
       workspaceId: placement.workspaceId,
       title: `【${roleLabel(role)}】${cardMark(id)} ${task.title}`,
       prompt: openingPrompt(chosen, task, role, reassignment),
-      labels: { role, kanban: "1", kanban_task: String(id) },
+      labels: { role, kanban: "1", kanban_task: String(id), ...(startup ? { kanban_start_generation: claimToken } : {}) },
       env: {
         [BOARD_AGENT_ENV]: "1",
         KANBAN_TOKEN: token,
@@ -1268,8 +1406,31 @@ export async function startTask(
         ...((task.workspace_kind === "worktree" || task.workspace_kind === "lane") && role === "executor" ? { KANBAN_WORKTREE: "1" } : {}),
       },
       config,
-    }, id, role, actor, claimedAt, recheckPolicy);
+    }, id, role, actor, claimedAt, finalGuard);
     openedId = created.id;
+    // Keep this before post-create proof: cleanup must know the agent even when it never gets a successful run.
+    appendEvent(id, "agent_opened", null, null, actor, {
+      agentId: created.id,
+      ...(created.recovered ? { recovered: "lost_create_response" } : {}),
+    });
+    if (startup) {
+      appendEvent(id, "rework_startup_agent", null, null, actor, { generation: startup.generation, agentId: created.id, workspaceId: created.workspaceId ?? placement.workspaceId });
+      const afterCreate = getTask(id);
+      if (afterCreate.status !== to || afterCreate.paseo_workspace_id !== task.paseo_workspace_id ||
+        (afterCreate.agent_id !== task.agent_id && afterCreate.agent_id !== created.id)) throw new KanbanError("start_lost", alreadyStarting());
+      const fate = await workspaceFateReader(launcher)({ paseo_workspace_id: created.workspaceId ?? placement.workspaceId ?? null });
+      if (fate === "gone" || worktreeDirectoryLost({ directory: cwd }) || !existsSync(join(cwd, ".git"))) {
+        const recovered = await recoverReworkStartup(afterCreate, launcher, { startup, agentId: created.id, actor });
+        if (recovered === "stale") throw new KanbanError("start_lost", alreadyStarting());
+        if (recovered === "retry" || recovered === "blocked") {
+          deleteToken(token);
+          return { message: getTask(id).hold_reason ?? t("paseoArchiving.hold.archiving", { workspaceId: startup.workspaceId, state: t("paseoArchiving.state.archiving") }) };
+        }
+      }
+      const current = getTask(id);
+      if (!holdsStartClaim(id, claimToken) || current.status !== afterCreate.status || current.agent_id !== afterCreate.agent_id ||
+        current.paseo_workspace_id !== afterCreate.paseo_workspace_id) throw new KanbanError("start_lost", alreadyStarting());
+    }
     // A recover path may already have bound this same agent. A new id that
     // collides with the previous worker (tests reuse short ids) still has to
     // write its own run, so require an open run for this role.
@@ -1279,17 +1440,10 @@ export async function startTask(
     if (getTask(id).status === to && getTask(id).agent_id === created.id && alreadyBound) {
       return { message: t("dispatch.started", { card: cardMark(id), agent: created.id }), agentId: created.id };
     }
-    // Stays even if the run row never lands, so cleanup can still archive this agent.
-    appendEvent(id, "agent_opened", null, null, actor, {
-      agentId: created.id,
-      ...(created.recovered ? { recovered: "lost_create_response" } : {}),
-    });
     if (!allowMain && created.workspaceId && listed.some((entry) => entry.id === created.workspaceId && isProjectMain(entry))) {
       throw new KanbanError("workspace_missing", t("dispatch.boundToMain"));
     }
     if (getTask(id).status !== to) throw lostClaim(id, to);
-    bindTokenAgent(token, created.id);
-    revokeOtherRoleTokens(id, role, created.id);
     const now = new Date().toISOString();
     // Only write back while the card is still in the status we claimed. Otherwise a 'started'
     // event would say running while the card sits elsewhere (an archived demo card).
@@ -1308,16 +1462,20 @@ export async function startTask(
       ? getDb()
           .prepare(`UPDATE tasks SET agent_id = ?, hold_reason = NULL, nudge_count = 0, updated_at = ?,
             blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, cooldown_until = NULL
-            WHERE id = ? AND status = ?`)
-          .run(created.id, now, id, to)
+            WHERE id = ? AND status = ? AND agent_id IS ?
+            AND EXISTS (SELECT 1 FROM start_claims WHERE task_id = tasks.id AND token = ?)`)
+          .run(created.id, now, id, to, task.agent_id, claimToken)
       : getDb()
           .prepare(
             `UPDATE tasks SET agent_id = ?, executor_agent_id = ?, executor_profile = ?, executor_family = ?, hold_reason = NULL, nudge_count = 0, updated_at = ?,
              blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, cooldown_until = NULL
-             WHERE id = ? AND status = ?`,
+             WHERE id = ? AND status = ? AND agent_id IS ?
+             AND EXISTS (SELECT 1 FROM start_claims WHERE task_id = tasks.id AND token = ?)`,
           )
-          .run(created.id, created.id, chosen.name, actualFamily(chosen), now, id, to);
+          .run(created.id, created.id, chosen.name, actualFamily(chosen), now, id, to, task.agent_id, claimToken);
     if (bound.changes !== 1) throw lostClaim(id, to);
+    bindTokenAgent(token, created.id);
+    revokeOtherRoleTokens(id, role, created.id);
     // Release only after a successful binding: cleanup must see the new current
     // worker, and a lost claim must never release another start's executor.
     if (!review) requestAgentReleases(id, [...supersededExecutors].map(agentId => ({ agentId, role: "executor" })));
@@ -1337,6 +1495,7 @@ export async function startTask(
     if (workspaceId) rememberPlacement(id, { cwd, workspaceId, name: placement.name }, actor);
     appendEvent(id, "started", from, to, actor, {
       agentId: created.id,
+      ...(startup ? { startupGeneration: startup.generation } : {}),
       profile: chosen.name,
       role,
       ...(reviewTarget ? { reviewTarget, reviewerRunId: Number(openedRun.lastInsertRowid) } : {}),
@@ -1363,7 +1522,13 @@ export async function startTask(
       await discardOpenedAgent(id, openedId, actor, role, reason, launcher);
     }
     deleteToken(token);
-    revert(id, from, to);
+    revert(id, from, to, claimToken);
+    if (!createAttempted && replacement && err instanceof KanbanError && err.code === "workspace_missing" && holdsStartClaim(id, claimToken)) {
+      const message = err.message;
+      setHold(id, message);
+      appendEvent(id, "rework_startup_deferred", null, null, actor, { generation: claimToken, directory: cwd, workspaceId: placement.workspaceId, reason: message });
+      return { message };
+    }
     throw err instanceof KanbanError ? err : new KanbanError("start_failed", err instanceof Error ? err.message : String(err));
   }
   } catch (err) {

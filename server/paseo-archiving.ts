@@ -3,6 +3,7 @@ import { getDb } from "./db";
 import type { AgentLauncher } from "./dispatch";
 import { KanbanError } from "./errors";
 import { pickWorkspace } from "./placement";
+import type { ListedWorkspace } from "./placement";
 import { appendEvent } from "./store";
 import { worktreeDirectoryLost } from "./workspace-recreate";
 import { t } from "../shared/i18n";
@@ -43,11 +44,13 @@ export async function liveWorkspace(input: {
   launcher: AgentLauncher;
   actor: string;
   now?: number;
+  /** Validate the exact snapshot a caller already awaited; never discard that second-list result. */
+  listed?: ListedWorkspace[];
 }): Promise<LiveWorkspace> {
   const { taskId, directory, launcher, actor } = input;
   const recorded = input.workspaceId ?? undefined;
-  if (!launcher.listWorkspaces) return { workspaceId: recorded };
-  const listed = await launcher.listWorkspaces();
+  if (!launcher.listWorkspaces && !input.listed?.length) return { workspaceId: recorded };
+  const listed = input.listed ?? await launcher.listWorkspaces!();
   // Paseo may have removed the directory while the list was on its way: that is the rebuild case, never "still there".
   if (worktreeDirectoryLost({ directory })) {
     return { hold: t("paseoArchiving.hold.directoryGone", { directory }) };

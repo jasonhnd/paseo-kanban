@@ -14,6 +14,7 @@ export interface ViewTask {
   badge: string;
   column: string;
   reviewRound: number;
+  reviewStatus?: string | null;
   blockedKind: string | null;
   scheduledUntil?: string | null;
   blockedReason: string | null;
@@ -104,6 +105,7 @@ export function isLandPending(task: Pick<ViewTask, "badge">): boolean {
 
 /** One short hint for the compact card: the single most important thing about it. */
 export function cardHint(task: ViewTask): { tone: "danger" | "warning" | "muted"; text: string } | null {
+  if (task.status === "blocked" && task.blockedKind === "background") return { tone: "warning", text: t("background.label") };
   if (task.status === "blocked" && task.blockedKind === "scheduled" && task.scheduledUntil) {
     return { tone: "warning", text: scheduledWaitLabel(task.scheduledUntil) };
   }
@@ -143,6 +145,7 @@ export interface AttentionItem<T extends ViewTask = ViewTask> {
 
 /** Why a card needs a person, or null when it does not. */
 export function attentionOf<T extends ViewTask>(task: T, decisions: readonly DecisionView[]): AttentionItem<T> | null {
+  if (task.status === "blocked" && task.blockedKind === "background") return null;
   const matched = task.status === "archived" ? [] : cardDecisions(task.code, decisions);
   const base = { task, decisions: matched.length, quiet: false };
   if (task.status === "blocked" && task.blockedKind === "scheduled" && task.scheduledUntil && Date.parse(task.scheduledUntil) > Date.now()) return null;
@@ -286,13 +289,14 @@ function blockedGuide(task: ViewTask, ctx: GuideContext): HandlingGuide {
   else if (task.blockedKind === "quota" || task.blockedKind === "rate_limit") steps.push(t("boardView.blocked.quota"));
   else if (task.blockedKind === "transient") steps.push(t("boardView.blocked.transient"));
   else if (task.blockedKind === "scheduled") steps.push(t("boardView.blocked.scheduled"));
+  else if (task.blockedKind === "background") steps.push(t("background.label"));
   else steps.push(t("boardView.blocked.whoDefault", { leader: LEADER_LABEL }));
   if (ctx.parents.length > 0) {
     const list = ctx.parents.map((item) => `${item.code}${t("common.paren", { text: statusLabel(item.status) })}`).join(t("common.listSep"));
     steps.push(t("boardView.blocked.parents", { list }));
   }
   return {
-    headline: task.blockedKind === "scheduled" && task.scheduledUntil ? scheduledWaitLabel(task.scheduledUntil) : t("boardView.blocked.headline"),
+    headline: task.blockedKind === "background" ? t("background.label") : task.blockedKind === "scheduled" && task.scheduledUntil ? scheduledWaitLabel(task.scheduledUntil) : t("boardView.blocked.headline"),
     steps,
     commands: [
       `bin/kanban unblock ${task.code}`,
@@ -300,7 +304,7 @@ function blockedGuide(task: ViewTask, ctx: GuideContext): HandlingGuide {
       `bin/kanban pass ${task.code} --note "${t("boardView.cmd.rulingReason")}"`,
       `bin/kanban archive ${task.code}`,
     ],
-    needsPerson: !(task.blockedKind === "scheduled" && task.scheduledUntil && Date.parse(task.scheduledUntil) > Date.now()),
+    needsPerson: task.blockedKind !== "background" && !(task.blockedKind === "scheduled" && task.scheduledUntil && Date.parse(task.scheduledUntil) > Date.now()),
   };
 }
 

@@ -19,6 +19,7 @@ export function isBlockedKind(kind: string): kind is BlockedKind {
 }
 
 export function blockedKindLabel(kind: string | null | undefined): string {
+  if (kind === "background") return t("background.label");
   if (kind && isBlockedKind(kind)) return t(BLOCKED_KIND_LABEL_KEYS[kind]);
   return kind ? kind : "";
 }

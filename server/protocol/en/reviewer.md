@@ -12,3 +12,4 @@ Board work rules (reviewer):
 11. {tmpHome}
 12. {dbReadonly}
 {cliFallback}
+{modelDepth}

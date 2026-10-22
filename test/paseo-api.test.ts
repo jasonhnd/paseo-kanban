@@ -21,6 +21,7 @@ import {
   readAgentEndNote,
   readAgentPage,
   readWorkspacePage,
+  readStartupEvidence,
   snapshotFromRecord,
 } from "../server/paseo";
 
@@ -139,7 +140,7 @@ describe("paseo paging", () => {
   it("exposes the active agents and a workspace snapshot through the audit view", async () => {
     const paseo = asPaseo({
       agents: { list: async () => page([{ agent: { ...agentRow, workspaceId: "w1" } }]) },
-      workspaces: { ref: () => ({ current: () => workspaceRow, refresh: async () => null }) },
+      workspaces: { ref: () => ({ current: () => workspaceRow, refresh: async () => workspaceRow }) },
     });
     const view = auditView(paseo);
     assert.deepEqual((await view.listActiveAgents()).map((agent) => agent.id), ["a1"]);
@@ -273,7 +274,7 @@ describe("paseo cleanup operations", () => {
       },
       workspaces: {
         archive: async (id: string) => { archived.push(`workspace:${id}`); },
-        ref: () => ({ current: () => workspaceRow, refresh: async () => null }),
+        ref: () => ({ current: () => workspaceRow, refresh: async () => workspaceRow }),
       },
     });
     const ops = cleanupOps(paseo);
@@ -477,4 +478,52 @@ describe("paseo launcher", () => {
     await launcher.beforeStart?.();
     assert.equal(ran, 1);
   });
+
+  it("refreshes a workspace even when its cached descriptor still looks live", async () => {
+    const descriptor = { id: "w", workspaceDirectory: "/copy", workspaceKind: "worktree", projectRootPath: "/root", archivingAt: "archive-started" };
+    let refreshed = 0;
+    const launcher = launcherFrom(asPaseo({ workspaces: { ref: () => ({
+      current: () => ({ ...descriptor, archivingAt: null }),
+      refresh: async () => { refreshed += 1; return descriptor; },
+    }) } }));
+    assert.equal((await launcher.inspectWorkspace!("w"))?.archived, true);
+    assert.equal(refreshed, 1);
+  });
+
+  for (const problem of ["none", "tool", "older", "newer", "gap", "stale", "compaction", "plugin", "unknown", "error", "projected", "wrong-agent", "retained-prefix"] as const) {
+    it(`requires complete canonical startup evidence: ${problem}`, async () => {
+      const page = {
+        agentId: "a", projection: "canonical", error: null as string | null,
+        hasOlder: false, hasNewer: false, gap: false, staleCursor: false,
+        window: { minSeq: 1, maxSeq: 2, nextSeq: 3 },
+        entries: [{ seqStart: 1, seqEnd: 1, item: { type: "user_message" } }, { seqStart: 2, seqEnd: 2, item: { type: "assistant_message" } }],
+      };
+      if (problem === "tool") page.entries.push({ seqStart: 3, seqEnd: 3, item: { type: "tool_call" } });
+      if (problem === "older") page.hasOlder = true;
+      if (problem === "newer") page.hasNewer = true;
+      if (problem === "gap") page.gap = true;
+      if (problem === "stale") page.staleCursor = true;
+      if (["compaction", "plugin", "unknown"].includes(problem)) page.entries.push({ seqStart: 3, seqEnd: 3, item: { type: problem } });
+      if (problem === "error") page.error = "partial read";
+      if (problem === "projected") page.projection = "projected";
+      if (problem === "wrong-agent") page.agentId = "other-agent";
+      if (problem === "retained-prefix") page.window.minSeq = 9;
+      const api = asPaseo({
+        agents: { ref: () => ({
+          refresh: async () => ({ agent: { archivedAt: "archived", status: "closed", activeTurn: null, workspaceId: "w", labels: { kanban_start_generation: "generation" } } }),
+          timeline: { refetch: async (options: unknown) => {
+            assert.deepEqual(options, { direction: "tail", limit: 1000, projection: "canonical" });
+            return page;
+          } },
+        }) },
+        workspaces: { ref: () => ({ refresh: async () => ({ archivingAt: "archiving", githubRuntime: { pullRequest: { isMerged: true, url: "https://github.com/o/r/pull/22" } } }) }) },
+      });
+      const proof = await readStartupEvidence(api, "a", "w");
+      assert.equal(proof?.archived, true);
+      assert.equal(proof?.merged, true);
+      assert.equal(proof?.timelineComplete, problem === "none");
+      assert.equal(proof?.toolCalls, problem === "tool" ? 1 : 0);
+      assert.equal(proof?.generation, "generation");
+    });
+  }
 });

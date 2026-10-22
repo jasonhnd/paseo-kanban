@@ -105,15 +105,15 @@ describe("MCP inject gate", () => {
     const executor = guardCreateHook(req({ env: { [BOARD_AGENT_ENV]: "1", KANBAN_ROLE: "executor" } }), "http://127.0.0.1:9");
     assert.match(executor?.config.systemPrompt ?? "", /\u770b\u677f\u5de5\u4f5c\u5b88\u5219\uff08\u6267\u884c\uff09/);
     assert.match(executor?.config.systemPrompt ?? "", /files、verification、risks/);
-    assert.match(executor?.config.systemPrompt ?? "", /\u540e\u53f0\u547d\u4ee4、\u5168\u91cf\u6d4b\u8bd5、\u5b50 agent \u6ca1\u51fa\u7ed3\u679c\u524d\u4e0d\u8981\u7ed3\u675f\u56de\u5408/);
+    assert.match(executor?.config.systemPrompt ?? "", /wait-bg/);
     assert.match(executor?.config.systemPrompt ?? "", /verification/);
     assert.match(executor?.config.systemPrompt ?? "", /CI.*handoff\.waitingOn/);
     assert.doesNotMatch(executor?.config.systemPrompt ?? "", /GitHub Actions/);
-    assert.match(executor?.config.systemPrompt ?? "", /\u786e\u5b9e\u8981\u7b49\u8d85\u8fc7 30 \u5206\u949f\uff0c\u5c31\u4ea4\u6d3b\u5e76\u5199 handoff\.waitingOn/);
+    assert.match(executor?.config.systemPrompt ?? "", /\u767b\u8bb0\u6210\u529f\u540e\u7ed3\u675f\u672c\u56de\u5408/);
     assert.doesNotMatch(executor?.config.systemPrompt ?? "", /\u518d\u7ed3\u675f\u8fd9\u4e00\u8f6e/);
     assert.match(executor?.config.systemPrompt ?? "", /\u5de5\u5177\u652f\u6301\u65f6\uff0c\u80fd\u62c6\u5f00\u7684\u67e5\u627e、\u9605\u8bfb、\u6d4b\u8bd5、\u6838\u5bf9\u5148\u6d3e sub-agent \u540c\u65f6\u505a\uff0c\u518d\u6c47\u603b/);
     assert.match(executor?.config.systemPrompt ?? "", /\u6539\u4ee3\u7801\u4ecd\u7531\u4f60\u81ea\u5df1\u505a\uff0c\u4ee5\u514d\u4e92\u76f8\u8986\u76d6/);
-    assert.match(executor?.config.systemPrompt ?? "", /\u7b49 sub-agent \u65f6\u7559\u5728\u672c\u56de\u5408\u91cc\u7b49\u5b83\u4eec\u8fd4\u56de/);
+    assert.match(executor?.config.systemPrompt ?? "", /\u4ea4\u6d3b\u524d\u6c47\u603b\u5b50 agent/);
     assert.match(executor?.config.systemPrompt ?? "", /\u9700\u8981\u5f00 PR \u65f6\u53ef\u4ee5\u5728\u672c\u5361\u76ee\u5f55\u91cc\u65b0\u5efa\u5206\u652f\uff0c\u4f46\u4e0d\u8981\u53e6\u5f00 worktree/);
     assert.doesNotMatch(executor?.config.systemPrompt ?? "", /\u53ea\u8bfb/);
     assert.doesNotMatch(executor?.config.systemPrompt ?? "", /\u7a7a\u63d0\u4ea4/);
@@ -148,7 +148,7 @@ describe("MCP inject gate", () => {
     // Executor rules grew by 167 and the no-wait rule shrank by 3 (CI dropped from the poll list).
     // Keep the original budget for the rules; a card checkout's CLI path may be longer than the installation's.
     const budgetedPrompt = (worktree?.config.systemPrompt ?? "").replace(displayCliPath(), "$STABLE_BIN/paseo-kanban");
-    assert.ok(budgetedPrompt.length <= 226 * 2 + 49 + 107 + 39 + 110 + 220 + 100 + 260 + 260 + 164 + 108 + 12);
+    assert.ok(budgetedPrompt.length <= 226 * 2 + 49 + 107 + 39 + 110 + 220 + 100 + 260 + 260 + 164 + 108 + 12 + 1600);
     // TEST_0256 adds the no-wait rule and the sub-agent wait sentence (260-character budget).
     const reader = guardCreateHook(req({ env: { [BOARD_AGENT_ENV]: "1", KANBAN_ROLE: "reader" } }), "http://127.0.0.1:9");
     assert.match(reader?.config.systemPrompt ?? "", /\u4e0d\u6539\u6587\u4ef6\uff0c\u4e0d commit/);
@@ -239,14 +239,13 @@ describe("MCP inject gate", () => {
       const checkoutHeadBudget = role === "executor" ? 108 : 0;
       // Immediate deletion replaces the 24-hour wait in the executor temporary-directory rule (12).
       const immediateCleanupBudget = role === "executor" ? 12 : 0;
-      assert.ok(budgetedText.length <= previous[role] * 2 + policyBudget + mergeCardBudget + tmpRuleBudget + noWaitBudget + noCiBudget + checkoutHeadBudget + immediateCleanupBudget, `${role} \u5de5\u4f5c\u5b88\u5219\u8d85\u8fc7\u6587\u6848\u9884\u7b97`);
-      if (role === "supervisor") assert.match(text, /\u5148\u7528 kanban_comment \u5199\u4e00\u53e5\u8fdb\u5ea6\uff0c\u518d\u7ed3\u675f\u8fd9\u4e00\u8f6e/);
-      else {
-        assert.match(text, /\u56de\u5408\u7ed3\u675f = \u4f60\u505c\u4e0b\u6765\u4e86\uff0c\u4e0d\u4f1a\u6709\u4eba\u518d\u53eb\u4f60/);
-        assert.match(text, /\u524d\u53f0\u8f6e\u8be2/);
-        assert.match(text, /Codex \u7684\u540e\u53f0\u4f1a\u8bdd\u548c Claude \u7684 ScheduleWakeup \u5728\u8fd9\u91cc\u90fd\u4e0d\u4f1a\u5524\u9192\u4f60/);
-        assert.doesNotMatch(text, /\u518d\u7ed3\u675f\u8fd9\u4e00\u8f6e/);
-      }
+      // Bounded completion-watcher shell usage and model-capability guidance replace minute polling.
+      const backgroundBudget = 1100;
+      const modelBudget = ["executor", "reviewer", "supervisor"].includes(role) ? 500 : 0;
+      assert.ok(budgetedText.length <= previous[role] * 2 + policyBudget + mergeCardBudget + tmpRuleBudget + noWaitBudget + noCiBudget + checkoutHeadBudget + immediateCleanupBudget + backgroundBudget + modelBudget, `${role} \u5de5\u4f5c\u5b88\u5219\u8d85\u8fc7\u6587\u6848\u9884\u7b97`);
+      assert.match(text, /wait-bg/);
+      assert.match(text, /wait\/sleep/);
+      assert.doesNotMatch(text, /sleep 60/);
       assert.doesNotMatch(text, /Paseo \u5b98\u65b9|\u56de A \u6211\u5c31\u5f00\u59cb/);
       assert.match(text, /bin\/paseo-kanban complete/);
       assert.doesNotMatch(text, /paseo-kanban\.mjs/);

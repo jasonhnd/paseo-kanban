@@ -108,6 +108,12 @@ function ReviewAndHandoff({ s, data }: { s: Styles; data: TaskDetailView }) {
   const hasDigest = Boolean(digest.summary || digest.verification || digest.risks || digest.files);
   return (
     <>
+      {data.runBudget ? <Section s={s} title={t("runBudget.title")}>
+        <Text style={s.text}>{t("runBudget.totals", { durationMs: data.runBudget.durationMs, turns: data.runBudget.turns, tokens: data.runBudget.tokens, cached: data.runBudget.cachedInputTokens, waits: data.runBudget.consecutiveWaits })}</Text>
+        <Text style={s.muted}>{t("runBudget.limitSummary", data.runBudget.limits)}</Text>
+        <Text style={s.muted}>{t("runBudget.source", { source: data.runBudget.source, status: data.runBudget.tokenStatus })}</Text>
+        {data.runBudget.notes.length ? <Text style={s.muted}>{t("runBudget.notes", { notes: data.runBudget.notes.join("; ") })}</Text> : null}
+      </Section> : null}
       <Section s={s} title={t("cardDrawer.handoff.title")}>
         {hasDigest ? (
           <>

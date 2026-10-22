@@ -11,9 +11,12 @@ import { saveConfig, type KanbanConfig } from "../server/config";
 import { closeDb, getDb } from "../server/db";
 import type { AgentLauncher } from "../server/dispatch";
 import { KanbanError } from "../server/errors";
-import { completeTask, pollAwaitingPr } from "../server/flow";
+import { completeTask, leaderReworkTask, pendingReworkReplacement, pollAwaitingPr } from "../server/flow";
+import { startTask } from "./helpers/compat-dispatch";
+import { acquireStartClaim, releaseStartClaim } from "../server/start-claim";
+import { reclaimTask } from "../server/failures";
 import { MISSING_CONFIRM_MS, resetReconcileForTests } from "../server/schedule";
-import { blockTask, claimStatus, createTask, getTask, openExecutorRun, unblockTask } from "../server/store";
+import { appendEvent, blockTask, claimStatus, createTask, getTask, openExecutorRun, unblockTask } from "../server/store";
 import { readContract, resetCheckCache, setGhRunner, type GhRunner } from "../server/pr";
 import { issueToken, type Identity } from "../server/tokens";
 import { handleTool } from "../server/tools";
@@ -158,6 +161,142 @@ describe("executor and batch rules forbid checking out a PR head", () => {
 });
 
 describe("reconcile blocks a card whose bound workspace is gone", () => {
+  async function startupCard() {
+    const cwd = join(dir, 'startup-copy');
+    mkdirSync(join(cwd, '.git'), { recursive: true });
+    const task = createTask({ project: 'live', title: 'Rework startup', role: 'executor', workspacePath: cwd });
+    getDb().prepare("UPDATE tasks SET status = 'acceptance', workspace_kind = 'worktree', executor_agent_id = 'departed' WHERE id = ?").run(task.id);
+    appendEvent(task.id, 'worktree_created', null, null, 'test', {
+      directory: cwd, root: dir, workspaceId: 'ws-startup', branch: `kanban/${task.id}-startup`, base: 'main', temp: true,
+    });
+    await leaderReworkTask(task.id, 'Fix archive startup', { presence: () => 'archived' });
+    let archived = false;
+    let generation = '';
+    let creates = 0;
+    const proof = { archived: true, busy: false, workspaceId: 'ws-startup', merged: true,
+      timelineComplete: true, toolCalls: 0, pullRequestUrl: 'https://github.com/o/r/pull/22' };
+    const launcher: AgentLauncher = {
+      async send() {},
+      async create(options) { generation = options.labels?.kanban_start_generation ?? ''; return { id: `startup-${++creates}`, workspaceId: 'ws-startup' }; },
+      async listWorkspaces() { return [{ ...ws('ws-startup', archived), directory: cwd, projectRoot: dir, kind: 'worktree' }]; },
+      async inspectStartup() { return { ...proof, generation }; },
+    };
+    const profile = { id: 'ex', name: 'Demo executor', role: 'executor', provider: 'codex', model: 'demo', family: 'openai' };
+    const startAgain = () => startTask(task.id, launcher, 'test', { chosen: profile, profiles: [profile] });
+    await startAgain();
+    return { task, launcher, proof, startAgain, archive: () => { archived = true; }, restore: () => { archived = false; }, creates: () => creates };
+  }
+
+  it('safely restores pending rework after a proven zero-tool startup archive, including after reload', async () => {
+    const f = await startupCard();
+    f.archive();
+    closeDb();
+    await tick(f.launcher, Date.now() - start.getTime(), () => 'archived');
+    assert.equal(getTask(f.task.id).status, 'ready');
+    assert.ok(pendingReworkReplacement(f.task.id));
+    assert.equal(events(f.task.id, 'rework_startup_retry').length, 1);
+    assert.equal(events(f.task.id, 'blocked').length, 0);
+    await tick(f.launcher, Date.now() - start.getTime(), () => 'archived');
+    assert.equal(events(f.task.id, 'rework_startup_retry').length, 1);
+    assert.equal(f.creates(), 1);
+  });
+
+  for (const missing of ['tool', 'timeline', 'merge', 'agent', 'generation', 'lookup', 'expired'] as const) {
+    it(`keeps needs_human when startup safety cannot be proven: ${missing}`, async () => {
+      const f = await startupCard();
+      f.archive();
+      if (missing === 'tool') f.proof.toolCalls = 1;
+      if (missing === 'timeline') f.proof.timelineComplete = false;
+      if (missing === 'merge') f.proof.merged = false;
+      if (missing === 'agent') f.proof.archived = false;
+      if (missing === 'generation') f.launcher.inspectStartup = async () => ({ ...f.proof, generation: 'another-create' });
+      if (missing === 'lookup') f.launcher.inspectStartup = async () => { throw new Error('timeline unavailable'); };
+      await tick(f.launcher, Date.now() - start.getTime() + (missing === 'expired' ? 180_000 : 0), () => 'archived');
+      const next = getTask(f.task.id);
+      assert.equal(next.status, 'blocked');
+      assert.equal(next.blocked_kind, 'needs_human');
+      assert.ok(next.blocked_reason?.includes(`kanban/${f.task.id}-startup`), 'explain the recoverable branch');
+      assert.equal(events(f.task.id, 'rework_startup_retry').length, 0);
+      assert.equal(f.creates(), 1);
+    });
+  }
+
+  it('bounds repeated safe startup retries across generations', async () => {
+    const f = await startupCard();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      f.archive();
+      await tick(f.launcher, Date.now() - start.getTime(), () => 'archived');
+      if (attempt < 2) {
+        assert.equal(getTask(f.task.id).status, 'ready');
+        f.restore();
+        await f.startAgain();
+      }
+    }
+    assert.equal(getTask(f.task.id).status, 'blocked');
+    assert.equal(events(f.task.id, 'rework_startup_retry').length, 2);
+    assert.equal(f.creates(), 3);
+  });
+
+  it('ignores an archive proof that finishes after the card is handed in', async () => {
+    const f = await startupCard();
+    f.archive();
+    f.launcher.inspectStartup = async () => {
+      completeTask(f.task.id, 'executor', 'Delivered during proof lookup', { files: [], verification: 'passed', risks: [] });
+      return { ...f.proof, generation: 'stale' };
+    };
+    await tick(f.launcher, Date.now() - start.getTime(), () => 'archived');
+    assert.equal(getTask(f.task.id).status, 'in_review');
+    assert.equal(events(f.task.id, 'blocked').length, 0);
+    assert.equal(events(f.task.id, 'rework_startup_retry').length, 0);
+  });
+
+  for (const changed of ['agent', 'workspace', 'generation', 'claim'] as const) {
+    it(`does not apply a startup retry after its ${changed} changes during proof lookup`, async () => {
+      const f = await startupCard();
+      const proof = f.launcher.inspectStartup!;
+      f.archive();
+      let token: string | null = null;
+      f.launcher.inspectStartup = async (...args) => {
+        const evidence = await proof(...args);
+        if (changed === 'agent') getDb().prepare("UPDATE tasks SET agent_id = 'new-current-agent' WHERE id = ?").run(f.task.id);
+        if (changed === 'workspace') bind(f.task.id, 'replacement-workspace');
+        if (changed === 'generation') appendEvent(f.task.id, 'rework_startup', null, null, 'test', { generation: 'new-generation' });
+        if (changed === 'claim') token = acquireStartClaim(f.task.id);
+        return evidence;
+      };
+      try {
+        await tick(f.launcher, Date.now() - start.getTime(), () => 'archived');
+        assert.equal(getTask(f.task.id).status, 'running');
+        assert.equal(events(f.task.id, 'rework_startup_retry').length, 0);
+        assert.equal(events(f.task.id, 'blocked').length, 0);
+        assert.equal(f.creates(), 1);
+      } finally { if (token) releaseStartClaim(f.task.id, token); }
+    });
+  }
+
+  it('does not reuse a startup permit for a later resumed run on the same agent', async () => {
+    const f = await startupCard();
+    appendEvent(f.task.id, 'resumed', 'rework', 'running', 'test', { agentId: getTask(f.task.id).agent_id });
+    f.archive();
+    await tick(f.launcher, Date.now() - start.getTime(), () => 'archived');
+    assert.equal(getTask(f.task.id).status, 'blocked');
+    assert.equal(events(f.task.id, 'rework_startup_retry').length, 0);
+  });
+
+  for (const tools of [0, 1]) {
+    it(`checks startup safety when a host hook reclaims before reconcile, with ${tools} tool calls`, async () => {
+      const f = await startupCard();
+      f.archive();
+      f.proof.toolCalls = tools;
+      assert.equal(reclaimTask(f.task.id), 'reclaimed');
+      await f.startAgain();
+      assert.equal(getTask(f.task.id).status, tools === 0 ? 'ready' : 'blocked');
+      assert.equal(events(f.task.id, 'rework_startup_retry').length, tools === 0 ? 1 : 0);
+      if (tools === 0) assert.ok(pendingReworkReplacement(f.task.id));
+      assert.equal(f.creates(), 1);
+    });
+  }
+
   it("stores a recoverable needs_human reason in both catalogs", () => {
     const en = catalog("en")["schedule.lostWorkspace.reason"];
     const zh = catalog("zh-CN")["schedule.lostWorkspace.reason"];

@@ -26,7 +26,7 @@ describe("family rules from kanban.config.json", () => {
     assert.deepEqual(DEFAULT_FAMILIES, {});
     for (const value of Object.values(DEFAULT_BANNED)) assert.deepEqual(value, []);
     assert.equal(isBannedProfile(profile({ provider: "antigravity", family: "google", model: "gemini" }), parseBanned(undefined)), false);
-    assert.equal(familyDispatchBlock(profile({ provider: "codex", family: "openai", model: "gpt-5", featureValues: { fast_mode: true } }), "ultra", fresh, parseFamilies(undefined)), null);
+    assert.equal(familyDispatchBlock(profile({ provider: "codex", family: "openai", model: "gpt-5" }), "ultra", fresh, parseFamilies(undefined)), null);
   });
 
   it("replaces the built-in rules when the field is present", () => {
@@ -50,6 +50,48 @@ describe("family rules from kanban.config.json", () => {
     assert.equal(familyDispatchBlock(profile({ provider: "acme-cli", model: "acme-2-pro" }), "ultra", fresh, families), null);
     assert.equal(familyDispatchBlock(profile({ provider: "codex", model: "gpt-5" }), null, fresh, families), null, "only explicitly configured family rules apply");
   });
+});
+
+describe("standard-speed dispatch invariant", () => {
+  const quick: Record<string, unknown>[] = [
+    { fast: true }, { fast_mode: true }, { fastMode: "true" },
+    { serviceTier: "priority" }, { service_tier: "fast" },
+    { featureValues: { fast: true } }, { featureValues: { fast_mode: true } },
+    { featureValues: { service_tier: "priority" } }, { featureValues: { serviceTier: " PRIORITY " } },
+    { config: { service_tier: "priority" } },
+    { featureValues: { config: { service_tier: "priority" } } },
+    { config: 'service_tier="priority"' },
+    { args: ["-c", 'service_tier="priority"'] },
+    { args: ["--config=service_tier='priority'"] },
+    { cliArgs: "-c 'service_tier=\"priority\"'" },
+    { featureValues: { args: ["--service-tier", "priority"] } },
+    { extraArgs: ["--fast"] }, { command: ["codex", "--fast-mode=true"] },
+    { config: '{"serviceTier":"priority"}' },
+    { config: '["-c", "service_tier=\\\"priority\\\""]' },
+    { featureValues: { config: { features: { fast_mode: true } } } },
+    { fast: false, featureValues: { fast: false, service_tier: "priority" } },
+  ];
+  for (const family of ["openai", "anthropic", "xai", "example", undefined]) {
+    for (const [index, fields] of quick.entries()) {
+      it(`refuses speed setting ${index + 1} for family ${family ?? "unmarked"} without opt-in rules`, () => {
+        assert.equal(familyDispatchBlock(profile({ ...fields, family }), null, fresh, {}), fastNotAllowed());
+        assert.equal(familyDispatchBlock(profile({ ...fields, family }), null, fresh,
+          parseFamilies({ example: { noFast: false } })), fastNotAllowed());
+      });
+    }
+  }
+  for (const fields of [
+    {}, { fast: false }, { fast_mode: "false" }, { featureValues: { fast: "false", fast_mode: false } },
+    { serviceTier: "default" }, { featureValues: { service_tier: "standard" } },
+    { args: ["-c", 'service_tier="default"', "--fast=false"] },
+    { config: { fast: false } }, { command: ["codex", "--fast-mode", "false"] },
+    { notes: 'service_tier="priority"', name: "A fast model description", model: "demo-fast" },
+    { featureValues: { priority: true, breakfast: true } },
+  ]) {
+    it(`allows standard settings ${JSON.stringify(fields)}`, () => {
+      assert.equal(familyDispatchBlock(profile(fields), null, fresh, {}), null);
+    });
+  }
 });
 
 describe("banned profiles from kanban.config.json", () => {

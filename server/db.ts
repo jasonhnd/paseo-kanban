@@ -18,6 +18,20 @@ let readOnly: DatabaseSync | null = null;
 let readOnlyDir: string | null = null;
 
 const SCHEMA = `
+CREATE TABLE IF NOT EXISTS run_budget_state (
+  task_id INTEGER PRIMARY KEY,
+  generation TEXT NOT NULL,
+  state_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS run_budget_turns (
+  task_id INTEGER NOT NULL,
+  generation TEXT NOT NULL,
+  source TEXT NOT NULL,
+  turn_id TEXT NOT NULL,
+  at TEXT NOT NULL,
+  turn_json TEXT NOT NULL,
+  PRIMARY KEY(task_id, generation, source, turn_id)
+);
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   project TEXT NOT NULL,
@@ -50,6 +64,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   scheduled_wake_text TEXT,
   scheduled_claim_id TEXT,
   scheduled_claim_until TEXT,
+  background_wait_json TEXT,
   nudge_count INTEGER NOT NULL DEFAULT 0,
   fail_count INTEGER NOT NULL DEFAULT 0,
   cooldown_until TEXT,
@@ -315,6 +330,7 @@ function migrateDb(db: DatabaseSync): void {
     "ALTER TABLE tasks ADD COLUMN scheduled_wake_text TEXT",
     "ALTER TABLE tasks ADD COLUMN scheduled_claim_id TEXT",
     "ALTER TABLE tasks ADD COLUMN scheduled_claim_until TEXT",
+    "ALTER TABLE tasks ADD COLUMN background_wait_json TEXT",
     "ALTER TABLE tasks ADD COLUMN hold_reason TEXT",
     "ALTER TABLE tasks ADD COLUMN workspace_kind TEXT NOT NULL DEFAULT 'dir'",
     "ALTER TABLE tasks ADD COLUMN workspace_base TEXT",

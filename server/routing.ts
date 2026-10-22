@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import { actualModel, differentReviewModels } from "../shared/fleet/review-model";
+import { gptExecutionEffort, lightExecutionProfile, operationalExecution } from "../shared/fleet/executor-effort";
 import { t } from "../shared/i18n";
 import { getDb } from "./db";
 import { resolveReviewTarget, reviewFamilyBlock, type ReviewTarget } from "./review-target";
@@ -14,6 +15,7 @@ import { setProfileHintSource, type ProfilePriorityHint } from "./task-create";
 import type { TaskRow } from "./task-record";
 import { downgradeEffort, isEffortValue, resolveTier, type Tier } from "./tier";
 import type { Effort } from "./effort";
+import { profileUsesFastMode } from "./profile-speed";
 import { roleLabel } from "../shared/labels";
 
 function findProfile(profiles: Profile[], override: string): Profile | undefined {
@@ -53,6 +55,8 @@ export interface RouteInput {
   project?: string | null;
   /** The card's tags, for example high-risk or complex-docs. */
   tags?: readonly string[];
+  title?: string;
+  brief?: string;
   /** Profile scope rules. Missing means no rules (older callers and unit tests). */
   rules?: ProfileRules;
   /** Starts of a profile today, Tokyo time. Needed for dailyLimit; missing skips that check. */
@@ -73,7 +77,7 @@ export interface RouteInput {
   now?: number;
 }
 
-export type EffortSource = "card" | "matrix" | "profile" | "downgrade";
+export type EffortSource = "card" | "matrix" | "profile" | "downgrade" | "execution";
 
 export type RouteDecision =
   | {
@@ -207,8 +211,8 @@ export function profileDepth(profile: Profile): string | null {
 }
 
 /**
- * Why this profile's family rule (kanban.config.json `families`) refuses the work. Null when no
- * rule applies. Restrictions are opt-in and apply equally to every configured family.
+ * Why dispatch refuses this profile. Standard speed is mandatory for every family;
+ * additional kanban.config.json `families` restrictions remain opt-in.
  * `effort` is the depth this start would actually use: the card, then the matrix, then the profile.
  * openai is an ordinary family; same-family review is a separate check.
  */
@@ -218,10 +222,10 @@ export function familyDispatchBlock(
   snapshot: PoolSnapshot,
   families: Readonly<Record<string, FamilyRule>> = fleetRules().families,
 ): string | null {
+  if (profileUsesFastMode(profile)) return fastNotAllowed();
   const rule = familyRuleFor({ ...profile, family: actualFamily(profile) }, families);
   if (!rule) return null;
   if (rule.modelPrefixes.length > 0 && !rule.modelPrefixes.some((prefix) => (profile.model ?? "").startsWith(prefix))) return modelNotAllowed();
-  if (rule.noFast && profile.featureValues?.fast_mode === true) return fastNotAllowed();
   if (rule.noUltra && effort === "ultra") return depthNotAllowed();
   if (rule.requirePoolSeen && poolUnseen(profile, snapshot)) return poolUnseenReason();
   return null;
@@ -494,6 +498,10 @@ const REJECTED: Considered = { ok: false, preferred: null, note: null };
 
 /** Whether this profile may take the card now. `scoped` false skips the profile rules (explicit --profile). */
 function consider(profile: Profile, input: RouteInput, skips: Skip[], scoped: boolean, effort?: string | null): Considered {
+  if (operationalExecution(input) && !lightExecutionProfile(profile)) {
+    skips.push({ profile, why: t("routing.operationsOnly"), fatal: "rule" });
+    return REJECTED;
+  }
   const depth = effort !== undefined ? effort : (input.cardEffort ?? profileDepth(profile));
   const gpt = familyDispatchBlock(profile, depth, input.snapshot);
   if (gpt) {
@@ -530,7 +538,7 @@ function consider(profile: Profile, input: RouteInput, skips: Skip[], scoped: bo
       skips.push({ profile, why: targetBlock, fatal: "family" });
       return REJECTED;
     }
-    // openai is compared like any other family: a GPT execution is not reviewed by GPT.
+    // Known execution and review models are compared independently of provider and family labels.
     if (!actualModel(profile.model) || profile.paused || (!input.reviewTarget && input.reviewsExecutor && !differentReviewModels(input.executorModel, profile.model))) {
       skips.push({ profile, why: t("routing.reviewModelUnavailable"), fatal: "family" });
       return REJECTED;
@@ -574,9 +582,11 @@ function pinnedNoEffort(name: string, effort: string | null | undefined): string
 function routeOverride(input: RouteInput, override: string, effort?: string | null): RouteDecision {
   const chosen = findProfile(input.profiles, override);
   if (!chosen) return { ok: false, action: "block", kind: "needs_human", reason: t("routing.profileNotFound", { name: override }) };
+  const raw = effort !== undefined ? effort : input.cardEffort ?? profileDepth(chosen);
+  const resolved = executionDepth(raw, chosen, input);
   const skips: Skip[] = [];
   // An explicit profile is never swapped and is not limited by the scope rules.
-  if (!consider(chosen, input, skips, false, effort).ok) {
+  if (!consider(chosen, input, skips, false, resolved).ok) {
     const skip = skips[0];
     if (!skip) return { ok: false, action: "block", kind: "needs_human", reason: t("routing.profileNotDispatchable", { name: override }) };
     const reason = withSnapshot(t("routing.pinnedBlocked", { name: chosen.name, why: skip.why }), input.snapshot);
@@ -595,12 +605,13 @@ function routeOverride(input: RouteInput, override: string, effort?: string | nu
     if (input.review && REVIEW_WAIT.has(skip.fatal)) return { ok: false, action: "hold", kind: "quota", reason, pool };
     return { ok: false, action: "block", kind: "needs_human", reason, pool };
   }
-  if (effort === undefined && input.cardEffort && input.supportsEffort && !input.supportsEffort(chosen, input.cardEffort)) {
+  if (effort === undefined && resolved && input.supportsEffort && !input.supportsEffort(chosen, resolved)) {
     return { ok: false, action: "hold", kind: "needs_human", unsupportedEffort: true,
-      reason: pinnedNoEffort(chosen.name, input.cardEffort) };
+      reason: pinnedNoEffort(chosen.name, resolved) };
   }
   const stale = snapshotNote(input.snapshot);
-  return { ok: true, profile: chosen, reason: `${t("routing.pinnedOk", { name: chosen.name })}${stale ? `${t("common.comma")}${stale}` : ""}` };
+  return { ok: true, profile: chosen, reason: `${t("routing.pinnedOk", { name: chosen.name })}${stale ? `${t("common.comma")}${stale}` : ""}`,
+    ...(resolved !== raw ? { effort: resolved, effortSource: "execution" as const } : {}) };
 }
 
 function routeByRoster(input: RouteInput): RouteDecision {
@@ -609,10 +620,11 @@ function routeByRoster(input: RouteInput): RouteDecision {
   const skips: Skip[] = [];
   const viable: Ranked[] = [];
   roster(input.profiles, input.role).forEach((profile, index) => {
-    const seen = consider(profile, input, skips, true);
+    const effort = executionDepth(input.cardEffort ?? profileDepth(profile), profile, input);
+    const seen = consider(profile, input, skips, true, effort);
     if (!seen.ok) return;
-    if (input.cardEffort && input.supportsEffort && !input.supportsEffort(profile, input.cardEffort)) {
-      skips.push({ profile, why: t("routing.noEffortSupport", { effort: input.cardEffort }), fatal: "effort" });
+    if (effort && input.supportsEffort && !input.supportsEffort(profile, effort)) {
+      skips.push({ profile, why: t("routing.noEffortSupport", { effort }), fatal: "effort" });
       return;
     }
     viable.push({ profile, index, tier: tierOf(profile, input.snapshot, avoid), preferred: seen.preferred, note: seen.note });
@@ -623,7 +635,10 @@ function routeByRoster(input: RouteInput): RouteDecision {
   viable.sort((a, b) => compareRanked(a, b, input.snapshot));
   const chosen = viable[0];
   if (!chosen) return noneLeft(skips, t("routing.noProfile"), input.snapshot, input.review, input.reviewTarget?.ok);
-  return { ok: true, profile: chosen.profile, reason: summarize(chosen, skips, input.snapshot, avoid) };
+  const raw = input.cardEffort ?? profileDepth(chosen.profile);
+  const effort = executionDepth(raw, chosen.profile, input);
+  return { ok: true, profile: chosen.profile, reason: summarize(chosen, skips, input.snapshot, avoid),
+    ...(effort !== raw ? { effort, effortSource: "execution" as const } : {}) };
 }
 
 function highRiskTags(input: RouteInput): readonly string[] {
@@ -657,6 +672,11 @@ export function matrixFirstChoice(input: RouteInput): { profile: Profile; tier: 
 function withExecutorFamily(input: RouteInput): RouteInput | RouteDecision {
   if (input.reviewTarget) {
     if (!input.reviewTarget.ok) return { ok: false, action: "block", kind: "needs_human", reason: input.reviewTarget.reason };
+    if (input.reviewTarget.source === "leader-profile" && input.reviewTarget.authorization) {
+      return { ...input, review: true, profileOverride: input.reviewTarget.authorization.profileId,
+        executorFamily: input.reviewTarget.family, executorModel: null, executorProvider: input.reviewTarget.provider,
+        executorProfile: input.reviewTarget.profile, reviewsExecutor: true };
+    }
     if (!actualModel(input.reviewTarget.model)) return { ok: false, action: "block", kind: "needs_human", reason: t("routing.reviewModelUnavailable") };
     return { ...input, review: true, executorFamily: input.reviewTarget.family, executorModel: input.reviewTarget.model, executorProvider: input.reviewTarget.provider, executorProfile: input.reviewTarget.profile, reviewsExecutor: true };
   }
@@ -701,6 +721,7 @@ function routeResolved(input: RouteInput): RouteDecision {
 }
 
 const EFFORT_SOURCE_KEYS = {
+  execution: "routing.effortSource.execution",
   card: "routing.effortSource.card",
   downgrade: "routing.effortSource.downgrade",
   matrix: "routing.effortSource.matrix",
@@ -737,10 +758,17 @@ function resolveItemEffort(
   profile: Profile,
   card: Effort | null,
   lowered: boolean,
+  input: RouteInput,
 ): { effort: string | null; source: EffortSource } {
-  if (card) return { effort: card, source: "card" };
-  if (item?.effort) return { effort: item.effort, source: lowered ? "downgrade" : "matrix" };
-  return { effort: profileDepth(profile), source: "profile" };
+  const raw = card ?? item?.effort ?? profileDepth(profile);
+  const effort = executionDepth(raw, profile, input);
+  const source = effort !== raw ? "execution" : card ? "card" : item?.effort ? lowered ? "downgrade" : "matrix" : "profile";
+  return { effort, source };
+}
+
+function executionDepth(effort: string | null, profile: Profile, input: RouteInput): string | null {
+  return gptExecutionEffort({ ...profile, effort, role: input.role, review: input.review,
+    tier: cardTier(input, input.matrix ?? null), tags: input.tags, title: input.title, brief: input.brief, explicit: Boolean(input.cardEffort) });
 }
 
 /**
@@ -815,7 +843,7 @@ function pickFromList(items: MatrixItem[], input: RouteInput, tier: Tier, lowere
       skips.push({ profile: entry.profile, why: pausedProfile, fatal: "pool" });
       continue;
     }
-    const resolved = resolveItemEffort(entry.item, entry.profile, input.cardEffort ?? null, lowered);
+    const resolved = resolveItemEffort(entry.item, entry.profile, input.cardEffort ?? null, lowered, input);
     if (!consider(entry.profile, input, skips, false, resolved.effort).ok) continue;
     if (resolved.effort && input.supportsEffort && !input.supportsEffort(entry.profile, resolved.effort)) {
       skips.push({ profile: entry.profile, why: t("routing.noEffortSupport", { effort: resolved.effort }), fatal: "effort" });
@@ -922,7 +950,13 @@ function opsProfileBlock(profile: Profile, input: RouteInput): string | null {
 
 function listForRole(input: RouteInput, matrix: DispatchMatrix, tier: Tier): MatrixList {
   if (input.review || input.role === "reviewer") return reviewList(input, matrix, tier);
-  if (input.role === "executor") return { items: matrix.executor[tier] ?? [] };
+  if (input.role === "executor") {
+    const items = operationalExecution(input) ? matrix.executor.L1 ?? matrix.executor[tier] ?? [] : matrix.executor[tier] ?? [];
+    return { items: operationalExecution(input) ? items.filter(item => {
+      const profile = findProfile(input.profiles, item.profile);
+      return profile && lightExecutionProfile(profile);
+    }) : items };
+  }
   if (isWildcardRole(input.role)) {
     const tierItems = isOpsRole(input.role) ? undefined : matrix.starTiers?.[input.role]?.[tier];
     return { items: tierItems ?? matrix.star[input.role] ?? [] };
@@ -938,7 +972,7 @@ function routeMatrixOverride(input: RouteInput, matrix: DispatchMatrix, tier: Ti
   const override = input.profileOverride ?? "";
   const chosen = findProfile(input.profiles, override);
   const item = chosen ? itemNamed(items, chosen.name) : null;
-  let resolved = chosen ? resolveItemEffort(item, chosen, input.cardEffort ?? null, false) : { effort: null, source: "profile" as const };
+  let resolved = chosen ? resolveItemEffort(item, chosen, input.cardEffort ?? null, false, input) : { effort: null, source: "profile" as const };
   const decision = routeOverride(input, override, chosen ? resolved.effort : undefined);
   if (!decision.ok) return decision;
   if (resolved.effort && input.supportsEffort && !input.supportsEffort(decision.profile, resolved.effort)) {
@@ -1124,23 +1158,38 @@ export function holdsWorkspace(role: string): boolean {
 export function currentOccupancy(profiles: Profile[]): Occupancy {
   const rows = getDb()
     .prepare(
-      `SELECT t.workspace_path, t.workspace_kind, t.status, t.role AS task_role, r.role, r.profile_name
+      `SELECT t.workspace_path, t.workspace_kind,
+         CASE WHEN t.status = 'blocked' AND t.blocked_kind != 'background' THEN t.blocked_from ELSE t.status END AS status,
+         t.blocked_from, t.role AS task_role, r.role, r.profile_name
        FROM tasks t
        LEFT JOIN runs r ON r.id = (
          SELECT id FROM runs WHERE task_id = t.id ORDER BY id DESC LIMIT 1
        )
-       WHERE t.status IN ('running', 'reviewing')`,
+       WHERE t.status IN ('running', 'reviewing') OR (t.status = 'blocked' AND (t.blocked_kind = 'background' OR EXISTS (
+         SELECT 1 FROM run_budget_state b WHERE b.task_id = t.id
+           AND json_extract(b.state_json, '$.agentId') = t.agent_id
+           AND json_extract(b.state_json, '$.phase') IN ('braking', 'braked')
+           AND coalesce(json_extract(b.state_json, '$.interrupted'), 0) = 0
+       )))`,
     )
     .all() as unknown as Array<{
     workspace_path: string | null;
     workspace_kind: string | null;
     status: string;
+    blocked_from: string | null;
     task_role: string;
     role: string | null;
     profile_name: string | null;
   }>;
   const occ: Occupancy = { global: 0, byPool: {}, byRole: {}, workspaces: new Set() };
   for (const row of rows) {
+    if (row.status === "blocked") {
+      // The model sleeps, but the command can still read/write this directory.
+      if (row.blocked_from === "running" && holdsWorkspace(row.role ?? row.task_role) && (row.workspace_kind ?? "dir") === "dir" && row.workspace_path) {
+        occ.workspaces.add(row.workspace_path);
+      }
+      continue;
+    }
     occ.global += 1;
     const role = row.role ?? (row.status === "reviewing" ? "reviewer" : row.task_role);
     occ.byRole[role] = (occ.byRole[role] ?? 0) + 1;

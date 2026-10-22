@@ -183,13 +183,15 @@ export function parseTags(json: string | null | undefined): string[] {
 
 /** The routing fields that come from the card and the config. */
 export function cardRouteContext(
-  task: { project: string; tags: string | null },
+  task: { project: string; tags: string | null; title?: string; brief?: string },
   overrides: Record<string, ProfileRule | null> | undefined,
   now = Date.now(),
-): { project: string; tags: string[]; rules: ProfileRules; runsToday: (profile: Profile) => number } {
+): { project: string; tags: string[]; title?: string; brief?: string; rules: ProfileRules; runsToday: (profile: Profile) => number } {
   return {
     project: task.project,
     tags: parseTags(task.tags),
+    ...(task.title !== undefined ? { title: task.title } : {}),
+    ...(task.brief !== undefined ? { brief: task.brief } : {}),
     rules: effectiveProfileRules(overrides),
     runsToday: (profile) => countRunsToday(profile.name, now),
   };

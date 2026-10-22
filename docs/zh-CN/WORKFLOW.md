@@ -23,7 +23,11 @@
 
 角色和供应商、模型分开配置。Paseo 档案使用 role、family；候选还使用 candidateFor。配置明确、非空的实际 model；供应商和 family 元数据不能证明独立审查。Fleet 目前只生成角色预览，不自动写档案；手动配置时保留已有项。
 
-审查比较 trim/lower 后的非空实际 model。同 family 不同 model 允许，同 model 跨 provider/effort/mode 拒绝，缺证据时等待。高风险工作仍须合格的独立审查和 leader 验收。默认审查矩阵另有独立 Codex 槽 `reviewer.gpt-6-sol`（模型 `gpt-6-sol`，L1 到 L4 均为 xhigh），只匹配这个精确模型，不占用 GPT-6.1 槽。
+审查比较 trim/lower 后的非空实际 model。同 family 不同 model 允许，同 model 跨 provider/effort/mode 拒绝，缺证据时不自动挑审查。leader 可通过指定档案并记录理由恢复旧交付，见[审查安排与旧卡恢复](REVIEW-SCHEDULING.md)。高风险工作仍须合格的独立审查和 leader 验收。默认审查矩阵另有独立 Codex 槽 `reviewer.gpt-6-sol`（模型 `gpt-6-sol`，L1 到 L4 均为 high），只匹配这个精确模型，不占用 GPT-6.1 槽。
+
+另建的 `--reviews <被审卡>` 审查卡，通过 `approve <审查卡> --summary "<证据>"`，或向 `kanban_approve` 传自己的卡号（可省略）记录结论。通过时先检查审查卡自己的合同。目标仍是 `in_review`、当前绑定审查 agent 有实际审查 run 且其 model 与目标执行 run 的实际 model 不同、没有另一份已安排、进行中或已通过的审查时，两张卡在同一事务中进入 `acceptance`。目标的 `approve` 事件记录审查卡号、agent、run 及双方实际 model；目标的合同、执行者、交接和审查轮次不变，调度器不会再为这份已通过的结果启动自动审查。
+
+缺 model、同 model、另有审查或交付证据变化时，审查卡仍记录通过，目标保留原状态，两张卡都说明原因。目标仍是 `in_review` 时，leader 可核对证据后使用 `pass <被审卡> --note "<原因>"`。旧卡的明确启动授权不补造执行 model，不能据此自动推进。等待 PR 检查时保存提交批准的审查者及交付证据，检查结束后重新核对。详见[关联审查通过规则](REVIEW-SCHEDULING.md#关联审查通过)。工人 token 仍只准操作自己的卡，且必须绑定当前负责的 agent；`--reviews` 或项目只读授权不会赋予被审卡的写权限。审查者不能直接对目标使用 pass、accept 或修改其他状态，最终验收仍由 leader 另做。
 
 L1：清楚的小改；L2：集中常规改动；L3：跨文件或调查；L4：资金、权限、安全、迁移、对外承诺、发布。难度选择已配置的模型与思考选项，不赋予操作授权，也不保证已配高风险审查者。
 
@@ -72,9 +76,27 @@ L1：清楚的小改；L2：集中常规改动；L3：跨文件或调查；L4：
 
 交付准备好但等 PR 或外部检查时照常交活，在 handoff.waitingOn 说明。只有权限或用户决定缺失等需要人的事才卡住；不受影响的活继续。
 
+长于几分钟的命令，用一条给足 timeout 的前台调用阻塞到结束，或脱离终端运行，再登记 `paseo-kanban wait-bg "$KANBAN_TMP/job.exit" --card <卡号> --log "$KANBAN_TMP/job.log"`。后台 shell 在结束时把退出码（0 到 255）写入新 pending 文件，随后原子重命名为退出码标记。登记成功后结束 agent 回合。看板服务在正常 tick 检查标记，不调用模型；结束后发一条结果消息，最多附日志尾部 8 KiB。等待与去重凭据持久保存，重启可恢复；等待期间不算卡死、不占需要人处理的提醒。禁止反复调用 wait/sleep 轮询进度。缺标记继续等；坏标记或临时目录被替换时携错误唤醒。看板必须保持运行，后台命令须能在回合结束后存活。所属 leader 可用 `unblock` 取消。命令结果尚未核对时不能提前交活。shell 示例见注入守则及 CLI 帮助。
+
+默认候选按模型能力分档。只有卡片明确 `--effort max` 或 `--tag needs-max` 才允许 max，`hard-code` 本身不授权 max；显式较低档位保留。执行卡的请求不提升自动审查。旧矩阵/档案的 max 使用前会被限制，生成的矩阵不会含 max。续跑已有 agent 保持原档位。
+
+| 卡片类型 | L1 | L2 | L3 | L4 |
+| --- | --- | --- | --- | --- |
+| 执行 | GPT-6-Luna medium | GPT-6.1-Sol medium | GPT-6.1-Sol high | GPT-6.1-Sol xhigh |
+| 杂活 | GPT-6-Luna medium | GPT-6-Luna medium | GPT-6-Luna medium | GPT-6-Luna medium |
+| 审查 | GPT-6-Luna high | GPT-6-Luna high | GPT-6.1-Sol high | GPT-6.1-Sol high |
+| 部署 / 等待 / 搬数据 / 运维 | Luna 或 Grok low | Luna 或 Grok low | Luna 或 Grok low | Luna 或 Grok low |
+
+审查继续要求实际模型与执行不同，首选模型相同时保留独立候选；既有额度顺序、暂停与能力检查继续生效。`ops`、`operations`、`deploy`、`deployment`、`wait`、`data-move`、`data-migration`、`release`、`release-rehearsal`、`maintenance` 标签在执行/杂活卡的所有难度下选择运维路由，显式档案/档位也不能绕过。只可选该角色矩阵里已配置的 Luna/Grok；轻量档案缺失或不可用就等待，不回退到 Sol。未打类型标签时，仅以部署/等待/搬数据等标题前缀或简报 `Task type: deploy` 行推断；明确 `code`/`hard-code` 标签禁用关键词推断，同时有运维标签时运维优先。专用 `ops_*` 列表默认 low，显式配置的角色档案与档位仍然保留。后台等待本身不调用模型。
+
+基表为 `shared/fleet/default-dispatch.example.json`。Fleet 合并 `fleet/afc.config.json` 的 `dispatchOverrides` 后生成 `fleet/dispatch-matrix.json` 并发布不可变策略。示例包含能力默认值和三个精确模型的 Luna 档案（`executor.gpt-6-luna`、`reviewer.gpt-6-luna`、`batch.gpt-6-luna`）。Luna 示例明确使用 `featureValues.service_tier=default`。在宿主配置添加或更新档案时保留其他档案和角色元数据；覆盖值采用 `examples/afc.config.example.json`，换装新代码后让 Fleet 正常重新生成矩阵和策略，不手改生成文件。审查默认值现为 L1/L2 Luna high、L3/L4 Sol high。
+
+
 只装 Fleet 有阵容、额度、决定，无派卡；只装 Kanban 有自配角色、基础顺序和本地决定，无 Fleet 额度保护。见 [DATA](DATA.md) 和[契约](../CONTRACT.md)。
 
 ## 恢复临时副本清理
+
+有资格的运维杂活卡可查看其他项目，并重试已完成／已归档卡的清理，不会获得 leader 身份。配置、令牌／run 绑定、命令范围和失效条件见[运维清理权限](OPS-CLEANUP.md)。普通项目只读授权仍限本项目。
 
 `resume-cleanup <卡号>` 清除停止重试标记（次数从 1 重新计），或立刻重试还在等待的退避（次数保留）。全局 Kanban leader（`supervisorAgentId`）可处理所有项目；普通的别项目 leader 仍被拒绝。这项例外不授予其他卡操作权限。普通恢复不会丢弃未合回工作：`not_merged` 仍保留副本和分支。
 
@@ -95,3 +117,21 @@ node "$BOARD_INSTALL/bin/paseo-kanban.mjs" resume-cleanup DEMO_0001 --discard-un
 副本仍存在时，出现新提交、本地／比较基准变化或未提交改动会暂停移除副本。检查该副本后，若仍打算丢弃，再显式加参数授权。副本删除后，基准前进不影响删除已批准的 tip。若分支 tip 不同或已在其他 worktree 中检出，则保留分支、撤销授权，记录 `keep_branch` 和 `temp_workspace_cleaned`（`keptBranch: true`），并唤醒登记的项目 leader（必要时回退到 Kanban leader）。删分支的临时错误继续使用正常退避和 12 次上限；达到上限同样保留、撤销并通知。不要求对已删除的副本重新授权。撤销最新授权后不能重新启用更旧授权。重建后的 workspace 代次不能复用旧授权。不加参数时，原有合并检查和保留分支规则继续生效。
 
 产物验收的 PR 地址须使用小写 `https://github.com/` 前缀；owner/repository 仍按大小写不敏感核对。
+
+## 恢复分支已消失的待合回记录
+
+已验收卡可能因主目录未清理而停在 `land_pending`。现在每次观察会保存排队分支的确切提交尖端。若分支消失，调度器只读检查本地分支、远程跟踪分支和标签，不 fetch。若某引用包含该尖端，会写入 `land_settled`，记录尖端、保留引用及解析后的提交，再解除合回占用。没有超出基准的自有提交也适用。卡副本仍存在但有未提交内容、尖端变化或无法读取时，不自动收束。恢复过程不合并，因此主目录仍可保持未清理状态。
+
+缺少尖端、尖端无法读取或未被现存引用保留时，自动合回停止，并单独通知已登记的 leader。调度器继续只读检查，因此恢复分支可恢复正常合回，后来保留的提交也可自动收束。不以建工作树时的基准、目录不存在、卡已归档或树相同推断最终尖端。旧排队事件没有保存尖端时，必须显式核对。体检会说明分支不存在并给出恢复建议；分支列表无法读取仍是未知，不算分支不存在的证据。
+
+核对确定无需本地合回后，已登记的项目 leader 或全局看板 leader 可显式关闭这条排队：
+
+```sh
+node "$BOARD_INSTALL/bin/paseo-kanban.mjs" resume-cleanup DEMO_0001 --settle-missing-land --reason "已核对安装类工作的独立发布证据，无需本地合回。"
+```
+
+须使用已登记 leader 的 agent 身份。卡片令牌、未登记为 leader 的创建者、其他项目 leader 和匿名终端都会被拒绝。理由必填且非空。卡须已完成或已归档，排队分支和基准须匹配自有临时工作树记录，且 Git 须确认确切本地分支不存在。不能与 `--discard-unmerged` 同用。分支恢复或排队记录变化会使操作失效。
+
+审计事件为 `land_settled`，包含 `mode: leader`、授权身份、理由、原排队事件、分支和基准、保存的尖端（缺失为 null）、可读取的未保留提交 SHA／标题及检查证据。自动收束用 `mode: retained`。两者都不写 `landed`，不合并、不重建分支、不授权丢弃。旧收束事件不会遮住新排队。正常清理在符合条件的 tick 恢复，仍独立核对归属、未提交内容和活跃 agent。
+
+选择扩展 `resume-cleanup`，因为这条已验收卡的合回占用会阻止清理。复用 `accept` 需要重开已归档卡，可能重复验收或合并；复用 `--discard-unmerged` 会混淆关闭缺失分支排队与删除现存分支的授权。没有保存尖端的旧安装类卡，可在核对发布证据后使用显式命令；仅升级会保留记录并通知，不会猜测。

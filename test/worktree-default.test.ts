@@ -235,6 +235,7 @@ describe("fetch the base before a worktree", () => {
         bases.push(options.baseBranch);
         const path = join(dir, "made-wt");
         mkdirSync(path, { recursive: true });
+        mkdirSync(join(path, ".git"));
         return { directory: path, workspaceId: "ws-fetch" };
       },
     };

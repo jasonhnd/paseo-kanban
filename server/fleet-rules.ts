@@ -9,7 +9,7 @@ export interface FamilyRule {
   providers: string[];
   /** Only models whose id starts with one of these may run. Empty allows any model. */
   modelPrefixes: string[];
-  /** Refuse a profile with fast mode on. */
+  /** Compatibility setting; routing always refuses fast/priority profiles for every family. */
   noFast: boolean;
   /** Refuse a start whose depth is ultra. */
   noUltra: boolean;

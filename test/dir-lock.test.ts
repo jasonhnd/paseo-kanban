@@ -112,6 +112,7 @@ describe("directory lock on manual start", () => {
     const holder = createTask({ project: "lock", title: "Directory executor", role: "executor", workspacePath: path });
     await startTask(holder.id, box, "test", pick(executor));
     const copy = createTask({ project: "lock", title: "demo fixture", role: "executor", workspacePath: path });
+    mkdirSync(join(path, ".git"));
     appendEvent(copy.id, "worktree_created", null, null, "test", { directory: path, branch: "kanban/copy", workspaceId: "wt-copy" });
     getDb().prepare("UPDATE tasks SET workspace_kind = 'worktree' WHERE id = ?").run(copy.id);
     await startTask(copy.id, box, "test", pick(executor));

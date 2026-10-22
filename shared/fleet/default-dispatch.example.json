@@ -5,8 +5,12 @@
     "executor": {
       "L1": [
         {
+          "profile": "executor.gpt-6-luna",
+          "effort": "medium"
+        },
+        {
           "profile": "executor.gpt-6.1-sol",
-          "effort": "low"
+          "effort": "medium"
         },
         {
           "profile": "executor.sonnet",
@@ -37,11 +41,11 @@
       ],
       "L3": [
         {
-          "profile": "executor.sonnet",
+          "profile": "executor.gpt-6.1-sol",
           "effort": "high"
         },
         {
-          "profile": "executor.gpt-6.1-sol",
+          "profile": "executor.sonnet",
           "effort": "high"
         },
         {
@@ -55,11 +59,11 @@
       ],
       "L4": [
         {
-          "profile": "executor.opus",
+          "profile": "executor.gpt-6.1-sol",
           "effort": "xhigh"
         },
         {
-          "profile": "executor.gpt-6.1-sol",
+          "profile": "executor.opus",
           "effort": "xhigh"
         },
         {
@@ -75,12 +79,16 @@
     "reviewer": {
       "L1": [
         {
-          "profile": "reviewer",
-          "effort": "low"
+          "profile": "reviewer.gpt-6-luna",
+          "effort": "high"
         },
         {
           "profile": "reviewer.gpt-6.1-sol",
-          "effort": "medium"
+          "effort": "high"
+        },
+        {
+          "profile": "reviewer",
+          "effort": "low"
         },
         {
           "profile": "reviewer.grok",
@@ -88,17 +96,21 @@
         },
         {
           "profile": "reviewer.gpt-6-sol",
-          "effort": "xhigh"
+          "effort": "high"
         }
       ],
       "L2": [
         {
-          "profile": "reviewer",
-          "effort": "medium"
+          "profile": "reviewer.gpt-6-luna",
+          "effort": "high"
         },
         {
           "profile": "reviewer.gpt-6.1-sol",
           "effort": "high"
+        },
+        {
+          "profile": "reviewer",
+          "effort": "medium"
         },
         {
           "profile": "reviewer.grok",
@@ -106,17 +118,43 @@
         },
         {
           "profile": "reviewer.gpt-6-sol",
-          "effort": "xhigh"
+          "effort": "high"
         }
       ],
       "L3": [
         {
+          "profile": "reviewer.gpt-6.1-sol",
+          "effort": "high"
+        },
+        {
+          "profile": "reviewer.gpt-6-luna",
+          "effort": "high"
+        },
+        {
           "profile": "reviewer",
           "effort": "high"
         },
         {
+          "profile": "reviewer.grok",
+          "effort": "high"
+        },
+        {
+          "profile": "reviewer.gpt-6-sol",
+          "effort": "high"
+        }
+      ],
+      "L4": [
+        {
           "profile": "reviewer.gpt-6.1-sol",
-          "effort": "xhigh"
+          "effort": "high"
+        },
+        {
+          "profile": "reviewer.gpt-6-luna",
+          "effort": "high"
+        },
+        {
+          "profile": "reviewer.fable",
+          "effort": "high"
         },
         {
           "profile": "reviewer.grok",
@@ -124,25 +162,7 @@
         },
         {
           "profile": "reviewer.gpt-6-sol",
-          "effort": "xhigh"
-        }
-      ],
-      "L4": [
-        {
-          "profile": "reviewer.fable",
-          "effort": "xhigh"
-        },
-        {
-          "profile": "reviewer.gpt-6.1-sol",
-          "effort": "xhigh"
-        },
-        {
-          "profile": "reviewer.grok",
-          "effort": "xhigh"
-        },
-        {
-          "profile": "reviewer.gpt-6-sol",
-          "effort": "xhigh"
+          "effort": "high"
         }
       ]
     },
@@ -181,6 +201,10 @@
     "batch": {
       "*": [
         {
+          "profile": "batch.gpt-6-luna",
+          "effort": "medium"
+        },
+        {
           "profile": "batch",
           "effort": null
         },
@@ -198,7 +222,7 @@
       "*": [
         {
           "profile": "ops.vercel",
-          "effort": "medium"
+          "effort": "low"
         }
       ]
     },
@@ -206,7 +230,7 @@
       "*": [
         {
           "profile": "ops.cloudflare",
-          "effort": "medium"
+          "effort": "low"
         }
       ]
     },
@@ -214,7 +238,7 @@
       "*": [
         {
           "profile": "ops.github",
-          "effort": "medium"
+          "effort": "low"
         }
       ]
     },
@@ -222,7 +246,7 @@
       "*": [
         {
           "profile": "ops.notion",
-          "effort": "medium"
+          "effort": "low"
         }
       ]
     }

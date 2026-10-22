@@ -9,7 +9,7 @@ import { setAgentAliveCheck, resetAgentAliveCheck } from '../server/alive';
 import { runKanban } from '../server/cli';
 import { saveConfig, type KanbanConfig } from '../server/config';
 import { closeDb, getDb } from '../server/db';
-import { completeTask, leaderReworkTask, rejectTask, requestChanges } from '../server/flow';
+import { completeTask, leaderReworkTask, pendingReworkReplacement, rejectTask, requestChanges } from '../server/flow';
 import { openEntry, type PoolSnapshot } from '../server/pools';
 import type { Profile } from '../server/profiles';
 import { resetReconcileForTests, type TickOptions } from "../server/schedule";
@@ -47,6 +47,7 @@ function pools(closed: string[] = []): PoolSnapshot {
 function fixture() {
   const cwd = join(dir, 'original-copy');
   mkdirSync(cwd);
+  mkdirSync(join(cwd, '.git'));
   writeFileSync(join(cwd, 'prior.txt'), 'previous submission');
   const task = createTask({ project: 'reopen', title: "Resume rework", role: 'executor', workspacePath: cwd, brief: "Original request", profileOverride: original.name });
   getDb().prepare("UPDATE tasks SET status = 'reviewing', workspace_kind = 'worktree', agent_id = 'review-agent', executor_agent_id = 'old-agent', executor_profile = ?, executor_family = ?, handoff_json = ? WHERE id = ?")
@@ -72,6 +73,23 @@ function events(id: number, kind: string) {
 }
 
 describe('automatic reopening of departed executors', () => {
+  for (const changedList of [2, 3]) it(`keeps rework pending when workspace list ${changedList} starts archiving the selected copy`, async () => {
+    const f = fixture();
+    await leaderReworkTask(f.task.id, 'Fix the archive race', { presence: () => 'archived' });
+    let lists = 0;
+    f.launcher.listWorkspaces = async () => [{
+      id: 'original-ws', directory: f.cwd, name: 'original', projectRoot: dir,
+      projectId: 'demo', kind: 'worktree', archived: ++lists >= changedList,
+    }];
+    await f.tick();
+    assert.equal(lists, changedList);
+    assert.equal(f.opened.length, 0);
+    assert.equal(getTask(f.task.id).status, 'ready');
+    assert.ok(pendingReworkReplacement(f.task.id));
+    assert.equal(events(f.task.id, 'rework_reopened').length, 0);
+    assert.equal(events(f.task.id, 'paseo_workspace_archiving').length, 1);
+  });
+
   for (const source of ['request_changes', 'rejected', 'leader_rework', 'land_conflict']) {
     for (const presence of ['archived', 'missing'] as const) {
       it(`${source} reopens an ${presence} executor immediately in its original copy`, async () => {

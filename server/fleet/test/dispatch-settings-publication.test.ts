@@ -79,10 +79,10 @@ test("settings RPC implementation publishes saved overrides and clearing restore
     assert.equal((await settings.writeSettingsWithDispatch({ file: "config", revision: first.revision, document: first.document })).status, "conflict");
     assert.equal(readFileSync(dispatch.DISPATCH_MATRIX, "utf8"), beforeConflict);
     await settings.writeSettingsWithDispatch({ file: "config", revision: result.snapshot.revision, document: { ...result.snapshot.document, dispatchOverrides: {} } });
-    assert.equal(read(dispatch.DISPATCH_MATRIX).roles.executor.L1[0].profile, "Demo executor.gpt-6.1-sol");
-    assert.equal(read(dispatch.DISPATCH_MATRIX).roles.executor.L1[0].effort, "low");
+    assert.equal(read(dispatch.DISPATCH_MATRIX).roles.executor.L1[0].profile, "Demo executor.gpt-6-luna");
+    assert.equal(read(dispatch.DISPATCH_MATRIX).roles.executor.L1[0].effort, "medium");
     assert.deepEqual(read(join(data, "..", "exports/fleet/dispatch-matrix.json")).roles, read(dispatch.DISPATCH_MATRIX).roles);
     await dispatch.publishFromSnapshotFile();
-    assert.equal(read(dispatch.DISPATCH_MATRIX).roles.executor.L1[1].effort, "low");
+    assert.equal(read(dispatch.DISPATCH_MATRIX).roles.executor.L1.find((row: { profile: string }) => row.profile === "Demo executor.sonnet").effort, "low");
   } finally { console.warn = warn; }
 });

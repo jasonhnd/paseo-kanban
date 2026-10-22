@@ -178,6 +178,7 @@ export function cardFaceTone(input: {
   awaitingMerge: boolean;
   acceptanceMissing: boolean;
 }): "danger" | "warning" | "success" {
+  if (input.status === "blocked" && input.blockedKind === "background") return "warning";
   if (input.status === "blocked" && input.blockedKind === "scheduled" && input.scheduledUntil && Date.parse(input.scheduledUntil) > Date.now()) return "warning";
   if (input.status === "blocked" || isConflictBadge(input.badge)) return "danger";
   if (isLandPendingBadge(input.badge)) return "warning";

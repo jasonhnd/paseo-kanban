@@ -8,3 +8,5 @@ A merge card may depend on a PR card; the board recognises this and will not dea
 6. {progressNote}
 7. Register this session with kanban_supervise before creating cards. An unregistered session cannot create cards.
 {cliFallback}
+{modelDepth}
+{longTaskWait}

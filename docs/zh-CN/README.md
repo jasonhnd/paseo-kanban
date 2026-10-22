@@ -1,5 +1,7 @@
 # Paseo Kanban
 
+默认关闭的一卡一机云执行要求项目开关及 `cloud` 标签，目前支持公开 `paseo-clear-chat` 项目的 Codex/Grok 执行卡。参见[云执行](CLOUD-RUNNER.md)、[运行预算刹车](RUN-BUDGET.md)及[后台等待](WORKFLOW.md)。
+
 用于 [Paseo](https://github.com/getpaseo/paseo) 的单插件，把跨项目代码 agent 看板与 Fleet 阵容、额度、决定和设置放在一起。执行者交活，使用不同实际模型的审查者核对，最后由项目 leader 验收。
 
 [English](../../README.md)

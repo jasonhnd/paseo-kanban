@@ -11,5 +11,73 @@
   "leaderUsage": {
     "reminderTokens": 500000,
     "warningTokens": 750000
+  },
+  "dispatchOverrides": {
+    "executor": {
+      "L1": {
+        "executor.gpt-6-luna": {
+          "effort": "medium"
+        },
+        "executor.gpt-6.1-sol": {
+          "effort": "medium"
+        }
+      },
+      "L2": {
+        "executor.gpt-6.1-sol": {
+          "effort": "medium"
+        }
+      },
+      "L3": {
+        "executor.gpt-6.1-sol": {
+          "effort": "high"
+        }
+      },
+      "L4": {
+        "executor.gpt-6.1-sol": {
+          "effort": "xhigh"
+        }
+      }
+    },
+    "reviewer": {
+      "L1": {
+        "reviewer.gpt-6-luna": {
+          "effort": "high"
+        },
+        "reviewer.gpt-6.1-sol": {
+          "effort": "high"
+        }
+      },
+      "L2": {
+        "reviewer.gpt-6-luna": {
+          "effort": "high"
+        },
+        "reviewer.gpt-6.1-sol": {
+          "effort": "high"
+        }
+      },
+      "L3": {
+        "reviewer.gpt-6-luna": {
+          "effort": "high"
+        },
+        "reviewer.gpt-6.1-sol": {
+          "effort": "high"
+        }
+      },
+      "L4": {
+        "reviewer.gpt-6-luna": {
+          "effort": "high"
+        },
+        "reviewer.gpt-6.1-sol": {
+          "effort": "high"
+        }
+      }
+    },
+    "batch": {
+      "L1": {
+        "batch.gpt-6-luna": {
+          "effort": "medium"
+        }
+      }
+    }
   }
 }

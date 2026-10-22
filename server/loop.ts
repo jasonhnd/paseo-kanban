@@ -26,6 +26,9 @@ export interface SchedulerDeps {
   config?: KanbanConfig;
   agentState?: (agentId: string | null) => AgentLiveness;
   agentActivity?: (agentId: string) => Promise<AgentActivity> | AgentActivity;
+  agentBudget?: TickOptions["agentBudget"];
+  interruptAgent?: TickOptions["interruptAgent"];
+  backgroundWaiting?: TickOptions["backgroundWaiting"];
   now?: Date;
   pools?: PoolSnapshot;
 }
@@ -125,6 +128,9 @@ export function bindScheduler(options: {
               config: deps.config,
               agentState: deps.agentState,
               agentActivity: deps.agentActivity,
+              agentBudget: deps.agentBudget,
+              interruptAgent: deps.interruptAgent,
+              backgroundWaiting: deps.backgroundWaiting,
               now: deps.now,
               pools: deps.pools,
               watchDaemonRestart: true,

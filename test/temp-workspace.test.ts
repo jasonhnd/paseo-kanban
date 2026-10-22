@@ -93,6 +93,7 @@ function launcher(): AgentLauncher & {
       trees.push({ branchName: options.branchName, baseBranch: options.baseBranch, title: options.title, cwd: options.cwd });
       const path = join(dir, "trees", `${trees.length}`);
       mkdirSync(path, { recursive: true });
+      mkdirSync(join(path, ".git"), { recursive: true });
       return { directory: path, workspaceId: `ws-${trees.length}`, name: options.title ?? null, head: "a".repeat(40) };
     },
   };

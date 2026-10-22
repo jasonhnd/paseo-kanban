@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import { getDb } from "./db";
+import { runBudgetSnapshot, type RunBudgetState } from "./run-budget";
 import { readContract } from "./pr";
 import { branchName, laneBranchName } from "./workspace";
 import { readWorktreeCreated } from "./worktree-record";
@@ -136,6 +137,7 @@ export interface TaskDetail {
     createdAt: string;
     updatedAt: string;
   };
+  runBudget?: RunBudgetState | null;
   parents: LinkRef[];
   children: LinkRef[];
   comments: Array<{ id: number; author: string; body: string; createdAt: string }>;
@@ -371,6 +373,7 @@ export function getDetail(id: number): TaskDetail {
   const runs = detailRuns(db, id);
   return {
     task: detailTask(task, card, lane),
+    runBudget: runBudgetSnapshot(id),
     parents: links.parents,
     children: links.children,
     comments,

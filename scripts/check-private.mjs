@@ -19,6 +19,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { identifierSpans } from "./private-identifiers.mjs";
 import { historyObjects } from "./git-objects.mjs";
+import { parseDenylist } from "../shared/privacy-denylist.mjs";
+export { parseDenylist };
 
 const RULES_FILE = join(dirname(fileURLToPath(import.meta.url)), "private-scan.rules.json");
 const CONTEXT = 40;
@@ -49,11 +51,12 @@ export function parseArgs(argv) {
   return options;
 }
 
+
+const regex = (source, flags = "") => new RegExp(source, flags);
+
 export function defaultListPath(env = process.env, home = homedir()) {
   return env.FLEET_PRIVATE_DENYLIST?.trim() || join(home, ".config", "paseo-fleet", "private-denylist.txt");
 }
-
-const regex = (source, flags = "") => new RegExp(source, flags);
 
 /** Compile the generic rules file. */
 export function compileRules(json) {
@@ -96,20 +99,6 @@ export function loadRules() {
   return compileRules(JSON.parse(readFileSync(RULES_FILE, "utf8")));
 }
 
-const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/** One term per line; `/regex/flags` or a case-insensitive literal; `#` starts a comment line. */
-export function parseDenylist(text) {
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("#"))
-    .map((term) => {
-      const literal = /^\/(.+)\/([a-z]*)$/.exec(term);
-      const pattern = literal ? regex(literal[1], literal[2].includes("g") ? literal[2] : `${literal[2]}g`) : regex(escapeRegex(term), "gi");
-      return { id: "private", pattern, allow: [], onlyPaths: null, literal: literal ? null : term };
-    });
-}
 
 /** Read the private denylist; a missing file is a setup error so a local commit never runs without it. */
 export function loadDenylist(listPath) {

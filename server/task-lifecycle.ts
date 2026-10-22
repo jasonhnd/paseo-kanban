@@ -14,6 +14,8 @@ import { expireTaskWorkerTokens, revokeAgentToken, revokeTaskWorkerTokens } from
 import { ROLES, statusLabel, type Status } from "../shared/labels";
 import { addComment, addEvent, appendEvent, now, taskById, type TaskRow } from "./task-record";
 import { t } from "../shared/i18n";
+import { parseRunBudget } from "./run-budget-config";
+import { assertRunBudgetSettled, resetRunBudget } from "./run-budget-control";
 
 export function blockTask(id: number, kind: string, reason: string, actor: string, extra?: Record<string, unknown>): TaskRow & { text?: string } {
   const text = reason.trim();
@@ -168,6 +170,9 @@ function closeOpenRuns(taskId: number, endKind: string, ts: string): void {
 export function unblockTask(id: number, actor: string, extra?: Record<string, unknown>): TaskRow {
   const task = taskById(id);
   if (task.status !== "blocked") throw new KanbanError("illegal_transition", t("taskLifecycle.error.notBlocked"), { from: task.status, to: "ready" });
+  assertRunBudgetSettled(id);
+  const override = extra?.runBudget === undefined ? undefined : parseRunBudget(extra.runBudget);
+  if (override && (typeof extra?.reason !== "string" || !extra.reason.trim())) throw new KanbanError("invalid", t("runBudget.overrideReason"));
   const restore = (task.blocked_from as Status | null) ?? "ready";
   let target: Status = restore === "blocked" || restore === "archived" ? "ready" : restore;
   const departed = target === "running" || target === "reviewing" ? departedAgent(task) : null;
@@ -177,13 +182,13 @@ export function unblockTask(id: number, actor: string, extra?: Record<string, un
   const info = departed
     ? getDb()
         .prepare(
-          `UPDATE tasks SET status = ?, agent_id = NULL, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_wake_text = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
+          `UPDATE tasks SET status = ?, agent_id = NULL, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, background_wait_json = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_wake_text = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
            WHERE id = ? AND status = 'blocked'`,
         )
         .run(target, ts, id)
     : getDb()
         .prepare(
-          `UPDATE tasks SET status = ?, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_wake_text = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
+          `UPDATE tasks SET status = ?, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, background_wait_json = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_wake_text = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
            WHERE id = ? AND status = 'blocked'`,
         )
         .run(target, ts, id);
@@ -193,6 +198,8 @@ export function unblockTask(id: number, actor: string, extra?: Record<string, un
     ? { agentId: departed.agentId, reason: departed.reason, note: departed.note, ...(extra ?? {}) }
     : { ...(extra ?? {}) };
   addEvent(id, "unblocked", "blocked", target, actor, data);
+  if (extra?.via !== "background_wait") resetRunBudget(id);
+  if (override) addEvent(id, "run_budget_override", null, target, actor, { limits: override, reason: extra!.reason, grantedBy: extra!.grantedBy ?? actor, once: true });
   return taskById(id);
 }
 
@@ -215,14 +222,20 @@ export function releaseSameScheduled(
   return releaseSameBlock(id, actor, "scheduled", held, extra);
 }
 
+export function releaseSameBackground(
+  id: number, actor: string, held: { blockedAt: string; agentId: string | null; wakeId: string }, extra?: Record<string, unknown>,
+): TaskRow | null {
+  return releaseSameBlock(id, actor, "background", held, extra);
+}
+
 function releaseSameBlock(
-  id: number, actor: string, kind: "transient" | "scheduled",
+  id: number, actor: string, kind: "transient" | "scheduled" | "background",
   held: { blockedAt: string; agentId: string | null; wakeId?: string }, extra?: Record<string, unknown>,
 ): TaskRow | null {
   const task = taskById(id);
   if (task.status !== "blocked" || task.blocked_kind !== kind) return null;
   if (task.blocked_at !== held.blockedAt || (task.agent_id ?? null) !== held.agentId) return null;
-  if (kind === "scheduled" && task.scheduled_wake_id !== held.wakeId) return null;
+  if (kind !== "transient" && task.scheduled_wake_id !== held.wakeId) return null;
   const restore = (task.blocked_from as Status | null) ?? "ready";
   let target: Status = restore === "blocked" || restore === "archived" ? "ready" : restore;
   const departed = target === "running" || target === "reviewing" ? departedAgent(task) : null;
@@ -234,13 +247,13 @@ function releaseSameBlock(
   const info = departed
     ? getDb()
         .prepare(
-          `UPDATE tasks SET status = ?, agent_id = NULL, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_wake_text = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
+          `UPDATE tasks SET status = ?, agent_id = NULL, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, background_wait_json = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_wake_text = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
            ${where}`,
         )
         .run(target, ts, id, kind, held.blockedAt, held.agentId, task.scheduled_wake_id)
     : getDb()
         .prepare(
-          `UPDATE tasks SET status = ?, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_wake_text = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
+          `UPDATE tasks SET status = ?, blocked_kind = NULL, blocked_reason = NULL, blocked_from = NULL, blocked_at = NULL, hold_reason = NULL, cooldown_until = NULL, background_wait_json = NULL, scheduled_until = NULL, scheduled_wake_id = NULL, scheduled_wake_text = NULL, scheduled_claim_id = NULL, scheduled_claim_until = NULL, nudge_count = 0, updated_at = ?
            ${where}`,
         )
         .run(target, ts, id, kind, held.blockedAt, held.agentId, task.scheduled_wake_id);
@@ -250,6 +263,7 @@ function releaseSameBlock(
     ? { agentId: departed.agentId, reason: departed.reason, note: departed.note, ...(extra ?? {}) }
     : { ...(extra ?? {}) };
   addEvent(id, "unblocked", "blocked", target, actor, data);
+  if (extra?.via !== "background_wait") resetRunBudget(id);
   return taskById(id);
 }
 

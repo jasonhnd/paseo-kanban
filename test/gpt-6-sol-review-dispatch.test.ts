@@ -27,10 +27,10 @@ mkdirSync(join(dir, "fleet"));
 
 const base: DispatchMatrix = JSON.parse(readFileSync(new URL("../shared/fleet/default-dispatch.example.json", import.meta.url), "utf8"));
 const preserved: Record<(typeof TIERS)[number], Array<[string, string]>> = {
-  L1: [["reviewer", "low"], ["reviewer.gpt-6.1-sol", "medium"], ["reviewer.grok", "low"]],
-  L2: [["reviewer", "medium"], ["reviewer.gpt-6.1-sol", "high"], ["reviewer.grok", "medium"]],
-  L3: [["reviewer", "high"], ["reviewer.gpt-6.1-sol", "xhigh"], ["reviewer.grok", "high"]],
-  L4: [["reviewer.fable", "xhigh"], ["reviewer.gpt-6.1-sol", "xhigh"], ["reviewer.grok", "xhigh"]],
+  L1: [["reviewer.gpt-6-luna", "high"], ["reviewer.gpt-6.1-sol", "high"], ["reviewer", "low"], ["reviewer.grok", "low"]],
+  L2: [["reviewer.gpt-6-luna", "high"], ["reviewer.gpt-6.1-sol", "high"], ["reviewer", "medium"], ["reviewer.grok", "medium"]],
+  L3: [["reviewer.gpt-6.1-sol", "high"], ["reviewer.gpt-6-luna", "high"], ["reviewer", "high"], ["reviewer.grok", "high"]],
+  L4: [["reviewer.gpt-6.1-sol", "high"], ["reviewer.gpt-6-luna", "high"], ["reviewer.fable", "high"], ["reviewer.grok", "high"]],
 };
 
 function reviewerRows(tier: string): Array<{ profile: string; effort: string | null }> {
@@ -89,14 +89,14 @@ after(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("the shipped reviewer default appends an independent gpt-6-sol slot at xhigh on every tier", () => {
+test("the shipped reviewer default appends an independent gpt-6-sol slot at high on every tier", () => {
   for (const role of ["executor", "reader", "decision", "batch", "ops_vercel", "ops_cloudflare", "ops_github", "ops_notion"]) {
     assert.equal(JSON.stringify(base.roles[role]).includes(SLOT), false);
   }
   for (const tier of TIERS) {
     const rows = reviewerRows(tier);
     assert.deepEqual(rows.slice(0, preserved[tier].length).map(row => [row.profile, row.effort]), preserved[tier]);
-    assert.deepEqual(rows.at(-1), { profile: SLOT, effort: "xhigh" });
+    assert.deepEqual(rows.at(-1), { profile: SLOT, effort: "high" });
   }
   const en = JSON.parse(readFileSync(new URL("../shared/locales/en/fleet.json", import.meta.url), "utf8")) as Record<string, string>;
   const zh = JSON.parse(readFileSync(new URL("../shared/locales/zh-CN/fleet.json", import.meta.url), "utf8")) as Record<string, string>;
@@ -135,7 +135,7 @@ test("default, override, export, schema and consumer selection keep the new slot
   for (const model of ["gpt-6.1-sol", "demo-executor", "grok-4.7", "claude-sonnet-5", "claude-fable-5"]) {
     for (const tier of TIERS) {
       const row = models[model][tier].find(entry => entry.profile === reviewerSol.name);
-      assert.equal(row?.effort, "xhigh", `${model}/${tier}`);
+      assert.equal(row?.effort, "high", `${model}/${tier}`);
       assert.equal(row?.order, undefined);
     }
   }
@@ -158,7 +158,7 @@ test("default, override, export, schema and consumer selection keep the new slot
   const movedSol = branches(moved)["gpt-6.1-sol"];
   assert.equal(movedSol.L1[0].profile, reviewerSol.name);
   assert.equal(movedSol.L1[0].order, 1);
-  assert.equal(movedSol.L1[0].effort, "xhigh");
+  assert.equal(movedSol.L1[0].effort, "high");
   assert.equal(movedSol.L4[0].profile, reviewerSol.name);
   assert.equal(branches(moved)["demo-executor"].L2.find(entry => entry.profile === reviewer61.name)?.effort, "high");
   const ignored: string[] = [];
@@ -167,21 +167,21 @@ test("default, override, export, schema and consumer selection keep the new slot
   assert.deepEqual(branches(untouched)["gpt-6.1-sol"].L1, models["gpt-6.1-sol"].L1);
   const onlyOld = applyDispatchMatrix(base, { ...options, dispatchOverrides: { reviewer: { L3: { "reviewer.gpt-6.1-sol": { effort: "high" } } } } });
   assert.equal(branches(onlyOld)["demo-executor"].L3.find(entry => entry.profile === reviewer61.name)?.effort, "high");
-  assert.equal(branches(onlyOld)["demo-executor"].L3.find(entry => entry.profile === reviewerSol.name)?.effort, "xhigh");
+  assert.equal(branches(onlyOld)["demo-executor"].L3.find(entry => entry.profile === reviewerSol.name)?.effort, "high");
 
   const exported = buildDispatchMatrixExport(plain, "0.0.0-demo", new Date("2030-01-01T00:00:00.000Z"));
   const parsed = ExportMatrix.parse(exported);
   assert.equal("byExecutorModel" in parsed.roles.reviewer, true);
   assert.equal("byExecutorFamily" in parsed.roles.reviewer, false);
   const consumed = parseDispatchMatrix(parsed);
-  assert.equal(consumed.reviewerModels?.["gpt-6.1-sol"]?.L2?.find(entry => entry.profile === reviewerSol.name)?.effort, "xhigh");
+  assert.equal(consumed.reviewerModels?.["gpt-6.1-sol"]?.L2?.find(entry => entry.profile === reviewerSol.name)?.effort, "high");
   assert.equal(consumed.reviewerModels?.["gpt-6-sol"]?.L4?.some(entry => entry.profile === reviewerSol.name), false);
 
   const selected = route(executor61, [kanban(reviewerSol)], "L2", consumed);
   assert.equal(selected.ok, true);
   if (!selected.ok) return;
   assert.equal(selected.profile.name, reviewerSol.name);
-  assert.equal(selected.effort, "xhigh");
+  assert.equal(selected.effort, "high");
   const spaced = route(executor61, [kanban(reviewerSol)], "L4", consumed, " GPT-6.1-Sol ");
   assert.equal(spaced.ok && spaced.profile.name, reviewerSol.name);
   const sameFamily = route(executorSol, [kanban(reviewer61)], "L2", consumed);

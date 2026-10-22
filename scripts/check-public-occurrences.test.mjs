@@ -13,6 +13,8 @@ function fixture(action) {
     for (const name of ["check-public-occurrences.mjs", "check-private.mjs", "private-identifiers.mjs", "git-objects.mjs"]) {
       cpSync(new URL(name, import.meta.url), join(root, "scripts", name));
     }
+    mkdirSync(join(root, "shared"));
+    cpSync(new URL("../shared/privacy-denylist.mjs", import.meta.url), join(root, "shared/privacy-denylist.mjs"));
     const line = 'export const provider = "PublicVendor";';
     const match = [...line.matchAll(/PublicVendor/g)][0];
     writeFileSync(join(root, "public.ts"), line + "\n");

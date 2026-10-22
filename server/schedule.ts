@@ -23,7 +23,7 @@ import { KanbanError } from "./errors";
 import { avoidedPools, cooldownLabel, noteStartFailure, recentSuccess, reclaimTask, TRANSIENT_START_LIMIT } from "./failures";
 import { loginBlipProfile } from "./login-blip";
 import { recoverLostCreate } from "./lost-agent";
-import { blockLostWorkspace, workspaceFateReader } from "./lost-workspace";
+import { blockLostWorkspace, recoverReworkStartup, reworkStartupInFlight, workspaceFateReader } from "./lost-workspace";
 import { agentLiveness, agentsDir, readAgentRecord, type AgentLiveness } from "./open";
 import { isQuotaWaitReason, quotaWaitLabel } from "../shared/blocked";
 import { onlyRolesBlock, quotaBrief, readPoolSnapshot, STALE_WAKE_MS, staleMinutes, type PoolSnapshot, type QuotaBrief } from "./pools";
@@ -41,6 +41,7 @@ import { scanStalled, type AgentActivity } from "./stall";
 import { waitUserHold } from "./wait-user";
 import { appendEvent, blockTask, getTask, setHold, unblockTask, type TaskRow } from "./store";
 import { resumeScheduledWaits } from "./scheduled-wait";
+import { resumeBackgroundWaits } from "./background-wait";
 import type { PaseoAgentSendOptions } from "@getpaseo/client";
 import { retryTransientBlocks } from "./transient-retry";
 import { tempWorkspaceMessage } from "./temp-workspace";
@@ -52,6 +53,9 @@ import { roleLabel, type Status } from "../shared/labels";
 import { stage } from "./perf";
 import { guardCard, guardStage, withTimeout } from "./guard";
 import { refreshCapacityGuard } from "./capacity-guard";
+import { cloudExecutionEnabled, cloudQueueReason, reconcileCloudMachines } from "./cloud-runner";
+import { isCloudRunning } from "./cloud-record";
+import { scanRunBudgets, type RunBudgetScan } from "./run-budget";
 
 export interface TickOptions {
   now?: Date;
@@ -67,6 +71,9 @@ export interface TickOptions {
   stallIdleMs?: number;
   /** Missing means this tick cannot see agent activity, so stalled cards are left alone. */
   agentActivity?: (agentId: string) => Promise<AgentActivity> | AgentActivity;
+  agentBudget?: RunBudgetScan["read"];
+  interruptAgent?: RunBudgetScan["interrupt"];
+  backgroundWaiting?: RunBudgetScan["backgroundWaiting"];
   /** Read daemon.log and look for agents interrupted by a restart. Tests leave this off. */
   watchDaemonRestart?: boolean;
   /** When set, do not read daemon.log. Null means no restart was seen. */
@@ -256,6 +263,8 @@ async function tryStart(
     return;
   }
   const now = (options.now ?? new Date()).getTime();
+  const cloudWait = cloudQueueReason(task, now);
+  if (cloudWait) { setHold(task.id, cloudWait); held.push({ id: task.id, reason: cloudWait }); return; }
   const role = plannedRole(task);
   let checkedExecutor: { id: string; state: AgentLiveness } | null = null;
   if (task.status === "ready" && lanesClosed(task, config)) {
@@ -269,7 +278,7 @@ async function tryStart(
     held.push({ id: task.id, reason: t("schedule.autoStartOff") });
     return;
   }
-  if (task.status === "rework" && task.role !== "reviewer") {
+  if (task.status === "rework" && task.role !== "reviewer" && !cloudExecutionEnabled(task)) {
     // A round-2 hold stays parked even when the old executor has left. Departed-executor
     // recovery would clear the hold and open a new agent before the leader rules.
     if (awaitingLeaderHold(task.id)) {
@@ -314,7 +323,10 @@ async function tryStart(
     held.push({ id: task.id, reason });
     return;
   }
-  const rework = planReworkReassignment(task, profiles, pools, config, now, (id) =>
+  // A disposable cloud executor has no local agent to resume or replace. A new
+  // review rejection can start its next generation through the normal gates.
+  const cloudRework = task.status === "rework" && cloudExecutionEnabled(task);
+  const rework = cloudRework ? null : planReworkReassignment(task, profiles, pools, config, now, (id) =>
     checkedExecutor?.id === id ? checkedExecutor.state : options.agentState ? options.agentState(id) : isAgentAlive(id) ? "alive" : agentLiveness(id));
   if (rework?.state === "waiting") {
     if (rework.kind === "quota") {
@@ -403,7 +415,7 @@ async function tryStart(
     auto: true,
     pool,
     role: startRole,
-    workspace: divert ? null : locked,
+    workspace: divert || cloudExecutionEnabled(task) ? null : locked,
     occupancy: occ,
     limits: config.concurrency,
     dispatchable: direct ? entry.dispatchable && limited == null : true,
@@ -411,7 +423,7 @@ async function tryStart(
       ? waitingAutoStart(entry.reason)
       : limited ? waitingAutoStart(limited) : null,
     cooldownUntil: switching ? null : task.cooldown_until,
-    recent: sendBack || replacement ? false : recentSuccess(task.id, role, now),
+    recent: sendBack || replacement || cloudRework ? false : recentSuccess(task.id, role, now),
     now,
   });
   if (gate) {
@@ -548,7 +560,7 @@ async function reconcile(
   now: Date,
   agentState: (agentId: string | null) => AgentLiveness,
   inspect?: AgentInspector,
-  launcher?: Pick<AgentLauncher, "inspectWorkspace" | "listWorkspaces">,
+  launcher?: AgentLauncher,
 ): Promise<void> {
   const rows = getDb().prepare("SELECT id, agent_id, updated_at FROM tasks WHERE status IN ('running', 'reviewing')").all() as unknown as Array<{
     id: number;
@@ -560,7 +572,9 @@ async function reconcile(
   for (const row of rows) {
     running.add(row.id);
     const task = getTask(row.id);
+    if (isCloudRunning(task)) continue;
     if ((task.status !== "running" && task.status !== "reviewing") || task.agent_id !== row.agent_id) continue;
+    if (reworkStartupInFlight(task.id, now.getTime())) continue;
     // Before start grace and before the lost-agent reclaim. A dead workspace
     // must not grow a replacement agent. Unknown listings keep the old rule.
     const fate = await workspaceFate(task);
@@ -573,6 +587,10 @@ async function reconcile(
       continue;
     }
     if (fate === "gone") {
+      if (launcher && await recoverReworkStartup(freshWorkspace, launcher, { now: now.getTime() }) !== "unhandled") {
+        missingSince.delete(row.id);
+        continue;
+      }
       blockLostWorkspace(freshWorkspace, agentState(freshWorkspace.agent_id));
       missingSince.delete(row.id);
       continue;
@@ -670,6 +688,7 @@ export async function runTick(options: TickOptions): Promise<TickResult> {
   // Every phase is its own failure domain: one that throws is recorded and the rest of the round still runs.
   const phase = (name: string, fn: () => Promise<unknown> | unknown): Promise<void> =>
     stage(name, () => guardStage(name, errors, fn, now.getTime()));
+  await phase("tick.cloudReconcile", reconcileCloudMachines);
   await phase("tick.wakeStale", () => {
     wakeOnStalePools(pools);
     wakeOnBadMatrix(matrix);
@@ -685,6 +704,7 @@ export async function runTick(options: TickOptions): Promise<TickResult> {
       console.error("[paseo-kanban] land", err instanceof Error ? err.message : err);
     }
   });
+  await phase("tick.runBudget", () => scanRunBudgets({ now, config, read: options.agentBudget, interrupt: options.interruptAgent, backgroundWaiting: options.backgroundWaiting }));
   await phase("tick.reconcile", () => reconcile(now, agentState, options.launcher.inspectAgent, options.launcher));
   await phase("tick.stall", () => scanStalled({
     now,
@@ -744,6 +764,7 @@ export async function runTick(options: TickOptions): Promise<TickResult> {
     }
   });
   await phase("tick.scheduledWait", () => resumeScheduledWaits(now, options.send));
+  await phase("tick.backgroundWait", () => resumeBackgroundWaits(now, options.send));
   await phase("tick.transientRetry", async () => {
     try {
       await retryTransientBlocks(now, config, options.send);

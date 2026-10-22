@@ -399,7 +399,7 @@ function loadEvents(db: DatabaseSync): DocEvent[] {
     `SELECT id, task_id, at, kind, to_status, data_json FROM events
      WHERE (kind IN (
        'worktree_created', 'temp_workspace', 'workspace_bound', 'cleanup_finished',
-       'temp_workspace_cleaned', 'land_pending', 'landed', 'lane_bound',
+       'temp_workspace_cleaned', 'land_pending', 'landed', 'land_settled', 'lane_bound',
        'agent_creating', 'agent_recover_ambiguous',
        'card_tmp_prepared', 'tmp_cleanup_failed', 'tmp_cleaned'
      ) OR to_status IN ('acceptance', 'done', 'archived'))
@@ -1605,6 +1605,7 @@ async function checkCards(
   budget: () => number,
 ): Promise<boolean> {
   const agents = sources.agents?.agents;
+  const landBranches = new Map<string, Promise<string[] | null>>();
   function addTimeout(finding: DoctorFinding): void {
     const matches = cardDecisions(finding.card ?? "", decisions);
     if (matches.length === 0) {
@@ -1657,7 +1658,7 @@ async function checkCards(
         suggestion: t("doctor.ambiguous.suggestion", { ids: ids.join(t("common.listSep")) || t("doctor.ambiguous.seeEvent") }),
       });
     }
-    if (task.status === "blocked") {
+    if (task.status === "blocked" && task.blocked_kind !== "background") {
       const kind = task.blocked_kind && isBlockedKind(task.blocked_kind) ? task.blocked_kind : "transient";
       const limitH = settings.blockedHours[kind === "scheduled" ? "transient" : kind];
       // A planned wait is healthy until its deadline. The normal overdue grace starts there.
@@ -1718,18 +1719,34 @@ async function checkCards(
     if (pending) {
       const row = taskEvents(scan, task.id).findLast((event) => event.kind === "land_pending");
       const waited = ageMs(row?.at, now);
-      if (waited != null && waited >= settings.landPendingMinutes * 60_000) {
+      const created = taskEvents(scan, task.id).findLast(event => event.kind === "worktree_created" && parseData(event.data_json).discarded !== true);
+      const root = created && parseData(created.data_json).root;
+      let missing = pending.missingBranch;
+      let unknown = false;
+      if (typeof root === "string" && sources.git?.repos.includes(root) && pending.branch) {
+        let listed = landBranches.get(root);
+        if (!listed) {
+          const wait = budget();
+          listed = wait > 0 ? withTimeout(sources.git.branches(root), wait).catch(() => null) : Promise.resolve(null);
+          landBranches.set(root, listed);
+        }
+        const branches = await listed;
+        unknown = branches === null;
+        if (branches) missing = !branches.includes(pending.branch);
+      }
+      if (missing || (waited != null && waited >= settings.landPendingMinutes * 60_000)) {
         add({
           id: `card:land:${task.id}`,
-          severity: pending.conflict ? "red" : "yellow",
+          severity: missing || pending.conflict ? "red" : "yellow",
           check: "card",
           project: task.project,
           card: markOf(task),
           taskId: task.id,
           object: pending.branch || "land_pending",
-          symptom: pending.conflict ? t("doctor.land.conflict", { minutes: settings.landPendingMinutes }) : t("doctor.land.waiting", { minutes: settings.landPendingMinutes }),
-          evidence: pending.reason,
-          suggestion: pending.conflict ? t("doctor.land.conflictSuggestion") : t("doctor.land.waitingSuggestion"),
+          symptom: missing ? t("doctor.land.missing") : pending.conflict ? t("doctor.land.conflict", { minutes: settings.landPendingMinutes }) : t("doctor.land.waiting", { minutes: settings.landPendingMinutes }),
+          evidence: missing ? t("missingLand.stopped", { branch: pending.branch, detail: pending.reason }) : pending.reason,
+          suggestion: missing ? t("missingLand.next", { card: markOf(task) }) : unknown ? t("doctor.land.unknownSuggestion")
+            : pending.conflict ? t("doctor.land.conflictSuggestion") : pending.mainDirty ? t("doctor.land.waitingSuggestion") : t("doctor.land.retrySuggestion"),
         });
       }
     }
@@ -2035,15 +2052,16 @@ function checkBoard(
   return { done: true, hold };
 }
 
-function openLand(scan: DoctorScan, taskId: number): { reason: string; branch: string; conflict: boolean } | null {
-  if (taskEvents(scan, taskId).some((event) => event.kind === "landed")) return null;
+function openLand(scan: DoctorScan, taskId: number): { reason: string; branch: string; conflict: boolean; missingBranch: boolean; mainDirty: boolean } | null {
   const row = taskEvents(scan, taskId).findLast((event) => event.kind === "land_pending");
-  if (!row) return null;
+  if (!row || taskEvents(scan, taskId).some(event => event.id > row.id && (event.kind === "landed" || event.kind === "land_settled"))) return null;
   const data = parseData(row.data_json);
   if (typeof data.reason !== "string" || !data.reason.trim()) return null;
   return {
     reason: data.reason,
     branch: typeof data.branch === "string" ? data.branch : "",
     conflict: data.conflict === true,
+    missingBranch: data.missingBranch === true,
+    mainDirty: data.mainDirty === true,
   };
 }

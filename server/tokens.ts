@@ -13,6 +13,21 @@ export interface Identity {
   agentId: string | null;
 }
 
+// Server-local proof of bearer validation. A copied identity object, header or agent-id env label
+// cannot acquire it. Keep the credential out of serialized identities and audit payloads.
+const cardCredentials = new WeakMap<Identity, string>();
+
+/** Recheck a validated card bearer, including revocation/expiry during an asynchronous operation. */
+export function hasLiveCardCredential(identity: Identity): boolean {
+  const token = cardCredentials.get(identity);
+  if (!token) return false;
+  const row = getDb().prepare("SELECT role, task_id, agent_id, expires_at FROM tokens WHERE token = ?").get(token) as
+    | { role: string; task_id: number | null; agent_id: string | null; expires_at: string | null }
+    | undefined;
+  return Boolean(row && !tokenExpired(row.expires_at) && row.task_id != null && row.agent_id &&
+    row.role === identity.role && row.task_id === identity.taskId && row.agent_id === identity.agentId);
+}
+
 /** An agent identity credential, never an unrestricted supervisor or a card-worker token. */
 export const LEADER_MCP_ROLE = "leader-mcp";
 
@@ -122,7 +137,9 @@ export function identityFromToken(token: string): Identity {
     | { role: string; task_id: number | null; agent_id: string | null; expires_at: string | null }
     | undefined;
   if (!row || tokenExpired(row.expires_at)) throw new Error(t("tokens.invalid"));
-  return { role: row.role, taskId: row.task_id, agentId: row.agent_id };
+  const identity = { role: row.role, taskId: row.task_id, agentId: row.agent_id };
+  if (row.task_id != null && row.agent_id) cardCredentials.set(identity, token);
+  return identity;
 }
 
 export function deleteToken(token: string): void {

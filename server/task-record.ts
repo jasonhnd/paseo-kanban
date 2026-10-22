@@ -42,6 +42,7 @@ export interface TaskRow {
   scheduled_wake_text: string | null;
   scheduled_claim_id: string | null;
   scheduled_claim_until: string | null;
+  background_wait_json: string | null;
   nudge_count: number;
   fail_count: number;
   cooldown_until: string | null;

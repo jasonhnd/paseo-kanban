@@ -3,6 +3,7 @@ import { existsSync } from "./perf-fs";
 import type { PaseoApi } from "@getpaseo/client";
 import type { AgentSnapshot, CleanupOps } from "./cleanup";
 import type { AgentLauncher } from "./dispatch";
+import type { StartupEvidence } from "./lost-workspace";
 import { KanbanError } from "./errors";
 import { findAgentFile, readAgentRecord } from "./open";
 import { endNoteFromTimeline } from "./login-blip";
@@ -169,9 +170,37 @@ async function createWorktreeAfterRefresh(
 
 async function snapshotWorkspace(paseo: PaseoApi, workspaceId: string): Promise<ListedWorkspace | null> {
   const handle = paseo.workspaces.ref(workspaceId);
-  const current = handle.current() ?? (await handle.refresh());
+  const current = await handle.refresh();
   if (!current) return null;
   return listedFromChecked(current);
+}
+
+/** A canonical, complete timeline of an already stopped agent is required; a tail with no tools is insufficient. */
+export async function readStartupEvidence(paseo: PaseoApi, agentId: string, workspaceId: string): Promise<StartupEvidence | null> {
+  const handle = paseo.agents.ref(agentId);
+  const [refreshed, workspace] = await Promise.all([handle.refresh(), paseo.workspaces.ref(workspaceId).refresh()]);
+  const agent = refreshed?.agent;
+  if (!agent || agent.workspaceId !== workspaceId) return null;
+  const page = await handle.timeline.refetch({ direction: "tail", limit: 1000, projection: "canonical" });
+  const harmless = new Set(["user_message", "assistant_message", "reasoning", "error", "notification"]);
+  const entries = page.entries;
+  const known = Array.isArray(entries) && entries.every(entry => entry?.item && harmless.has(entry.item.type));
+  // hasOlder=false alone also describes a retained tail whose earlier tool calls were pruned.
+  const fullWindow = page.window && (page.window.minSeq === 0 || page.window.minSeq === 1) &&
+    (entries.length === 0 ? page.window.maxSeq === 0 : entries[0]?.seqStart === 1 && entries.at(-1)?.seqEnd === page.window.maxSeq);
+  const descriptor = workspace as { archivingAt?: unknown; githubRuntime?: { pullRequest?: { isMerged?: unknown; url?: unknown } | null } | null } | null;
+  const pr = descriptor?.githubRuntime?.pullRequest;
+  return {
+    archived: typeof agent.archivedAt === "string" && agent.archivedAt.length > 0,
+    busy: !["closed", "idle", "error"].includes(agent.status) || agent.activeTurn != null,
+    generation: agent.labels?.kanban_start_generation ?? null,
+    workspaceId: agent.workspaceId ?? null,
+    merged: typeof descriptor?.archivingAt === "string" && descriptor.archivingAt.length > 0 && pr?.isMerged === true,
+    ...(typeof pr?.url === "string" && pr.url ? { pullRequestUrl: pr.url } : {}),
+    timelineComplete: known && Boolean(fullWindow) && page.agentId === agentId && page.projection === "canonical" && page.error === null &&
+      page.hasOlder === false && page.hasNewer === false && page.gap === false && page.staleCursor === false,
+    toolCalls: Array.isArray(entries) ? entries.filter(entry => entry?.item?.type === "tool_call").length : -1,
+  };
 }
 
 /**
@@ -426,6 +455,9 @@ export function launcherFrom(paseo: PaseoApi, beforeStart?: () => Promise<void>)
     },
     inspectWorkspace(workspaceId) {
       return snapshotWorkspace(paseo, workspaceId);
+    },
+    inspectStartup(agentId, workspaceId) {
+      return readStartupEvidence(paseo, agentId, workspaceId);
     },
     listModels(provider) {
       return paseo.providers.listModels(provider);

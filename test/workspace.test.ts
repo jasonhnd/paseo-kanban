@@ -152,6 +152,7 @@ describe("workspace reuse", () => {
   it("keeps execute, review, and rework in one worktree workspace and passes the parent project id", async () => {
     const root = room("repo");
     const tree = room("repo-tree");
+    mkdirSync(join(tree, ".git"));
     const calls: Array<{ projectId?: string | null; branchName: string }> = [];
     const created: Array<{ cwd: string; workspaceId?: string }> = [];
     let sent = 0;

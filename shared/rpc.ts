@@ -1,5 +1,6 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
+import { runBudgetSchema } from "./run-budget";
 import { decisionsSnapshotSchema, leaderTargetSchema } from "./decisions";
 import { settingsDocumentSchema, settingsReadSchema, settingsWriteSchema } from "./settings";
 
@@ -15,6 +16,7 @@ export const cardSchema = z.object({
   model: z.string().nullable(),
   agentId: z.string().nullable(),
   reviewRound: z.number(),
+  reviewStatus: z.string().nullable().optional(),
   blockedAt: z.string().nullable(),
   scheduledUntil: z.string().nullable().optional(),
   blockedKind: z.string().nullable(),
@@ -177,6 +179,7 @@ export const historyRpc = defineRpc({
 });
 
 export const taskDetailSchema = z.object({
+  runBudget: runBudgetSchema.nullish(),
   task: cardSchema.extend({
     brief: z.string(),
     workspacePath: z.string().nullable(),
