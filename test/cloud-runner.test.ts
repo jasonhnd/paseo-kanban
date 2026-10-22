@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, beforeEach, test } from "node:test";
@@ -19,11 +19,14 @@ import { setLanguage } from "../shared/i18n";
 import { cloudDelivery, cloudRunRecord } from "../server/cloud-record";
 import { cloudPrivacyFindings } from "../server/cloud-privacy";
 import { requestChanges } from "../server/flow";
+import { executable as fixtureExecutable } from "../scripts/isolated-environment.mjs";
 
 delete process.env.KANBAN_TOKEN;
 delete process.env.PASEO_AGENT_ID;
 const root = mkdtempSync(join(tmpdir(), "cloud-runner-"));
-const realGit = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+const realGit = fixtureExecutable("git");
+// The remote shell fixture declares its POSIX tools without inheriting provider executables.
+const shellTools = ["mkdir", "grep", "tail"].map(name => [name, fixtureExecutable(name, `${process.env.PATH}:/bin:/usr/bin`)]);
 let dir: string;
 let repo: string;
 let remote: string;
@@ -69,6 +72,7 @@ beforeEach(async () => {
   process.env.KANBAN_TMP_ROOT = join(dir, "scratch");
   process.env.FLEET_PRIVATE_DENYLIST = join(dir, "denylist.txt");
   writeFileSync(process.env.FLEET_PRIVATE_DENYLIST, "CloudPrivateTerm\n");
+  for (const [name, target] of shellTools) symlinkSync(target, join(tools, name));
   git(repo, "init", "-b", "main");
   writeFileSync(join(repo, "package.json"), '{"name":"cloud-fixture","version":"1.0.0","scripts":{"test":"node -e \\\"process.exit(0)\\\""}}\n');
   writeFileSync(join(repo, "package-lock.json"), '{"name":"cloud-fixture","version":"1.0.0","lockfileVersion":3,"packages":{}}\n');
