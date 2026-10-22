@@ -14,7 +14,7 @@ import { runKanban } from "../server/cli";
 import { setWakeSender } from "../server/bus";
 import { cardMark } from "../server/card-ref";
 import { drainCleanups, installCleanup, noteOverdueArchives, type CleanupOps } from "../server/cleanup";
-import { DEFAULT_ARCHIVE_DEADLINE_MS, DEFAULT_CONCURRENCY, loadConfig, saveConfig, setProjectWorkspace } from "../server/config";
+import { DEFAULT_ARCHIVE_DEADLINE_MS, DEFAULT_CONCURRENCY, loadConfig, saveConfig, setProjectCode, setProjectWorkspace } from "../server/config";
 import { closeDb, getDb } from "../server/db";
 import { type AgentLauncher } from "../server/dispatch";
 import { startTask } from "./helpers/compat-dispatch";
@@ -4424,6 +4424,9 @@ describe("accept merges a temporary branch when the project has no remote", () =
 
   it("finishes a dirty main directory, keeps the worktree, and lands on the next tick", async () => {
     const root = await makeRepo("dirty-root");
+    // Earlier terminal fixtures can age past the deadline and share the derived DIR code.
+    // Keep the formatted audit assertions specific to this queued landing.
+    setProjectCode("dirty", "DIRTYLAND");
     const card = await branchCard(root, "dirty", "feature", "feature.txt", "feature\n");
     writeFileSync(join(root, "scratch.txt"), "dirty\n");
     const result = await acceptTask(card.id);
