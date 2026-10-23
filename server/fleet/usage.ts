@@ -1,3 +1,5 @@
+import { mergeXUltraPlans, X_ULTRA, xUltraReservePct, type XUltraReserve } from "../../shared/fleet/x-ultra";
+import { reconcileXUltraWindow } from "./x-ultra";
 /// <reference types="node" />
 import { providerBanned } from "../../shared/fleet/provider-policy";
 // "Am I using what I pay for?" — token usage per plan and model, valued at API list prices,
@@ -33,7 +35,7 @@ import { antigravityDisplayWindows, antigravityUsageRequested, readAntigravityUs
 import { settleSuperGrokChoice, type SuperGrokChoice } from "./grok-usage";
 import { configuredStopPct, type CursorReadMeta, MANUAL_STOP, oneMonthBefore, poolStatus, type PoolStatus, type SuperGrokReadMeta, writePoolStatus } from "./pools";
 import { textHidden } from "../../shared/fleet/hidden-plans";
-import { adapterSwitches, readHiddenPlans, readBannedProviders } from "./adapters/config";
+import { adapterSwitches, readHiddenPlans, readBannedProviders, readUnknownQuotaPolicy } from "./adapters/config";
 import { judgeAt, knownQuotaFailure, planBalance, type PlanBalance, windowsFor } from "./adapters/windows";
 import { type CouponBoardView, codexCreditsCardText, readCodexCreditsForDispatch, refreshCouponRound } from "./reset-coupons";
 import { cursorLivePct, cursorMeta, cursorReadForPlan, companyCursor, companyWindows, dispatchView, poolView, withCursorLink } from "./usage-view";
@@ -58,6 +60,7 @@ const RESCAN_MS = 5 * 60_000;
  * See examples/plans.example.json and shared/quota-adapters.ts for `adapter`.
  */
 interface PlanConfig {
+  xUltraReserve?: XUltraReserve;
   id: string;
   name: string;
   /**
@@ -132,7 +135,7 @@ function usablePlans(raw: readonly unknown[]): PlanConfig[] {
     const providers = Array.isArray(plan.providers) ? plan.providers.filter((p): p is string => typeof p === "string") : [];
     out.push({ ...(plan as PlanConfig), name: typeof plan.name === "string" ? plan.name : plan.id, providers, priceUsdMonthly: plan.priceUsdMonthly ?? null, dispatch: plan.dispatch === true, coverage: plan.coverage ?? "" });
   }
-  return out;
+  return mergeXUltraPlans(out);
 }
 
 /** No plan to judge. Writing a snapshot without pools would let Kanban treat every pool as open, so none is written. */
@@ -290,9 +293,11 @@ function planOf(cfg: PlanConfig, planConfigs: PlanConfig[], ctx: PlanContext): U
   const windows = windowsFor(cfg, adapter, { ...ctx, ...(ambiguous ? { quotaError: t("quota.setup.ambiguousSource") } : {}) }).map((w) => ({ ...w, pool: w.primary ? cfg.id : poolOfWindow(cfg, adapter, w.label) }));
   const bundled = new Set([...cfg.providers, ...(cfg.includes ?? []).flatMap((id) => planConfigs.find((p) => p.id === id)?.providers ?? [])]);
   const api30dUsd = ctx.sumUsd((r) => bundled.has(r.provider) && r.hour >= Date.now() - 30 * DAY);
-  const stopPct = configuredStopPct(cfg);
+  const sharedReserve = cfg.id === X_ULTRA ? xUltraReservePct(cfg.xUltraReserve) : null;
+  const stopPct = sharedReserve !== null ? Math.min(configuredStopPct(cfg) ?? 97, 100 - sharedReserve) : configuredStopPct(cfg);
   return {
     id: cfg.id,
+    ...(cfg.xUltraReserve ? { xUltraReserve: cfg.xUltraReserve } : {}),
     name: cfg.name,
     adapter,
     ...(baseAdapterOf(cfg) === CURSOR_API ? { cursorMonitoring: ctx.switches[CURSOR_API] } : {}),
@@ -411,7 +416,7 @@ export async function assemble(paseo: PaseoApi, period: Period, options?: { capt
     readAgentRecords(),
     readRoleProfiles(),
     // cursor-api off: no Cursor reading at all; its plans fall back to the hand copy.
-    switches[CURSOR_API] && planConfigs.some(p => adapterOf(p, switches) === CURSOR_API)
+    switches[CURSOR_API] && planConfigs.some(p => adapterOf(p, switches) === CURSOR_API || p.id === X_ULTRA)
       ? captureCursorUsage().then(async captured => {
         const local = await readCursorUsageFile();
         return captured && !captured.ok && captured.error ? { ...(local ?? captured), ok: false, error: captured.error } : local ?? captured;
@@ -445,7 +450,13 @@ export async function assemble(paseo: PaseoApi, period: Period, options?: { capt
   const catalog = poolCatalog(planConfigs, switches);
   const tables = periodTables({ rows, period, planConfigs, priceMemo, estimated, sessionRole: sessionRolesOf(records, profiles) });
   warnings.push(...tableWarnings(tables.unpriced, planConfigs));
+  const sharedProviderWindow = plans.find(p => p.id === X_ULTRA)?.windows[0];
   const supergrokRead = await overlaySuperGrok(plans, planConfigs, options?.captureGrok === true, switches);
+  const shared = plans.find(p => p.id === X_ULTRA);
+  if (shared) {
+    shared.windows = [reconcileXUltraWindow(shared.windows[0], cursorReading, Date.now(), sharedProviderWindow)];
+    if (supergrokRead) supergrokRead.sourceText = t("quota.xUltra.sources", { at: shared.windows[0].sampledAt ?? "?" });
+  }
   const generatedAt = new Date().toISOString();
   // From the plans.json already read above: no extra file, CLI, or daemon call on the panel path.
   const override = activeDispatchPriority(plansFile, Date.parse(generatedAt));
@@ -645,6 +656,7 @@ async function buildUsageWithPools(paseo: PaseoApi, period: Period): Promise<Boa
     codexBurnWeek: coupons?.codexBurnWeek ?? null,
     codexCredits,
     bannedProviders: readBannedProviders(),
+    unknownQuota: readUnknownQuotaPolicy(),
   };
   if (plansError) {
     logPlansError(plansError);

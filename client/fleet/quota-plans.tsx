@@ -29,6 +29,7 @@ import {
   planNote,
   poolKey,
   poolLineKind,
+  poolForecastText,
   priceButtonLabel,
   priceDraft,
   quotaWindowReadText,
@@ -118,10 +119,11 @@ function WindowPool({ s, plan, pools, index }: {
   if (!isFirstPoolWindow(plan.windows, plan.id, index)) return null;
   const pool = pools[poolKey(plan.id, plan.windows[index] ?? {})];
   const kind = poolLineKind(pool);
-  if (!kind) return null;
+  if (!pool) return null;
   return (
     <View style={{ gap: 4 }}>
-      <Badge s={s} label={kind.label} tone={kind.tone} />
+      {kind ? <Badge s={s} label={kind.label} tone={kind.tone} /> : null}
+      <Text style={s.muted}>{poolForecastText(pool)}</Text>
       {pool?.reason ? <Text style={s.text}>{quotaPageReason(pool.reason)}</Text> : null}
     </View>
   );
@@ -167,6 +169,7 @@ function PaceRow({ s, name, pool }: { s: Styles; name: string; pool: PoolView })
       </View>
       <Text style={s.muted}>{paceDaysLine(pool)} · {paceProgressText(pool.usedPct, pool.pacePct)}</Text>
       <Text style={s.muted}>{paceDailyLine(pool)}</Text>
+      <Text style={s.muted}>{poolForecastText(pool)}</Text>
       {pool.earlyReset ? <Text style={s.muted}>{pool.earlyReset}</Text> : null}
     </View>
   );

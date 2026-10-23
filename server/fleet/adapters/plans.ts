@@ -1,3 +1,4 @@
+import { mergeXUltraPlans } from "../../../shared/fleet/x-ultra";
 /// <reference types="node" />
 import { providerBanned } from "../../../shared/fleet/provider-policy";
 import { readBannedProviders } from "./config";
@@ -21,7 +22,7 @@ export const PLANS_FILE = join(STATE_DIR, "plans.json");
 export function plansOf(file: unknown): PlanSource[] {
   const plans = file && typeof file === "object" ? (file as { plans?: unknown }).plans : undefined;
   if (!Array.isArray(plans)) return [];
-  return plans.filter((plan): plan is PlanSource => Boolean(plan) && typeof plan === "object" && typeof (plan as { id?: unknown }).id === "string");
+  return mergeXUltraPlans(plans.filter((plan): plan is PlanSource => Boolean(plan) && typeof plan === "object" && typeof (plan as { id?: unknown }).id === "string"));
 }
 
 export async function readPlanSources(path: string = PLANS_FILE): Promise<PlanSource[]> {

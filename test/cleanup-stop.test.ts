@@ -3,6 +3,7 @@ import { zhCN, zhCNPart } from "./helpers/locale";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { after, beforeEach, describe, it } from "node:test";
 import { setWakeSender } from "../server/bus";
 import { CARD_ERROR_LIMIT, cardErrorBlocks, readCleanupEvents, RETRY_ATTEMPT_LIMIT } from "../server/archive-book";
@@ -13,8 +14,9 @@ import { closeDb, getDb } from "../server/db";
 import { createTask } from "../server/store";
 import { resetAgentAliveCheck, resetBoardWakeForTests, setAgentAliveCheck } from "../server/wake";
 
-const dir = mkdtempSync(join("/tmp", "cleanup-stop-"));
+const dir = mkdtempSync(join(tmpdir(), "cleanup-stop-"));
 mkdirSync(join(dir, "agents"), { recursive: true });
+const previousDataDir = process.env.KANBAN_DATA_DIR;
 process.env.KANBAN_DATA_DIR = dir;
 process.env.KANBAN_AGENTS_DIR = join(dir, "agents");
 const MIN = 60_000;
@@ -28,7 +30,8 @@ after(() => {
   setWakeSender(() => {});
   closeDb();
   rmSync(dir, { recursive: true, force: true });
-  delete process.env.KANBAN_DATA_DIR;
+  if (previousDataDir === undefined) delete process.env.KANBAN_DATA_DIR;
+  else process.env.KANBAN_DATA_DIR = previousDataDir;
   delete process.env.KANBAN_AGENTS_DIR;
 });
 

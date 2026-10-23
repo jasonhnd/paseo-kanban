@@ -1,3 +1,4 @@
+import { canonicalPoolRows } from "../../shared/fleet/x-ultra";
 /// <reference types="node" />
 import { capturePolicyDigest, publishPolicySnapshot } from "../application/policy-snapshot";
 import { buildPoolStatusExport, buildDispatchMatrixExport, producerVersion } from "./exports";
@@ -23,6 +24,7 @@ import {
   type DispatchProfile,
   type DispatchStats,
   DAY_MS,
+  type EffortRun,
   lineupForRoles,
   type PoolFlags,
   profilesFromConfig,
@@ -44,6 +46,7 @@ import { priceFor } from "./prices";
 import { QUOTA_HISTORY_FILE, runsInSpan, samplesInPeriod, spanOf, type HistorySample } from "./quota-history";
 import { roleOf } from "./records";
 import { CONFIG, type Json, logSwallowed, PASEO_DIR, readJson, STATE_DIR, writeJson } from "./util";
+import type { RunCost } from "../../shared/fleet/run-cost";
 import { t, tIn } from "../../shared/fleet/i18n";
 import { loadDispatchSettings } from "./dispatch-settings";
 
@@ -246,7 +249,7 @@ export async function readDispatchPriority(now: number): Promise<DispatchPriorit
   return activeDispatchPriority(await readJson<Json>(PLANS_FILE, {}), now);
 }
 
-async function pricedHits(files: Record<string, ScanFile>, sinceMs: number): Promise<{ hits: UsageHit[]; claude: ClaudeSessionInput[] }> {
+async function pricedHits(files: Record<string, ScanFile>, sinceMs: number): Promise<{ hits: UsageHit[]; claude: ClaudeSessionInput[]; priceOf: (provider: string, model: string) => ReturnType<typeof priceFor> }> {
   const plans = await readJson<{ prices?: Record<string, Json> }>(PLANS_FILE, {});
   const overrides = plans.prices ?? {};
   const memo = new Map<string, Awaited<ReturnType<typeof priceFor>>>();
@@ -288,7 +291,7 @@ async function pricedHits(files: Record<string, ScanFile>, sinceMs: number): Pro
     await consume(file.sessionId, file.b, file.provider === "claude" ? path : null);
   }
   for (const row of await ledgerBuckets()) await consume(row.sessionId, row.b, null);
-  return { hits, claude };
+  return { hits, claude, priceOf };
 }
 
 function poolDeltas(pools: Record<string, PoolFlags>, samples: HistorySample[], runs: Array<{ profile: string; at: string }>, profiles: DispatchProfile[], catalog: readonly PoolEntry[], now: number): Array<{ pool: string; deltaPct: number | null; runs: number }> {
@@ -305,7 +308,7 @@ function poolDeltas(pools: Record<string, PoolFlags>, samples: HistorySample[], 
     const mine = samplesInPeriod(samples, key, pool.resetsAt ?? null, bounds.start, Math.min(bounds.end, now));
     const sorted = [...mine].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
     const resets = new Map(samples.map((sample) => {
-      const row = sample.pools?.[key];
+      const row = canonicalPoolRows(sample.pools ?? {})[key];
       return [row && "observedAt" in row ? row.observedAt : sample.at, row?.resetsAt ?? null];
     }));
     let first = 0;
@@ -346,6 +349,7 @@ export async function publishFromSnapshotFile(now = Date.now()): Promise<Dispatc
 
 /** Build and write the matrix and the stats. Failures are the caller's to log; the pool snapshot is already on disk. */
 export async function publishDispatch(pools: Record<string, PoolStatus>, now = Date.now(), poolDefs?: PoolEntry[], capturedDigest: string | null = capturePolicyDigest(), compatibilityOnly = false): Promise<DispatchStats> {
+  pools = canonicalPoolRows(pools);
   const [base, profiles, override, catalog] = await Promise.all([loadBaseMatrix(), loadProfiles(), readDispatchPriority(now), poolDefs ?? readPoolCatalog()]);
   const dispatchSettings = await loadDispatchSettings(profiles ?? []);
   // Claude's spend classification follows the Claude main pool, whatever plans.json calls it.
@@ -360,7 +364,7 @@ export async function publishDispatch(pools: Record<string, PoolStatus>, now = D
   const samples = Array.isArray(history.samples) ? history.samples : [];
   const scan = await readJson<{ files?: Record<string, ScanFile> }>(SCAN_CACHE, { files: {} });
   const weekStart = claudeWeekStart((claudeId ? flags[claudeId]?.resetsAt : null) ?? null, now);
-  const { hits, claude } = await pricedHits(scan.files ?? {}, Math.min(since, weekStart) - 2 * 60 * 60 * 1000);
+  const { hits, claude, priceOf } = await pricedHits(scan.files ?? {}, Math.min(since, weekStart) - 2 * 60 * 60 * 1000);
   const agents = profiles ? await readAgents(profiles) : { bySession: {}, sessionsByAgent: new Map<string, string[]>() };
   const windowStart = now - STATS_WINDOW_DAYS * DAY_MS;
   const attributable: AttributableRun[] = [];
@@ -386,12 +390,25 @@ export async function publishDispatch(pools: Record<string, PoolStatus>, now = D
     });
   }
   const usage = assignUsage(attributable, hits);
-  const effortRuns = attributable.map((run) => ({
-    profile: run.profile,
-    effort: run.effort,
-    tokens: usage.get(run.id)?.tokens ?? null,
-    usd: usage.get(run.id)?.usd ?? null,
-  }));
+  // Durable end-of-run observations survive cleanup of the agent/session metadata.
+  // A record without usable tokens still needs the transcript fallback.
+  const costs = await readJson<{ records?: RunCost[] }>(join(STATE_DIR, "run-costs.json"), {});
+  const durable = new Map((Array.isArray(costs.records) ? costs.records : []).map(row => [String(row.runId), row]));
+  const effortRuns: EffortRun[] = [];
+  const valid = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0;
+  for (const run of attributable) {
+    const cost = durable.get(run.id);
+    let measured = usage.get(run.id) ?? { tokens: null, usd: null };
+    if (cost && valid(cost.tokensIn) && valid(cost.tokensOut) && Number.isFinite(cost.tokensIn + cost.tokensOut)) {
+      const profile = profiles?.find(p => p.name === run.profile);
+      const price = await priceOf(cost.provider ?? profile?.provider ?? "", cost.model ?? profile?.model ?? "");
+      const cached = valid(cost.tokensCached) && cost.tokensCached <= cost.tokensIn ? cost.tokensCached : 0;
+      // Run totals include cached input but do not identify per-call long-context tiers.
+      const usd = publicPriceUsd([cost.tokensIn - cached, cached, 0, 0, cost.tokensOut], false, price);
+      measured = { tokens: cost.tokensIn + cost.tokensOut, usd };
+    }
+    effortRuns.push({ profile: run.profile, effort: run.effort, ...measured });
+  }
   const runPoints = runRows.flatMap((run) => (run.profile && run.startedAt ? [{ profile: run.profile, at: run.startedAt }] : []));
   const claudePace = claudeId ? flags[claudeId] : undefined;
   const claudeSpend: ClaudeSpend | null = claudePace

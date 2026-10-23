@@ -119,7 +119,8 @@ test("isolated Grok quota reads twice return every process and socket count to z
 });
 
 for (const reader of ["grok", "cursor"] as const) {
-  for (const mode of ["timeout", "login", "frame-error", "partial-open"] as const) {
+  for (const mode of ["timeout", "login", "trust", "modern", "frame-error", "partial-open"] as const) {
+    if (reader === "cursor" && (mode === "trust" || mode === "modern")) continue;
     test(`${reader} ${mode} closes the real screen and its full fake process tree`, { skip: !native, timeout: 20_000 }, async (t) => {
       const f = terminal(t, mode);
       let closed = false;
@@ -135,10 +136,16 @@ for (const reader of ["grok", "cursor"] as const) {
       const reading = reader === "grok"
         ? await (await import("../grok-usage")).readGrokScreenVia(io, timeout, fastSleep)
         : await (await import("../cursor-usage")).readCursorScreenVia(io, timeout, fastSleep);
-      assert.equal(reading.ok, false);
-      assert.ok(reading.error);
-      if (mode === "frame-error") assert.match(reading.error, /Synthetic frame failure/);
-      if (mode === "partial-open") assert.match(reading.error, /Synthetic open failure/);
+      if (reader === "grok" && mode === "modern") {
+        assert.equal(reading.ok, true, reading.error ?? "modern quota read succeeds");
+        assert.equal("usedPct" in reading && reading.usedPct, 42);
+      } else {
+        assert.equal(reading.ok, false);
+        assert.ok(reading.error);
+      }
+      if (reader === "grok" && mode === "trust") assert.match(reading.error!, /grok_folder_trust/);
+      if (mode === "frame-error") assert.match(reading.error!, /Synthetic frame failure/);
+      if (mode === "partial-open") assert.match(reading.error!, /Synthetic open failure/);
       assert.equal(closed, true);
       await f.clean();
     });

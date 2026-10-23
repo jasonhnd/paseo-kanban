@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { assertTestSafePath } from "../storage/test-safety";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile, rename, open, rm, mkdir } from "node:fs/promises";
@@ -100,6 +101,7 @@ export async function runJson<T>(cmd: string, args: string[], timeoutMs?: number
 }
 
 export async function readJson<T>(path: string, fallback: T): Promise<T> {
+  assertTestSafePath(path);
   try {
     return JSON.parse(await readFile(path, "utf8")) as T;
   } catch {
@@ -111,6 +113,7 @@ export async function readJson<T>(path: string, fallback: T): Promise<T> {
  * Last rename wins. This does not serialize read/modify/write operations or sync data to disk.
  */
 export async function writeJson(path: string, data: unknown): Promise<void> {
+  assertTestSafePath(path);
   await mkdir(dirname(path), { recursive: true });
   const tmp = join(dirname(path), `.${basename(path)}.${process.pid}.${randomUUID()}.tmp`);
   // Exclusive creation establishes ownership. If open fails, never remove that path.

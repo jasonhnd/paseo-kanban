@@ -10,7 +10,7 @@ const runner = new URL("../bin/test.mjs", import.meta.url);
 const phasesModule = new URL("./helpers/test-phases.mjs", import.meta.url);
 const roots: string[] = [];
 after(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
-function runFixture(failure?: "functional" | "performance" | "pollution", inheritedLegacy?: string | null) {
+function runFixture(failure?: "functional" | "performance" | "pollution", inheritedLegacy?: string | null, concurrency?: string) {
   const root = mkdtempSync(join(tmpdir(), "kanban-test-runner-"));
   roots.push(root);
   mkdirSync(join(root, "test"));
@@ -24,13 +24,14 @@ function runFixture(failure?: "functional" | "performance" | "pollution", inheri
   writeFileSync(fixtureRunner, readFileSync(runner, "utf8")
     .replace('import.meta.resolve("tsx")', JSON.stringify(import.meta.resolve("tsx")))
     .replace('"../test/helpers/test-tmp.mjs"', JSON.stringify(helperUrl)));
-  for (const [name, delay] of [["fast", 10], ["slow", 100]] as const) {
+  for (const [name, delay] of [["fast", concurrency === "1" ? 1500 : 10], ["slow", 100]] as const) {
     writeFileSync(join(root, "test", `${name}.test.ts`), `
       import { test } from "node:test";
       import assert from "node:assert/strict";
       import { existsSync, mkdirSync, writeFileSync } from "node:fs";
       import { join } from "node:path";
       test("${name} worker", async () => {
+        ${concurrency === "1" && name === "slow" ? 'assert.ok(existsSync("fast"), "single-worker limit must finish the first file before starting the next");' : ""}
         await new Promise(resolve => setTimeout(resolve, ${delay}));
         assert.ok(!existsSync("${name}"), "ordinary tests must run once");
         writeFileSync("${name}", String(process.pid));
@@ -81,6 +82,8 @@ function runFixture(failure?: "functional" | "performance" | "pollution", inheri
   const env = { ...process.env };
   // A child --test invocation must be a fresh runner, not a recursive test worker.
   delete env.NODE_TEST_CONTEXT;
+  if (concurrency === undefined) delete env.KANBAN_TEST_CONCURRENCY;
+  else env.KANBAN_TEST_CONCURRENCY = concurrency;
   if (inheritedLegacy === null) delete env.AFC_LEGACY_DATA_DIR;
   else if (inheritedLegacy !== undefined) env.AFC_LEGACY_DATA_DIR = inheritedLegacy;
   const result = spawnSync(process.execPath, [fixtureRunner], { cwd: tmpdir(), env, encoding: "utf8", timeout: SUBPROCESS_TIMEOUT_MS });
@@ -92,6 +95,22 @@ it("test runner waits for all parallel workers before the isolated performance p
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(readFileSync(join(result.root, "performance"), "utf8"), "ran");
   assert.equal(readFileSync(join(result.root, "tick-scale"), "utf8"), "ran");
+});
+it("test runner applies an explicit single-worker limit without dropping either phase", () => {
+  const result = runFixture(undefined, undefined, "1");
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  for (const file of ["fast", "slow", "ordinary", "performance", "tick-scale"]) {
+    assert.equal(existsSync(join(result.root, file)), true, file);
+  }
+});
+it("test runner rejects invalid concurrency before starting workers", () => {
+  for (const value of ["0", "-1", "1.5", "65", "invalid", ""]) {
+    const result = runFixture(undefined, undefined, value);
+    assert.notEqual(result.status, 0, value);
+    assert.match(result.stderr, /KANBAN_TEST_CONCURRENCY.*integer from 1 to 64/);
+    assert.equal(existsSync(join(result.root, "fast")), false);
+    assert.equal(existsSync(join(result.root, "performance")), false);
+  }
 });
 it("test runner rejects a whole phase that adds a card directory in its default project root", () => {
   const result = runFixture("pollution");
@@ -116,14 +135,14 @@ it("test runner gives the run a private TMPDIR and removes it afterwards", () =>
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const fast = readFileSync(join(result.root, "fast.tmpdir"), "utf8");
   const slow = readFileSync(join(result.root, "slow.tmpdir"), "utf8");
-  assert.equal(fast, slow);
+  assert.equal(dirname(fast), dirname(slow), "workers share the outer run but own separate homes");
   assert.equal(readFileSync(join(result.root, "fast.test-marker"), "utf8"), fast);
   assert.equal(readFileSync(join(result.root, "slow.test-marker"), "utf8"), slow);
   assert.match(fast, /kanban-test-\d+-/);
   assert.notEqual(fast, process.env.TMPDIR);
   for (const worker of ["fast", "slow"]) {
     const cardRoot = readFileSync(join(result.root, `${worker}.card-root`), "utf8");
-    assert.ok(cardRoot.startsWith(fast + "/"));
+    assert.ok(cardRoot.startsWith(readFileSync(join(result.root, `${worker}.tmpdir`), "utf8") + "/"));
     assert.notEqual(cardRoot, process.env.KANBAN_TMP_ROOT);
     assert.equal(existsSync(cardRoot), false);
   }
@@ -156,7 +175,8 @@ it("coverage keeps c8 data and test temp dirs under one root that is removed aft
   roots.push(root);
   for (const dir of ["bin", "test/helpers", "server", "shared"]) mkdirSync(join(root, dir), { recursive: true });
   const repo = new URL("..", import.meta.url).pathname;
-  for (const file of ["bin/coverage.mjs", "test/helpers/test-tmp.mjs", "test/helpers/card-root-audit.mjs", "test/helpers/coverage-phases.mjs", "test/helpers/test-phases.mjs"]) copyFileSync(join(repo, file), join(root, file));
+  mkdirSync(join(root, "server/storage"), { recursive: true });
+  for (const file of ["server/storage/test-safety.ts", "test/helpers/test-environment.mjs", "bin/coverage.mjs", "test/helpers/test-tmp.mjs", "test/helpers/card-root-audit.mjs", "test/helpers/coverage-phases.mjs", "test/helpers/test-phases.mjs"]) copyFileSync(join(repo, file), join(root, file));
   symlinkSync(join(repo, "node_modules"), join(root, "node_modules"));
   writeFileSync(join(root, "server/mod.ts"), "export const value = 1;\n");
   writeFileSync(join(root, "test/a.test.ts"), `

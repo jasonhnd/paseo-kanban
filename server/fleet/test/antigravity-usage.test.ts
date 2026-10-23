@@ -481,10 +481,13 @@ describe("same pool", () => {
     assert.equal(card?.windows.some(row => row.id.includes(ANTIGRAVITY_ACP_WINDOW)), false);
   });
 
-  test("quota protection none is an explicit bypass", () => {
+  test("quota protection none bypasses the hard hold while unknown quota remains bounded", () => {
     const windows = windowsFor(plan("gemini"), ANTIGRAVITY_CLI, context(reading(PLENTIFUL)));
     const status = poolStatus([usage(windows, { quotaProtection: "none" })], { now: NOW })["gemini-pool"];
     assert.equal(status.dispatchable, true);
-    assert.equal(status.reason, t("quota.setup.unprotected"));
+    assert.equal(status.state, "unknown");
+    assert.equal(status.paceState, "unknown");
+    assert.equal(status.unknownQuota?.maxConcurrent, 1);
+    assert.deepEqual(status.unknownQuota?.tiers, ["L1", "L2"]);
   });
 });

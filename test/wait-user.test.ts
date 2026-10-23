@@ -49,7 +49,7 @@ const PARENT_PR = "https://github.com/fixture/repo/pull/1";
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 let ghCalls = 0;
 const profiles: Profile[] = [
-  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" },
+  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" },
   { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" },
 ];
 

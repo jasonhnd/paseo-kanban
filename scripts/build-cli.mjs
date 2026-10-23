@@ -28,7 +28,8 @@ export async function buildCli(root = ROOT) {
     absWorkingDir: root,
     entryPoints: [join(root, source)],
     outfile: join(root, "bin", `${name}.bundle.mjs`),
-    external: ["@getpaseo/client", "@getpaseo/protocol", "@getpaseo/relay"],
+    // Keep policy literals at their canonical package path: public approvals are bound to exact source lines.
+    external: ["@getpaseo/client", "@getpaseo/protocol", "@getpaseo/relay", "../shared/privacy-rules.mjs"],
     minifyIdentifiers: true,
     minifyWhitespace: true,
     legalComments: "none",

@@ -30,7 +30,7 @@ const poolFile = join(dir, "pool-status.json");
 process.env.KANBAN_POOL_STATUS = poolFile;
 
 const profiles: Profile[] = [
-  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" },
+  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" },
   { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" },
 ];
 
@@ -88,7 +88,7 @@ beforeEach(() => {
     sent.push({ id, text });
   });
   setAgentAliveCheck(() => true);
-  writePools({ cursor: { dispatchable: true }, "claude-max": { dispatchable: true } });
+  writePools({ alternate: { dispatchable: true }, "claude-max": { dispatchable: true } });
 });
 
 after(() => {
@@ -119,18 +119,18 @@ describe("scheduler", () => {
     const capped = await runTick({
       profiles,
       launcher: launcher(),
-      config: lockAuto("cap", limits({ pools: { cursor: 1 } })),
+      config: lockAuto("cap", limits({ pools: { alternate: 1 } })),
     });
     assert.equal(capped.started.length, 1);
     assert.equal(capped.started[0], first.id);
-    assert.match(capped.held.find((item) => item.id === second.id)?.reason ?? "", new RegExp(zhCN("routing.poolFull", {"pool":"cursor"})));
+    assert.match(capped.held.find((item) => item.id === second.id)?.reason ?? "", new RegExp(zhCN("routing.poolFull", {"pool":"alternate"})));
 
     const sameA = createTask({ project: "room", title: "Same directory A", role: "executor", workspacePath: dir });
     const sameB = createTask({ project: "room", title: "Same directory B", role: "executor", workspacePath: dir });
     const crowded = await runTick({
       profiles,
       launcher: launcher(),
-      config: queueOnBusyDir(lockAuto("room", limits({ pools: { cursor: 5 }, roles: { executor: 3 } })), "room"),
+      config: queueOnBusyDir(lockAuto("room", limits({ pools: { alternate: 5 }, roles: { executor: 3 } })), "room"),
     });
     assert.ok(crowded.started.includes(sameA.id));
     assert.equal(crowded.started.includes(sameB.id), false);
@@ -138,14 +138,14 @@ describe("scheduler", () => {
   });
 
   it("does not dispatch a pool marked dispatchable false", async () => {
-    writePools({ cursor: { dispatchable: false } });
+    writePools({ alternate: { dispatchable: false } });
     const task = createTask({ project: "pool", title: "demo fixture", role: "executor", workspacePath: dir });
     const result = await runTick({ profiles, launcher: launcher(), config: lockAuto("pool") });
     assert.equal(result.started.includes(task.id), false);
     const waiting = getTask(task.id);
     assert.equal(waiting.status, "ready");
     assert.equal(waiting.blocked_kind, null);
-    assert.match(waiting.hold_reason ?? "", new RegExp("^" + zhCN("blocked.prefix.quota") + "cursor" + zhCN("nativeSessions.sweep.reasonSep")));
+    assert.match(waiting.hold_reason ?? "", new RegExp("^" + zhCN("blocked.prefix.quota") + "alternate" + zhCN("nativeSessions.sweep.reasonSep")));
     assert.equal(getDb().prepare("SELECT id FROM events WHERE task_id = ? AND kind = 'blocked'").get(task.id), undefined);
     assert.equal(getDb().prepare("SELECT id FROM events WHERE task_id = ? AND kind LIKE 'wake_%'").get(task.id), undefined);
     assert.equal(getDb().prepare("SELECT id FROM events WHERE task_id = ? AND kind = 'board_wake'").get(task.id), undefined);
@@ -155,7 +155,7 @@ describe("scheduler", () => {
   });
 
   it("turns an old quota block back into a quota wait and does not wake the leader", async () => {
-    writePools({ cursor: { dispatchable: false, reason: "5 hour window reached 70%" } });
+    writePools({ alternate: { dispatchable: false, reason: "5 hour window reached 70%" } });
     const task = createTask({ project: "legacy-quota", title: "Old quota card", role: "executor", workspacePath: dir });
     blockTask(task.id, "quota", zhCN("routing.noProfile"), "scheduler");
     sent.length = 0;
@@ -163,7 +163,7 @@ describe("scheduler", () => {
     const waiting = getTask(task.id);
     assert.equal(waiting.status, "ready");
     assert.equal(waiting.blocked_kind, null);
-    assert.match(waiting.hold_reason ?? "", new RegExp("^" + zhCN("blocked.prefix.quota") + "cursor" + zhCN("nativeSessions.sweep.reasonSep")));
+    assert.match(waiting.hold_reason ?? "", new RegExp("^" + zhCN("blocked.prefix.quota") + "alternate" + zhCN("nativeSessions.sweep.reasonSep")));
     assert.match(waiting.hold_reason ?? "", /5 hour window/);
     const blocked = getDb().prepare("SELECT id FROM events WHERE task_id = ? AND kind = 'blocked' AND id > (SELECT id FROM events WHERE task_id = ? AND kind = 'unblocked')").get(task.id, task.id);
     assert.equal(blocked, undefined);
@@ -186,7 +186,7 @@ describe("scheduler", () => {
     assert.match(blocked.blocked_reason ?? "", new RegExp(localePattern(zhCNPart("routing.profileNotFound", 0, 5))));
     assert.equal(sent.some((item) => item.id === "boss"), true);
 
-    writePools({ cursor: { dispatchable: false, reason: "Not logged in" }, "claude-max": { dispatchable: true } });
+    writePools({ alternate: { dispatchable: false, reason: "Not logged in" }, "claude-max": { dispatchable: true } });
     const loggedOut = createTask({ project: "permanent", title: "Executor not logged in", role: "executor", workspacePath: dir });
     sent.length = 0;
     await runTick({ profiles, launcher: launcher(), config: loadConfig() });
@@ -293,7 +293,7 @@ describe("scheduler", () => {
     const now = new Date("2026-09-26T15:00:00.000Z");
     getDb()
       .prepare(
-        ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, started_at, ended_at, end_kind)\n         VALUES (?, 'agent-ok', 'executor', '" + zhCN("labels.role.executor") + "', 'cursor', 'grok-4.7', 'xai', ?, ?, 'complete')"),
+        ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, started_at, ended_at, end_kind)\n         VALUES (?, 'agent-ok', 'executor', '" + zhCN("labels.role.executor") + "', 'alternate', 'grok-4.7', 'xai', ?, ?, 'complete')"),
       )
       .run(task.id, new Date(now.getTime() - 60_000).toISOString(), new Date(now.getTime() - 60_000).toISOString());
     const held = await runTick({ profiles, launcher: launcher(), now, config: lockAuto("guard") });
@@ -406,7 +406,7 @@ describe("scheduler", () => {
     getDb().prepare(("UPDATE tasks SET status = 'rework', executor_agent_id = 'orig-exec', agent_id = 'orig-exec', executor_profile = '" + zhCN("labels.role.executor") + "' WHERE id = ?")).run(task.id);
     getDb()
       .prepare(
-        ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, started_at, ended_at, end_kind)\n         VALUES (?, 'orig-exec', 'executor', '" + zhCN("labels.role.executor") + "', 'cursor', 'grok-4.7', 'xai', ?, ?, 'complete')"),
+        ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, started_at, ended_at, end_kind)\n         VALUES (?, 'orig-exec', 'executor', '" + zhCN("labels.role.executor") + "', 'alternate', 'grok-4.7', 'xai', ?, ?, 'complete')"),
       )
       .run(task.id, ended, ended);
     const resumed: string[] = [];
@@ -421,7 +421,7 @@ describe("scheduler", () => {
         },
       },
       now,
-      config: lockAuto("rework-now", limits({ global: 50, pools: { cursor: 50 }, roles: { executor: 50 } })),
+      config: lockAuto("rework-now", limits({ global: 50, pools: { alternate: 50 }, roles: { executor: 50 } })),
     });
     assert.deepEqual(resumed, ["orig-exec"]);
     assert.ok(result.started.includes(task.id));
@@ -429,7 +429,7 @@ describe("scheduler", () => {
   });
 
   it("queues a GPT rework when codex-pro is not in the snapshot", async () => {
-    writePools({ cursor: { dispatchable: true }, "claude-max": { dispatchable: true } });
+    writePools({ alternate: { dispatchable: true }, "claude-max": { dispatchable: true } });
     const workspace = join(dir, "gpt-rework-missing");
     mkdirSync(workspace, { recursive: true });
     const gpt: Profile = {
@@ -459,7 +459,7 @@ describe("scheduler", () => {
           resumed.push(id);
         },
       },
-      config: lockAuto("gpt-rework-missing", limits({ global: 50, pools: { cursor: 50, "codex-pro": 50, "claude-max": 50 }, roles: { executor: 50 } })),
+      config: lockAuto("gpt-rework-missing", limits({ global: 50, pools: { alternate: 50, "codex-pro": 50, "claude-max": 50 }, roles: { executor: 50 } })),
     });
     assert.deepEqual(resumed, []);
     assert.ok(!result.started.includes(task.id));
@@ -468,7 +468,7 @@ describe("scheduler", () => {
   });
 
   it("does not send a GPT rework back at ultra", async () => {
-    writePools({ "codex-pro": { dispatchable: true }, cursor: { dispatchable: true }, "claude-max": { dispatchable: true } });
+    writePools({ "codex-pro": { dispatchable: true }, alternate: { dispatchable: true }, "claude-max": { dispatchable: true } });
     const workspace = join(dir, "gpt-rework-ultra");
     mkdirSync(workspace, { recursive: true });
     const gpt: Profile = {
@@ -497,7 +497,7 @@ describe("scheduler", () => {
           resumed.push(id);
         },
       },
-      config: lockAuto("gpt-rework-ultra", limits({ global: 50, pools: { cursor: 50, "codex-pro": 50 }, roles: { executor: 50 } })),
+      config: lockAuto("gpt-rework-ultra", limits({ global: 50, pools: { alternate: 50, "codex-pro": 50 }, roles: { executor: 50 } })),
     });
     assert.deepEqual(resumed, []);
     const after = getTask(task.id);
@@ -506,7 +506,7 @@ describe("scheduler", () => {
   });
 
   it("blocks a GPT rework on the executor run depth, not the later reviewer run", async () => {
-    writePools({ "codex-pro": { dispatchable: true }, cursor: { dispatchable: true }, "claude-max": { dispatchable: true } });
+    writePools({ "codex-pro": { dispatchable: true }, alternate: { dispatchable: true }, "claude-max": { dispatchable: true } });
     const workspace = join(dir, "gpt-rework-reviewer-depth");
     mkdirSync(workspace, { recursive: true });
     const gpt: Profile = {
@@ -547,7 +547,7 @@ describe("scheduler", () => {
           resumed.push(id);
         },
       },
-      config: lockAuto("gpt-rework-reviewer-depth", limits({ global: 50, pools: { cursor: 50, "codex-pro": 50 }, roles: { executor: 50 } })),
+      config: lockAuto("gpt-rework-reviewer-depth", limits({ global: 50, pools: { alternate: 50, "codex-pro": 50 }, roles: { executor: 50 } })),
     });
     assert.deepEqual(resumed, []);
     const after = getTask(task.id);
@@ -556,7 +556,7 @@ describe("scheduler", () => {
   });
 
   it("still holds a stale pool whose last reading is at the stop line", async () => {
-    writePools({ cursor: { dispatchable: false, usedPct: 98 } });
+    writePools({ alternate: { dispatchable: false, usedPct: 98 } });
     const old = new Date(Date.now() - 31 * 60 * 1000);
     utimesSync(poolFile, old, old);
     const workspace = join(dir, "stale-work");
@@ -565,7 +565,7 @@ describe("scheduler", () => {
     const result = await runTick({
       profiles,
       launcher: launcher(),
-      config: lockAuto("stale", limits({ global: 50, pools: { cursor: 50 }, roles: { executor: 50 } })),
+      config: lockAuto("stale", limits({ global: 50, pools: { alternate: 50 }, roles: { executor: 50 } })),
     });
     assert.ok(!result.started.includes(task.id));
     const after = getTask(task.id);
@@ -577,7 +577,7 @@ describe("scheduler", () => {
   });
 
   it("starts from a stale snapshot that still allows the pool, and says the snapshot is stale", async () => {
-    writePools({ cursor: { dispatchable: true }, "claude-max": { dispatchable: true } });
+    writePools({ alternate: { dispatchable: true }, "claude-max": { dispatchable: true } });
     const old = new Date(Date.now() - 45 * 60 * 1000);
     utimesSync(poolFile, old, old);
     const workspace = join(dir, "stale-open");
@@ -586,7 +586,7 @@ describe("scheduler", () => {
     const result = await runTick({
       profiles,
       launcher: launcher(),
-      config: lockAuto("stale-open", limits({ global: 50, pools: { cursor: 50 }, roles: { executor: 50 } })),
+      config: lockAuto("stale-open", limits({ global: 50, pools: { alternate: 50 }, roles: { executor: 50 } })),
     });
     assert.ok(result.started.includes(task.id));
     const started = getDb()
@@ -603,7 +603,7 @@ describe("scheduler", () => {
     const result = await runTick({
       profiles,
       launcher: launcher(),
-      config: lockAuto("no-pools", limits({ global: 50, pools: { cursor: 50 }, roles: { executor: 50 } })),
+      config: lockAuto("no-pools", limits({ global: 50, pools: { alternate: 50 }, roles: { executor: 50 } })),
     });
     assert.ok(result.started.includes(task.id));
     const started = getDb()
@@ -615,7 +615,7 @@ describe("scheduler", () => {
   it("switches to another pool immediately after a rate limit instead of waiting out the cooldown", async () => {
     const workspace = join(dir, "switch");
     mkdirSync(workspace, { recursive: true });
-    writePools({ cursor: { dispatchable: true }, supergrok: { dispatchable: true }, "claude-max": { dispatchable: true } });
+    writePools({ alternate: { dispatchable: true }, supergrok: { dispatchable: true }, "claude-max": { dispatchable: true } });
     const alt: Profile[] = [
       ...profiles,
       { id: "sg", name: "Executor · Super", role: "candidate", candidateFor: "executor", family: "xai", provider: "grok", model: "grok-4.7", pool: "supergrok" },
@@ -627,11 +627,11 @@ describe("scheduler", () => {
       .run(("{\"summary\":\"" + zhCNPart("tempLand.conflict.withCard", 10, 12) + "Demo text\"}"), task.id);
     getDb()
       .prepare(
-        ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, started_at)\n         VALUES (?, 'agent-hot', 'executor', '" + zhCN("labels.role.executor") + "', 'cursor', 'grok-4.7', 'xai', ?)"),
+        ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, started_at)\n         VALUES (?, 'agent-hot', 'executor', '" + zhCN("labels.role.executor") + "', 'alternate', 'grok-4.7', 'xai', ?)"),
       )
       .run(task.id, now.toISOString());
     addComment(task.id, "executor", "Title changed first");
-    assert.equal(applyFailure(task.id, "429 Too many requests", "rate_limit", now, "cursor"), "requeue");
+    assert.equal(applyFailure(task.id, "429 Too many requests", "rate_limit", now, "alternate"), "requeue");
     const prompts: string[] = [];
     const released = await runTick({
       profiles: alt,
@@ -643,7 +643,7 @@ describe("scheduler", () => {
         },
         async send() {},
       },
-      config: lockAuto("switch", limits({ global: 50, pools: { cursor: 50, supergrok: 50, "claude-max": 50 }, roles: { executor: 50 } })),
+      config: lockAuto("switch", limits({ global: 50, pools: { alternate: 50, supergrok: 50, "claude-max": 50 }, roles: { executor: 50 } })),
     });
     assert.ok(released.started.includes(task.id));
     assert.equal(getTask(task.id).executor_profile, "Executor · Super");
@@ -657,28 +657,28 @@ describe("scheduler", () => {
     const workspace = join(dir, "recover");
     mkdirSync(workspace, { recursive: true });
     writePools({
-      cursor: { dispatchable: false, reason: "Executor also edits", usedPct: 91, onlyRoles: ["executor"] },
+      alternate: { dispatchable: false, reason: "Executor also edits", usedPct: 91, onlyRoles: ["executor"] },
       "claude-max": { dispatchable: false, usedPct: 40 },
     });
     const task = createTask({ project: "recover", title: "Waiting for quota", role: "executor", workspacePath: workspace });
-    const wide = limits({ global: 50, pools: { cursor: 50, "claude-max": 50 }, roles: { executor: 50 } });
+    const wide = limits({ global: 50, pools: { alternate: 50, "claude-max": 50 }, roles: { executor: 50 } });
     await runTick({ profiles, launcher: launcher(), config: lockAuto("recover", wide) });
     assert.equal(getTask(task.id).status, "ready");
     assert.equal(getTask(task.id).blocked_kind, null);
-    assert.match(getTask(task.id).hold_reason ?? "", new RegExp("^" + zhCN("blocked.prefix.quota") + "cursor" + zhCN("nativeSessions.sweep.reasonSep")));
+    assert.match(getTask(task.id).hold_reason ?? "", new RegExp("^" + zhCN("blocked.prefix.quota") + "alternate" + zhCN("nativeSessions.sweep.reasonSep")));
     const heldWait = JSON.parse(
       (getDb().prepare("SELECT data_json FROM events WHERE task_id = ? AND kind = 'held'").get(task.id) as { data_json: string }).data_json,
     ) as { quotaWait: boolean; quota: { generatedAt: string | null; state: string | null; pool: string | null; dispatchable: boolean | null; usedPct: number | null; onlyRoles: string[] | null; matrixGeneratedAt: string | null } };
     assert.equal(heldWait.quotaWait, true);
     assert.equal(heldWait.quota.generatedAt, "2026-10-01T00:00:00.000Z");
     assert.equal(heldWait.quota.state, "fresh");
-    assert.equal(heldWait.quota.pool, "cursor");
+    assert.equal(heldWait.quota.pool, "alternate");
     assert.equal(heldWait.quota.dispatchable, false);
     assert.equal(heldWait.quota.usedPct, 91);
     assert.deepEqual(heldWait.quota.onlyRoles, ["executor"]);
     assert.equal(heldWait.quota.matrixGeneratedAt, null);
     assert.equal(getDb().prepare("SELECT id FROM events WHERE task_id = ? AND kind = 'blocked'").get(task.id), undefined);
-    writePools({ cursor: { dispatchable: true, usedPct: 12, onlyRoles: ["executor"] }, "claude-max": { dispatchable: true } });
+    writePools({ alternate: { dispatchable: true, usedPct: 12, onlyRoles: ["executor"] }, "claude-max": { dispatchable: true } });
     const released = await runTick({ profiles, launcher: launcher(), config: loadConfig() });
     assert.ok(released.started.includes(task.id));
     assert.equal(getTask(task.id).status, "running");
@@ -687,7 +687,7 @@ describe("scheduler", () => {
     ) as { quota: { generatedAt: string | null; state: string | null; pool: string | null; dispatchable: boolean | null; usedPct: number | null; onlyRoles: string[] | null; matrixGeneratedAt: string | null } };
     assert.equal(started.quota.generatedAt, "2026-10-01T00:00:00.000Z");
     assert.equal(started.quota.state, "fresh");
-    assert.equal(started.quota.pool, "cursor");
+    assert.equal(started.quota.pool, "alternate");
     assert.equal(started.quota.dispatchable, true);
     assert.equal(started.quota.usedPct, 12);
     assert.deepEqual(started.quota.onlyRoles, ["executor"]);
@@ -696,7 +696,7 @@ describe("scheduler", () => {
 
   it("puts a deprioritized pool behind another dispatchable pool", async () => {
     writePools({
-      cursor: { dispatchable: true, deprioritize: true },
+      alternate: { dispatchable: true, deprioritize: true },
       supergrok: { dispatchable: true, deprioritize: false },
       "claude-max": { dispatchable: true },
     });
@@ -710,7 +710,7 @@ describe("scheduler", () => {
     const result = await runTick({
       profiles: alt,
       launcher: launcher(),
-      config: lockAuto("deprio", limits({ global: 50, pools: { cursor: 50, supergrok: 50, "claude-max": 50 }, roles: { executor: 50 } })),
+      config: lockAuto("deprio", limits({ global: 50, pools: { alternate: 50, supergrok: 50, "claude-max": 50 }, roles: { executor: 50 } })),
     });
     assert.ok(result.started.includes(task.id));
     const started = getDb().prepare("SELECT data_json FROM events WHERE task_id = ? AND kind = 'started'").get(task.id) as { data_json: string };
@@ -721,7 +721,7 @@ describe("scheduler", () => {
 
   it("keeps a profile override even when another pool is healthier", async () => {
     writePools({
-      cursor: { dispatchable: true, deprioritize: true },
+      alternate: { dispatchable: true, deprioritize: true },
       supergrok: { dispatchable: true },
       "claude-max": { dispatchable: true },
     });
@@ -741,7 +741,7 @@ describe("scheduler", () => {
     const result = await runTick({
       profiles: alt,
       launcher: launcher(),
-      config: lockAuto("override", limits({ global: 50, pools: { cursor: 50, supergrok: 50, "claude-max": 50 }, roles: { executor: 50 } })),
+      config: lockAuto("override", limits({ global: 50, pools: { alternate: 50, supergrok: 50, "claude-max": 50 }, roles: { executor: 50 } })),
     });
     assert.ok(result.started.includes(task.id));
     const started = getDb().prepare("SELECT data_json FROM events WHERE task_id = ? AND kind = 'started'").get(task.id) as { data_json: string };
@@ -752,12 +752,12 @@ describe("scheduler", () => {
 
   it("records the pinned profile pool on a quota block and a review hold", async () => {
     writePools({
-      cursor: { dispatchable: false, usedPct: 88, onlyRoles: ["executor"], reason: "Executor also edits" },
+      alternate: { dispatchable: false, usedPct: 88, onlyRoles: ["executor"], reason: "Executor also edits" },
       "claude-max": { dispatchable: false, usedPct: 70, onlyRoles: ["reviewer"], reason: "Reviewer Demo text" },
     });
     const wide = limits({
       global: 50,
-      pools: { cursor: 50, "claude-max": 50 },
+      pools: { alternate: 50, "claude-max": 50 },
       roles: { executor: 50, reviewer: 50 },
     });
     const blockDir = join(dir, "pin-block");
@@ -788,12 +788,12 @@ describe("scheduler", () => {
     assert.equal(result.started.includes(heldCard.id), false);
     assert.equal(getTask(blockedCard.id).status, "ready");
     assert.equal(getTask(blockedCard.id).blocked_kind, null);
-    assert.match(getTask(blockedCard.id).hold_reason ?? "", new RegExp("^" + zhCN("blocked.prefix.quota") + "cursor" + zhCN("nativeSessions.sweep.reasonSep")));
+    assert.match(getTask(blockedCard.id).hold_reason ?? "", new RegExp("^" + zhCN("blocked.prefix.quota") + "alternate" + zhCN("nativeSessions.sweep.reasonSep")));
     const blocked = JSON.parse(
       (getDb().prepare("SELECT data_json FROM events WHERE task_id = ? AND kind = 'held'").get(blockedCard.id) as { data_json: string }).data_json,
     ) as { quotaWait: boolean; quota: { pool: string | null; dispatchable: boolean | null; usedPct: number | null; onlyRoles: string[] | null; state: string | null } };
     assert.equal(blocked.quotaWait, true);
-    assert.equal(blocked.quota.pool, "cursor");
+    assert.equal(blocked.quota.pool, "alternate");
     assert.equal(blocked.quota.dispatchable, false);
     assert.equal(blocked.quota.usedPct, 88);
     assert.deepEqual(blocked.quota.onlyRoles, ["executor"]);
@@ -812,7 +812,7 @@ describe("scheduler", () => {
 
   it("does not start a pinned decision card when the pool is only for reviewers, and still starts a review", async () => {
     writePools({
-      cursor: { dispatchable: true },
+      alternate: { dispatchable: true },
       "claude-max": { dispatchable: true, onlyRoles: ["reviewer"] },
     });
     const alt: Profile[] = [
@@ -830,7 +830,7 @@ describe("scheduler", () => {
       workspacePath: workspace,
       profileOverride: "Decision · Claude",
     });
-    const config = lockAuto("only-roles", limits({ global: 50, pools: { cursor: 50, "claude-max": 50 }, roles: { executor: 50, reviewer: 50, decision: 50 } }));
+    const config = lockAuto("only-roles", limits({ global: 50, pools: { alternate: 50, "claude-max": 50 }, roles: { executor: 50, reviewer: 50, decision: 50 } }));
     const result = await runTick({ profiles: alt, launcher: launcher(), config, matrix: { state: "missing" } });
     assert.equal(result.started.includes(task.id), false);
     const blocked = getTask(task.id);
@@ -851,7 +851,7 @@ describe("scheduler", () => {
   });
 
   it("still starts a pinned decision card when the snapshot has no onlyRoles", async () => {
-    writePools({ cursor: { dispatchable: true }, "claude-max": { dispatchable: true } });
+    writePools({ alternate: { dispatchable: true }, "claude-max": { dispatchable: true } });
     const alt: Profile[] = [
       ...profiles,
       { id: "dc-open", name: "Decision · Claude", role: "decision", family: "anthropic", provider: "claude", model: "opus", pool: "claude-max" },
@@ -868,7 +868,7 @@ describe("scheduler", () => {
     const result = await runTick({
       profiles: alt,
       launcher: launcher(),
-      config: lockAuto("only-roles-open", limits({ global: 50, pools: { cursor: 50, "claude-max": 50 }, roles: { decision: 50 } })),
+      config: lockAuto("only-roles-open", limits({ global: 50, pools: { alternate: 50, "claude-max": 50 }, roles: { decision: 50 } })),
       matrix: { state: "missing" },
     });
     assert.ok(result.started.includes(task.id), getTask(task.id).blocked_reason ?? getTask(task.id).hold_reason ?? "");
@@ -877,7 +877,7 @@ describe("scheduler", () => {
 
   it("does not send a Claude executor back when the pool is only for reviewers", async () => {
     writePools({
-      cursor: { dispatchable: true },
+      alternate: { dispatchable: true },
       "claude-max": { dispatchable: true, onlyRoles: ["reviewer"] },
     });
     const alt: Profile[] = [
@@ -910,7 +910,7 @@ describe("scheduler", () => {
           resumed.push(id);
         },
       },
-      config: lockAuto("only-roles-rework", limits({ global: 50, pools: { cursor: 50, "claude-max": 50 }, roles: { executor: 50 } })),
+      config: lockAuto("only-roles-rework", limits({ global: 50, pools: { alternate: 50, "claude-max": 50 }, roles: { executor: 50 } })),
       matrix: { state: "missing" },
     });
     assert.deepEqual(resumed, []);
@@ -919,7 +919,7 @@ describe("scheduler", () => {
     assert.match(getTask(task.id).hold_reason ?? "", new RegExp(zhCN("reworkReassign.waitingAutoStart", {"reason":zhCN("pools.onlyFor", {pool:"claude-max",roles:zhCN("labels.role.reviewer")})})));
 
     getDb().prepare("UPDATE tasks SET status = 'acceptance' WHERE id = ?").run(task.id);
-    writePools({ cursor: { dispatchable: true }, "claude-max": { dispatchable: true, onlyRoles: ["executor"] } });
+    writePools({ alternate: { dispatchable: true }, "claude-max": { dispatchable: true, onlyRoles: ["executor"] } });
     const allowed = createTask({ project: "only-roles-rework", title: "Executor can return", role: "executor", workspacePath: workspace });
     getDb()
       .prepare("UPDATE tasks SET status = 'rework', executor_agent_id = 'orig-opus-2', agent_id = 'orig-opus-2', executor_profile = ? WHERE id = ?")
@@ -955,7 +955,7 @@ describe("scheduler", () => {
     const result = await runTick({
       profiles: alt,
       launcher: launcher(),
-      config: lockAuto("reserve", limits({ global: 50, pools: { cursor: 50, supergrok: 50, "claude-max": 50 }, roles: { executor: 50 } })),
+      config: lockAuto("reserve", limits({ global: 50, pools: { alternate: 50, supergrok: 50, "claude-max": 50 }, roles: { executor: 50 } })),
     });
     assert.ok(result.started.includes(task.id));
     assert.equal(getTask(task.id).executor_profile, "Executor · Grok");
@@ -1064,7 +1064,7 @@ describe("scheduler", () => {
           return { directory: path };
         },
       },
-      config: queueOnBusyDir(lockAuto("isolate", limits({ global: 50, pools: { cursor: 50, "claude-max": 50 }, roles: { executor: 50 } })), "isolate"),
+      config: queueOnBusyDir(lockAuto("isolate", limits({ global: 50, pools: { alternate: 50, "claude-max": 50 }, roles: { executor: 50 } })), "isolate"),
     });
     assert.ok(result.started.includes(treeA.id));
     assert.ok(result.started.includes(treeB.id));
@@ -1084,12 +1084,12 @@ describe("scheduler", () => {
 });
 
 describe("directory lock by role", () => {
-  const roomy = () => limits({ global: 100, pools: { cursor: 100, "claude-max": 100, "claude-read": 100 }, roles: { executor: 100, reviewer: 100, reader: 100, decision: 100, batch: 100 } });
+  const roomy = () => limits({ global: 100, pools: { alternate: 100, "claude-max": 100, "claude-read": 100 }, roles: { executor: 100, reviewer: 100, reader: 100, decision: 100, batch: 100 } });
   const lockProfiles: Profile[] = [
     ...profiles,
     { id: "rd", name: zhCN("labels.role.reader"), role: "reader", family: "xai", provider: "claude", model: "sonnet", pool: "claude-read" },
     { id: "dc", name: zhCN("labels.role.decision"), role: "decision", family: "xai", provider: "claude", model: "opus", pool: "claude-read" },
-    { id: "bt", name: zhCN("labels.role.batch"), role: "batch", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" },
+    { id: "bt", name: zhCN("labels.role.batch"), role: "batch", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" },
   ];
   const alive = () => "alive" as const;
 
@@ -1313,7 +1313,7 @@ describe("directory lock by role", () => {
 });
 
 describe("started means running", () => {
-  const wide = () => limits({ global: 100, pools: { cursor: 100, "claude-max": 100 }, roles: { executor: 100, reviewer: 100 } });
+  const wide = () => limits({ global: 100, pools: { alternate: 100, "claude-max": 100 }, roles: { executor: 100, reviewer: 100 } });
 
   function eventsOf(id: number, kind: string): Array<{ from_status: string | null; to_status: string | null }> {
     return getDb().prepare("SELECT from_status, to_status FROM events WHERE task_id = ? AND kind = ? ORDER BY id").all(id, kind) as unknown as Array<{
@@ -1433,14 +1433,14 @@ describe("hold reasons and review waits", () => {
       .run("exec-opus", complexDocsProfileName, task.id);
     recordFixtureDelivery(task.id, "sonnet");
     writePools({
-      cursor: { dispatchable: true },
+      alternate: { dispatchable: true },
       "claude-max": { dispatchable: true },
       "google-review": { dispatchable: false, reason: "Quota exhausted" },
     });
     sent.length = 0;
     const wide = limits({
       global: 5000,
-      pools: { cursor: 5000, "claude-max": 5000, "google-review": 5000 },
+      pools: { alternate: 5000, "claude-max": 5000, "google-review": 5000 },
       roles: { executor: 5000, reviewer: 5000 },
     });
     const held = await runTick({
@@ -1470,7 +1470,7 @@ describe("hold reasons and review waits", () => {
     assert.equal(getDb().prepare("SELECT id FROM events WHERE task_id = ? AND kind = 'blocked'").get(task.id), undefined);
 
     writePools({
-      cursor: { dispatchable: true },
+      alternate: { dispatchable: true },
       "claude-max": { dispatchable: true },
       "google-review": { dispatchable: true },
     });
@@ -1507,11 +1507,11 @@ describe("hold reasons and review waits", () => {
       pool: "claude-max",
     };
     const task = createTask({ project: "no-reviewer", title: "No other family can review", role: "executor", workspacePath: path });
-    writePools({ "claude-max": { dispatchable: true }, cursor: { dispatchable: true } });
+    writePools({ "claude-max": { dispatchable: true }, alternate: { dispatchable: true } });
     const held = await runTick({
       profiles: [claudeOnly, same],
       launcher: launcher(),
-      config: lockAuto("no-reviewer", limits({ global: 50, pools: { "claude-max": 50, cursor: 50 }, roles: { executor: 50 } })),
+      config: lockAuto("no-reviewer", limits({ global: 50, pools: { "claude-max": 50, alternate: 50 }, roles: { executor: 50 } })),
       agentState: () => "alive",
     });
     assert.equal(held.started.includes(task.id), false);
@@ -1549,11 +1549,11 @@ describe("hold reasons and review waits", () => {
       model: "grok-4.7",
       pool: "supergrok",
     };
-    writePools({ "claude-max": { dispatchable: true }, cursor: { dispatchable: true }, supergrok: { dispatchable: true } });
+    writePools({ "claude-max": { dispatchable: true }, alternate: { dispatchable: true }, supergrok: { dispatchable: true } });
     const started = await runTick({
       profiles: [claudeOnly, same, xaiReview],
       launcher: launcher(),
-      config: lockAuto("no-reviewer", limits({ global: 50, pools: { "claude-max": 50, cursor: 50, supergrok: 50 }, roles: { executor: 50 } })),
+      config: lockAuto("no-reviewer", limits({ global: 50, pools: { "claude-max": 50, alternate: 50, supergrok: 50 }, roles: { executor: 50 } })),
       agentState: () => "alive",
     });
     assert.ok(started.started.includes(task.id), getTask(task.id).hold_reason ?? "");

@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { setPoolExhaustionNotify } from "./pool-exhaustion";
 import { openAgent as refuseDesktopOpen } from "../open";
 import { createPolicyChannel, injectPolicyChannel, onPolicyPublished } from "../application/policy-snapshot";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
@@ -8,6 +9,7 @@ import { buildInsights } from "./insights";
 import { readAgentRecords } from "./records";
 import { recordTurn } from "./ledger";
 import { publishFromSnapshotFile } from "./dispatch";
+import { setUnknownQuotaNotify } from "./unknown-quota";
 import { setEarlyResetNotify } from "./early-reset";
 import { buildUsage, updatePlan } from "./usage";
 import { beginCursorConnect, disconnectCursor } from "./cursor-usage";
@@ -63,7 +65,7 @@ function registerFleet(server: PluginServerContext, currentHandle: () => PaseoAp
   applyServerLanguage();
   const cleanups: Array<() => void> = [];
   const own = (cleanup: () => void) => { cleanups.push(cleanup); return cleanup; };
-  const dispose = () => { for (const cleanup of cleanups.splice(0).reverse()) cleanup(); setEarlyResetNotify(null); };
+  const dispose = () => { for (const cleanup of cleanups.splice(0).reverse()) cleanup(); setEarlyResetNotify(null); setUnknownQuotaNotify(null); setPoolExhaustionNotify(null); };
   try {
   const stopContractExports = own(startContractExports());
   const stopPoolRefresh = own(startPoolRefresh(() => currentHandle() ?? paseoRef, { allowOwnClient: false }));
@@ -80,6 +82,8 @@ function registerFleet(server: PluginServerContext, currentHandle: () => PaseoAp
     await run(BIN.paseo, ["send", agentId, "--no-wait", "--prompt", text], 20_000);
   };
   setEarlyResetNotify(notifySupervisor);
+  setUnknownQuotaNotify(notifySupervisor);
+  setPoolExhaustionNotify(notifySupervisor);
   const stopDecisionMaint = own(startDecisionMaintenance(notifySupervisor));
   const stopResetCoupons = own(startResetCouponConfirm(() => currentHandle() ?? paseoRef, notifySupervisor));
   server.handle(configReadRpc, async ({ file }) => ({ ...await readSettingsWithDispatch(file), language: language() }));

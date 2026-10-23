@@ -275,6 +275,7 @@ export function archiveTask(id: number, actor: string): TaskRow {
     .prepare(`UPDATE tasks SET status = 'archived', updated_at = ? WHERE id = ? AND status = ?`)
     .run(ts, id, task.status);
   if (info.changes !== 1) throw new KanbanError("conflict", t("taskLifecycle.error.statusChanged", { card: cardMark(id) }), { id });
+  closeOpenRuns(id, "archived", ts);
   addEvent(id, "archived", task.status, "archived", actor, {});
   revokeTaskWorkerTokens(id);
   const archived = taskById(id);

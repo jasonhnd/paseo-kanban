@@ -94,9 +94,10 @@ describe("profiles", () => {
   });
 
   it("matches a unique profile name prefix", () => {
-    const pick = selectProfile([cursor, officialReviewer], {
+    const selectable = { ...cursor, name: "Executor · Demo Local (candidate)", provider: "demo" };
+    const pick = selectProfile([selectable, officialReviewer], {
       role: "executor",
-      profileOverride: "Executor · Cursor Local",
+      profileOverride: "Executor · Demo Local",
       review: false,
     });
     assert.equal(pick.ok, true);

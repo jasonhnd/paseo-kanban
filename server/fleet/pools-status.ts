@@ -1,9 +1,10 @@
+import { X_ULTRA, xUltraReservePct } from "../../shared/fleet/x-ultra";
 /// <reference types="node" />
 // Assembles pool-status.json: one row per pool of the catalog (shared/quota-adapters.ts), then sibling softening,
 // sub pools (Claude's Fable week) following their main pool, and ChatGPT credits.
 import { join } from "node:path";
 import { providerBanned } from "../../shared/fleet/provider-policy";
-import { readBannedProviders } from "./adapters/config";
+import { readBannedProviders, readUnknownQuotaPolicy } from "./adapters/config";
 import {
   burnCapReason,
   BURN_FRONT_SESSION_PCT,
@@ -37,6 +38,8 @@ import { capSubNeed, type NeedKind, needPerDayOf, needTargetPct, wasteRiskOf } f
 import { activeDispatchPriority, poolStatusPriority, resolveDispatchPriority, withPoolPriority } from "../../shared/fleet/dispatch-priority";
 import { publishPoolStatusExport } from "./exports";
 import { attachConsumption, QUOTA_HISTORY_FILE, recordSample } from "./quota-history";
+import { forecastPool, recentReadings, unknownForecast } from "./pool-forecast";
+import type { HistorySample } from "./quota-history";
 import { trackEarlyResets } from "./early-reset";
 import { readJson, STATE_DIR, writeJson } from "./util";
 import { codexCouponInHand, configuredStopPct, hardReason, idleReason } from "./pools-hard";
@@ -82,6 +85,8 @@ import {
 } from "./pools-reviewer";
 import type { CursorReadMeta, PoolStatus, PoolStatusOptions, SuperGrokReadMeta } from "./pools-types";
 import { t, tAll } from "../../shared/fleet/i18n";
+import { unknownQuotaPolicy, unknownQuotaReason } from "../../shared/fleet/unknown-quota";
+import { notifyUnknownQuota } from "./unknown-quota";
 import { validPercent } from "../../shared/fleet/quota-cycle";
 
 export const POOL_STATUS = join(STATE_DIR, "pool-status.json");
@@ -145,8 +150,7 @@ function entry(
     window: w?.label ?? null,
     usedPct: w?.usedPct ?? null,
     resetsAt: w?.resetsAt ?? null,
-    projectedPct: w?.projectedPct ?? null,
-    runsOutAt: w?.runsOutAt ?? null,
+    ...unknownForecast(),
     verdict: w?.verdict ?? "unknown",
     dispatchable,
     deprioritize: flags?.deprioritize ?? false,
@@ -373,7 +377,12 @@ function consider(ctx: StatusCtx, pool: PoolEntry, plan: UsagePlan, w: UsageWind
   const paced = withPace(entry(plan, judged, flags.dispatchable, flags.reason), pace, flags);
   const status = ctx.burnNames && mode.burnOn ? { ...paced, unpauseProfiles: [...ctx.burnNames] } : paced;
   const band = applyReviewerBand(status, flags, mode.exception, judged?.usedPct ?? null);
-  ctx.draft.set(key, applyUnreadNotes(band.status, band.flags, unread.unreadReset, unread.carryNote));
+  const reservePct = pool.parent ? mode.burnOn ? 100 - mode.weeklyStop : 0
+    : pool.adapter === CODEX_CLI ? 20
+    : isLeaderPool(pool) ? 100 - (band.status.onlyRoles?.length && mode.exception ? mode.exception.stopPct : mode.weeklyStop)
+    : Math.max(0, 100 - (configuredStopPct(plan) ?? 100));
+  const routingStatus = { ...band.status, adapter: pool.adapter, providers: [...(plan.providers ?? [])], parent: pool.parent, reservePct };
+  ctx.draft.set(key, applyUnreadNotes(routingStatus, band.flags, unread.unreadReset, unread.carryNote));
 }
 
 /**
@@ -522,7 +531,10 @@ function closeUndispatched(draft: Map<string, Draft>, plans: UsagePlan[], terms:
 }
 
 export function poolStatus(plans: UsagePlan[], options: PoolStatusOptions = {}): Record<string, PoolStatus> {
-  plans = plans.filter((plan) => !providerBanned(plan, options.bannedProviders));
+  plans = plans.filter((plan) => !providerBanned(plan, options.bannedProviders)).map(plan => {
+    const reserve = plan.id === X_ULTRA ? xUltraReservePct(plan.xUltraReserve) : null;
+    return reserve === null ? plan : { ...plan, stopPct: Math.min(plan.stopPct ?? 97, 100 - reserve) };
+  });
   const now = options.now ?? Date.now();
   const burn = options.claudeBurn ?? null;
   const catalog = options.catalog ?? poolCatalog(plans);
@@ -545,7 +557,51 @@ export function poolStatus(plans: UsagePlan[], options: PoolStatusOptions = {}):
   // Removed on purpose; the coupon record and burn-mode pacing are untouched, only the preference is gone.
   applyCodexCredits(ctx.draft, plans, options, now, catalog);
   const pools = Object.fromEntries([...ctx.draft].map(([key, row]) => [key, { ...row.status, ...wasteRiskOf(row.status) }]));
-  return withNeed(restrictPlanRoles(pools, plans, catalog), ctx.targets, catalog);
+  return applyXUltraReserve(withQuotaStates(withNeed(restrictPlanRoles(pools, plans, catalog), ctx.targets, catalog), plans, catalog, options, now), plans, options);
+}
+
+/** Unknown reserves impose the conservative G1d bounds; configured reserves can only narrow dispatch. */
+function applyXUltraReserve(pools: Record<string, PoolStatus>, plans: UsagePlan[], options: PoolStatusOptions): Record<string, PoolStatus> {
+  const row = pools[X_ULTRA];
+  if (!row) return pools;
+  const reserve = xUltraReservePct(plans.find(p => p.id === X_ULTRA)?.xUltraReserve);
+  if (reserve === null) {
+    const base = unknownQuotaPolicy(options.unknownQuota);
+    const policy = { ...base, maxConcurrent: Math.min(1, base.maxConcurrent), tiers: base.tiers.filter(tier => tier === "L1" || tier === "L2") };
+    pools[X_ULTRA] = { ...row, state: "unknown", unknownQuota: policy, prefer: false,
+      reason: `${row.reason} ${t("quota.xUltra.reservePending")} ${unknownQuotaReason(policy)}` };
+  } else {
+    const stopped = row.usedPct !== null && row.usedPct >= 100 - reserve;
+    pools[X_ULTRA] = { ...row, reservePct: reserve, ...(stopped ? { dispatchable: false, prefer: false, deprioritize: false,
+      reason: t("quota.xUltra.reserveStop", { reserve }), paceState: "stopped" as const } : {}) };
+  }
+  return pools;
+}
+
+/** Preserve hard stops and pool order while making failed/expired source evidence explicit. */
+function withQuotaStates(pools: Record<string, PoolStatus>, plans: UsagePlan[], catalog: PoolEntry[], options: PoolStatusOptions, now: number): Record<string, PoolStatus> {
+  const policy = unknownQuotaPolicy(options.unknownQuota);
+  for (const [id, row] of Object.entries(pools)) {
+    const pool = catalog.find(item => item.id === id);
+    const plan = plans.find(item => item.id === (pool?.planId ?? id));
+    const w = plan && pool ? pool.sub !== null ? subWindowFor(pool.adapter, pool.sub, plan.windows)
+      : plan.windows.find(window => window.primary) ?? mainWindowOf(pool.adapter, plan.windows) : undefined;
+    const clock = w?.source === "manual" ? w.manualAt : w?.sampledAt ?? w?.collectedAt;
+    const at = clock ? Date.parse(clock) : NaN;
+    // Numeric legacy fixtures/files without any source-clock fields retain their old policy.
+    const clocked = !!w && ("sampledAt" in w || "collectedAt" in w || w.source === "manual" && !!w.manualAt);
+    const deadlines = [clocked ? Number.isFinite(at) && at <= now ? at + policy.maxAgeMs : now : Infinity,
+      ...[w?.readingExpiresAt, w?.resetsAt].filter((value): value is string => value != null).map(value => Date.parse(value))];
+    const expires = Math.min(...deadlines);
+    const unknown = !validPercent(w?.usedPct) || !!w?.readError || w?.readingState === "stale" || w?.readingState === "unknown"
+      || !Number.isFinite(expires) && expires !== Infinity || expires <= now;
+    const fields = { state: unknown ? "unknown" as const : "known" as const, unknownQuota: policy,
+      ...(expires !== Infinity ? { quotaStateExpiresAt: Number.isFinite(expires) ? new Date(expires).toISOString() : null } : {}) };
+    pools[id] = unknown ? { ...row, ...fields, usedPct: null, projectedPct: null, runsOutAt: null, prefer: false,
+      paceState: "unknown", reason: row.dispatchable ? unknownQuotaReason(policy) : row.reason }
+      : { ...row, ...fields };
+  }
+  return pools;
 }
 
 /** Apply explicit role limits last: they can narrow a reviewer exception, but never reopen a pool. */
@@ -711,6 +767,7 @@ export async function writePoolStatus(
     codexBurnWeek,
     codexCredits,
     bannedProviders: readBannedProviders(),
+    unknownQuota: readUnknownQuotaPolicy(),
   });
   const override = activeDispatchPriority(await readJson<unknown>(PLANS_FILE, null), now);
   const loginState = await readJson<unknown>(join(STATE_DIR, "cursor-login-state.json"), null);
@@ -727,6 +784,8 @@ export async function writePoolStatus(
     ...(cursorRead ? { cursorRead } : {}),
     ...(supergrokRead ? { supergrokRead } : {}),
   });
+  // File-only recovery tracking; panel publications never send messages.
+  await notifyUnknownQuota(held, [], async () => {}, undefined, now).catch(error => console.error("[afc] unknown quota tracking:", String(error).slice(0, 160)));
   // The fleet-quota/v1 copy for Kanban; logs and carries on if it fails.
   await publishPoolStatusExport(held, priorityLine, now);
   // Files only: compare with the last reading for an official early reset. A carried percent is not a new reading.
@@ -744,6 +803,20 @@ async function recordPools(plans: UsagePlan[], options: PoolStatusOptions): Prom
     pools = await attachConsumption(pools, samples);
   } catch (e) {
     console.error("[afc] quota history:", String(e).slice(0, 200));
+  }
+  try {
+    const now = options.now ?? Date.now();
+    const file = join(STATE_DIR, "quota-forecast-history.json");
+    const history = await readJson<{ samples: HistorySample[] }>(file, { samples: [] });
+    const readings = withoutCarriedReadings(pools, carriedPools(options.catalog ?? poolCatalog(plans)));
+    const samples = recentReadings(Array.isArray(history.samples) ? history.samples : [], readings, now);
+    await writeJson(file, { samples });
+    pools = Object.fromEntries(Object.entries(pools).map(([key, pool]) => {
+      const forecasted = { ...pool, ...forecastPool(readings[key], samples, key, now) };
+      return [key, { ...forecasted, ...wasteRiskOf(forecasted) }];
+    }));
+  } catch (e) {
+    console.error("[afc] quota forecast:", String(e).slice(0, 200));
   }
   return pools;
 }

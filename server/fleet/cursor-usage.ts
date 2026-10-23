@@ -1,3 +1,4 @@
+import { X_ULTRA } from "../../shared/fleet/x-ultra";
 import { platformCapabilities } from "./platform";
 /// <reference types="node" />
 // Read Cursor quota on AFC's fixed hourly schedule, preferring its own Cursor API login.
@@ -100,6 +101,8 @@ export interface CursorUsageReading {
   /** Last actual successful Auto reading, so failure cannot clear a known exhausted pool. */
   lastKnown?: { autoPct: number; readAt: string; resetsAt: string | null };
   readAt: string;
+  /** Derived per-row validity on file reads; independent of obsolete Auto billing metadata. */
+  grokOk?: boolean;
   /** Authorization succeeded, but the shared sampling slot has not run again. No credential data. */
   awaitingSample?: boolean;
   ok: boolean;
@@ -139,11 +142,16 @@ export async function readCursorUsageFile(): Promise<CursorUsageReading | null> 
     const reading = normalizeStoredReading(JSON.parse(await readFile(CURSOR_USAGE_FILE, "utf8")));
     if (!reading) return null;
     const at = validQuotaTime(reading.readAt, Date.now());
+    const grokRow = reading.windows.find(window => /^grok$/i.test(window.label.trim()));
+    const grokOk = reading.ok && !reading.loggedOut && !reading.linkBroken && !reading.awaitingSample
+      && !!at && Date.now() - Date.parse(at) < QUOTA_DISPLAY_TTL_MS
+      && typeof grokRow?.usedPct === "number" && Number.isFinite(grokRow.usedPct) && grokRow.usedPct >= 0 && grokRow.usedPct <= 100
+      && Date.parse(grokRow.resetsAt ?? "") > Date.now();
     if (reading.ok && (!at || Date.now() - Date.parse(at) >= QUOTA_DISPLAY_TTL_MS || reading.resetsAt && Date.parse(reading.resetsAt) <= Date.now())) {
-      return { ...reading, ok: false, error: reading.error ?? t("quota.setup.staleHold"),
+      return { ...reading, grokOk, ok: false, error: reading.error ?? t("quota.setup.staleHold"),
         ...(reading.autoPct !== null ? { lastKnown: reading.lastKnown ?? { autoPct: reading.autoPct, readAt: reading.readAt, resetsAt: reading.resetsAt } } : {}) };
     }
-    return reading;
+    return { ...reading, grokOk };
   } catch {
     return null;
   }
@@ -596,7 +604,7 @@ export function cursorScreenReadEnabled(plan: { screenRead?: unknown } | null | 
 
 /** `screenRead` of the cursor-api plan in plans.json. */
 async function plansCursorScreenRead(): Promise<boolean> {
-  const cursor = (await readPlanSources()).find((p) => baseAdapterOf(p) === CURSOR_API) as { screenRead?: unknown } | undefined;
+  const cursor = (await readPlanSources()).find((p) => p.id === X_ULTRA || baseAdapterOf(p) === CURSOR_API) as { screenRead?: unknown } | undefined;
   return cursorScreenReadEnabled(cursor ?? null);
 }
 

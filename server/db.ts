@@ -10,6 +10,7 @@ import { assertTestDataPath, canMigrateDataDir, dataDir, requestedDataDir } from
 import { countIo } from "./perf-count";
 import { syncProjectCodes } from "./project-codes";
 import { t } from "../shared/i18n";
+import { bindRunCostFunctions, RUN_COST_TRIGGERS } from "./run-cost";
 
 let current: DatabaseSync | null = null;
 let currentDir: string | null = null;
@@ -18,6 +19,11 @@ let readOnly: DatabaseSync | null = null;
 let readOnlyDir: string | null = null;
 
 const SCHEMA = `
+CREATE TABLE IF NOT EXISTS run_cost_snapshots (
+  run_id INTEGER PRIMARY KEY,
+  start_json TEXT NOT NULL,
+  record_json TEXT
+);
 CREATE TABLE IF NOT EXISTS run_budget_state (
   task_id INTEGER PRIMARY KEY,
   generation TEXT NOT NULL,
@@ -261,6 +267,7 @@ export function getDb(): DatabaseSync {
     mkdirSync(dir, { recursive: true });
   }
   const db = countSql(new DatabaseSync(join(dir, "kanban.db")));
+  bindRunCostFunctions(db, dir);
   try {
     // WAL setup itself needs a lock, including when reopening an existing board.
     db.exec("PRAGMA busy_timeout = 5000");
@@ -392,6 +399,7 @@ function migrateDb(db: DatabaseSync): void {
         AND (agent_id = NEW.executor_agent_id OR agent_id = NEW.agent_id);
     END;
   `);
+  db.exec(RUN_COST_TRIGGERS);
   backfillCodeSeq(db);
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS tasks_project_code_seq ON tasks(project, code_seq)");
   db.exec(`

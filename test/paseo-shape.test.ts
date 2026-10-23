@@ -59,7 +59,7 @@ describe("profile file", () => {
     assert.throws(() => profilesFromText("{"), new RegExp(zhCN("compat.workspaces.notJson")));
     assert.throws(() => profilesFromText("{}"), new RegExp(zhCN("compat.workspaces.notArray")));
     assert.throws(() => profilesFromText(JSON.stringify({ daemon: { agentProfiles: [{ id: "a", name: "A" }] } })), new RegExp(localePattern(zhCNPart("profiles.itemMissingFields", 19, 40))));
-    const ok = profilesFromText(JSON.stringify({ daemon: { agentProfiles: [{ id: "a", name: "A", provider: "cursor" }] } }));
+    const ok = profilesFromText(JSON.stringify({ daemon: { agentProfiles: [{ id: "a", name: "A", provider: "alternate" }] } }));
     assert.equal(ok[0]?.name, "A");
   });
 
@@ -83,7 +83,7 @@ describe("turn payload", () => {
 });
 
 describe("daemon list pages", () => {
-  it("requires pageInfo.nextCursor and archivedAt, and stops when the cursor does not advance", async () => {
+  it("requires pageInfo.nextCursor and archivedAt, and stops when the alternate does not advance", async () => {
     assert.throws(() => readWorkspacePage({ entries: [workspace], pageInfo: {} }), /pageInfo.nextCursor/);
     const page = readWorkspacePage({ entries: [workspace], pageInfo: { nextCursor: null } });
     assert.equal(page.entries[0]?.kind, "local_checkout");
@@ -127,7 +127,7 @@ describe("local paseo files", () => {
 
     writeFileSync(
       join(folder, "abcd.json"),
-      JSON.stringify({ id: "abcd", cwd: dir, workspaceId: "wks", labels: [], archivedAt: 1, title: "A", provider: "cursor" }),
+      JSON.stringify({ id: "abcd", cwd: dir, workspaceId: "wks", labels: [], archivedAt: 1, title: "A", provider: "alternate" }),
     );
     const odd = await captureError(() => {
       const file = findAgentFile("abcd");
@@ -186,7 +186,7 @@ describe("scheduler skips a bad round", () => {
     let created = 0;
     await runTick({
       profiles: [
-        { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok" },
+        { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "grok" },
         { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet" },
       ],
       pools: {

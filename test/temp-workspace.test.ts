@@ -48,8 +48,8 @@ mkdirSync(dir, { recursive: true });
 mkdirSync(trees, { recursive: true });
 mkdirSync(agents, { recursive: true });
 
-const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" };
-const batch: Profile = { id: "bt", name: zhCN("labels.role.batch"), role: "batch", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" };
+const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" };
+const batch: Profile = { id: "bt", name: zhCN("labels.role.batch"), role: "batch", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" };
 const reader: Profile = { id: "rd", name: zhCN("labels.role.reader"), role: "reader", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" };
 const decision: Profile = { id: "dc", name: zhCN("labels.role.decision"), role: "decision", family: "anthropic", provider: "claude", model: "opus", pool: "claude-max" };
 const reviewer: Profile = { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" };
@@ -187,7 +187,7 @@ describe("temporary workspace at start", () => {
         autoStart: { tick: true },
         supervisorAgentId: null,
         supervisors: {},
-        concurrency: { global: 50, pools: { cursor: 50, "claude-max": 50 }, roles: { executor: 50, reviewer: 50 } },
+        concurrency: { global: 50, pools: { alternate: 50, "claude-max": 50 }, roles: { executor: 50, reviewer: 50 } },
         projects: { tick: { defaultWorkspace: "dir", baseBranch: "main", worktreeLanes: 1, lanesEnabled: false, parallel: true } },
       },
     });
@@ -217,7 +217,7 @@ describe("temporary workspace at start", () => {
         autoStart: { queued: true },
         supervisorAgentId: null,
         supervisors: {},
-        concurrency: { global: 50, pools: { cursor: 50, "claude-max": 50 }, roles: { executor: 50, reviewer: 50 } },
+        concurrency: { global: 50, pools: { alternate: 50, "claude-max": 50 }, roles: { executor: 50, reviewer: 50 } },
         projects: { queued: { defaultWorkspace: "dir", baseBranch: "main", worktreeLanes: 1, lanesEnabled: false, parallel: false } },
       },
     });
@@ -266,7 +266,7 @@ describe("temporary workspace at start", () => {
         autoStart: { tick: true },
         supervisorAgentId: null,
         supervisors: {},
-        concurrency: { global: 50, pools: { cursor: 50, "claude-max": 50 }, roles: { executor: 50, reviewer: 50 } },
+        concurrency: { global: 50, pools: { alternate: 50, "claude-max": 50 }, roles: { executor: 50, reviewer: 50 } },
         projects: { "rework-busy": { defaultWorkspace: "dir", baseBranch: "main", worktreeLanes: 1, lanesEnabled: false, parallel: true } },
       },
     });
@@ -364,7 +364,7 @@ describe("temporary workspace at start", () => {
         autoStart: { "always-tick": true },
         supervisorAgentId: null,
         supervisors: {},
-        concurrency: { global: 50, pools: { cursor: 50, "claude-max": 50 }, roles: { executor: 50, reviewer: 50 } },
+        concurrency: { global: 50, pools: { alternate: 50, "claude-max": 50 }, roles: { executor: 50, reviewer: 50 } },
         projects: {
           "always-tick": { defaultWorkspace: "dir", baseBranch: "develop", worktreeLanes: 1, lanesEnabled: false, parallel: true, alwaysTemp: true },
         },
@@ -455,7 +455,7 @@ function writeAgent(id: string, cwd: string, taskId = id.replace(/^agent-/, ""))
       id,
       cwd,
       title: id,
-      provider: "cursor",
+      provider: "alternate",
       labels: { kanban: "1", kanban_task: taskId },
       lastActivityAt: "2026-09-29T00:00:00.000Z",
     }),
@@ -3032,7 +3032,7 @@ describe("temporary workspace cleanup", () => {
         id: foreign,
         cwd: card.directory,
         title: "Manual session",
-        provider: "cursor",
+        provider: "alternate",
         labels: {},
         lastActivityAt: "2026-09-29T00:00:00.000Z",
       }),
@@ -4422,7 +4422,12 @@ describe("accept merges a temporary branch when the project has no remote", () =
     assert.equal(eventRows(right.id).some((row) => row.kind === "temp_workspace_cleaned"), false);
   });
 
-  it("finishes a dirty main directory, keeps the worktree, and lands on the next tick", async () => {
+  it("finishes a dirty main directory, keeps the worktree, and lands on the next tick", async (t) => {
+    // Earlier dirty-* projects derive the same display code. On a slow suite their retained
+    // workspaces become overdue, so whole-board text must identify this card uniquely.
+    const saved = loadConfig();
+    setProjectCode("dirty", "DIRTYLAND");
+    t.after(() => saveConfig(saved));
     const root = await makeRepo("dirty-root");
     // Earlier terminal fixtures can age past the deadline and share the derived DIR code.
     // Keep the formatted audit assertions specific to this queued landing.

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { it } from "node:test";
 import { pathToFileURL } from "node:url";
@@ -7,13 +6,13 @@ import { pathToFileURL } from "node:url";
 // The scanner is plain JavaScript shared with the cockpit; load it by URL so tsc does not need a declaration.
 type Hit = { rule: string };
 type Scanner = {
-  compileRules(json: unknown): unknown;
+  loadRules(): unknown;
   scanFile(path: string, text: string, compiled: unknown, privateRules?: unknown[]): Hit[];
 };
 
 const scripts = join(import.meta.dirname, "..", "scripts");
 const scanner: Scanner = await import(pathToFileURL(join(scripts, "check-private.mjs")).href);
-const compiled = scanner.compileRules(JSON.parse(readFileSync(join(scripts, "private-scan.rules.json"), "utf8")));
+const compiled = scanner.loadRules();
 const j = (...parts: string[]) => parts.join("");
 const rulesHit = (path: string, text: string) => scanner.scanFile(path, text, compiled).map(hit => hit.rule);
 

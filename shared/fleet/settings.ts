@@ -1,3 +1,4 @@
+import { canonicalPoolId } from "./x-ultra";
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
 import { parseDispatchPriority } from "./dispatch-priority";
@@ -14,6 +15,9 @@ export const planSchema = z.object({
   adapter: z.enum(ADAPTER_IDS).optional(), providers: strings.optional(),
   usageProvider: z.string().optional(), priceUsdMonthly: z.number().nonnegative().nullable().optional(),
   dispatch: z.boolean().optional(), pacePause: z.boolean().optional(),
+  xUltraReserve: z.object({ botPct: z.number().min(0).max(100).nullable().optional(), userPct: z.number().min(0).max(100).nullable().optional() })
+    .refine(value => (value.botPct ?? 0) + (value.userPct ?? 0) <= 100, "Shared reserve exceeds 100%").optional(),
+  reservePct: z.number().min(0).max(100).optional(),
   stopPct: z.number().min(0).max(100).optional(), cycleDay: z.number().int().min(1).max(31).optional(),
   quotaCycle: quotaCycleSchema.optional(), manual: copiedQuotaSchema.nullable().optional(),
   manualOverride: copiedQuotaSchema.nullable().optional(), quotaProtection: z.enum(["pause", "none"]).optional(),
@@ -26,8 +30,8 @@ export const plansSchema = z.object({
     .refine(value => parseDispatchPriority(value) !== null, "Invalid dispatch priority").nullable().optional(),
 }).passthrough().superRefine((document, ctx) => {
   if (document.schemaVersion === 2 && document.dispatchPriority) {
-    const ids = new Set(document.plans.map(plan => plan.id));
-    for (const id of document.dispatchPriority.order) if (!ids.has(id)) ctx.addIssue({ code: "custom", path: ["dispatchPriority", "order"], message: "Priority references an unknown pool" });
+    const ids = new Set(document.plans.map(plan => canonicalPoolId(plan.id)));
+    for (const id of document.dispatchPriority.order) if (!ids.has(canonicalPoolId(id))) ctx.addIssue({ code: "custom", path: ["dispatchPriority", "order"], message: "Priority references an unknown pool" });
   }
 });
 // Unknown keys survive edits alongside the validated settings.

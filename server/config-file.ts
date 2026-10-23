@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { assertTestSafePath } from "./storage/test-safety";
 import { DatabaseSync } from "node:sqlite";
 import { closeSync, existsSync, fsyncSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "./perf-fs";
 import { dirname, join } from "node:path";
@@ -49,6 +50,7 @@ export function oneLine(err: unknown): string {
 
 /** Missing means ENOENT. Anything else that stops a JSON object coming out is broken. */
 export function readConfigFile(path: string = configPath()): ConfigFileRead {
+  assertTestSafePath(path);
   let text: string;
   try {
     text = readFileSync(path, "utf8");

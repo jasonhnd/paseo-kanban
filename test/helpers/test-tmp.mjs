@@ -1,5 +1,5 @@
 // Shared by bin/test.mjs and coverage-phases.mjs: every whole-suite run gets its
-// own TMPDIR (kanban-test-<pid>-<random> under the system temp dir), so tests
+// own home, host, state and TMPDIR under the invoking temporary directory, so tests
 // that forget to clean up stay inside the invoking TMPDIR. The directory is
 // removed when the run ends, including on errors and SIGINT/SIGTERM/SIGHUP.
 import { spawn } from "node:child_process";
@@ -7,6 +7,8 @@ import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { privateTestEnvironment } from "./test-environment.mjs";
+import { assertTestEnvironment } from "../../server/storage/test-safety.ts";
 import { defaultCardDirectories, newCardDirectories } from "./card-root-audit.mjs";
 
 const FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
@@ -30,32 +32,35 @@ export function removeTestTmp(dir) {
  * Runs `phases` ([label, ...nodeArgs]) one after another with a private TMPDIR.
  * Returns the exit code; the caller passes it to process.exit.
  */
+// Keep real Git/filesystem fixtures from exhausting their operation budgets merely because
+// unrelated test files start on every available CPU. This changes file scheduling only.
+// Coverage supplies its own explicit concurrency argument and retains that override.
+function workerArgs(extraTestArgs) {
+  if (extraTestArgs.some(arg => arg === "--test-concurrency" || arg.startsWith("--test-concurrency="))) return extraTestArgs;
+  const value = process.env.KANBAN_TEST_CONCURRENCY ?? "4";
+  const limit = Number(value);
+  if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(limit) || limit > 64) {
+    throw new Error("KANBAN_TEST_CONCURRENCY must be an integer from 1 to 64");
+  }
+  return [`--test-concurrency=${limit}`, ...extraTestArgs];
+}
+
 export async function runPhasesInPrivateTmp(phases, { cwd, logPrefix, extraTestArgs = [] }) {
+  assertTestEnvironment(process.env);
+  const testArgs = workerArgs(extraTestArgs);
   const before = defaultCardDirectories(cwd);
   const testTmp = createTestTmp();
   let child = null;
   let interruptedBy = null;
   const onSignal = signal => { interruptedBy = signal; child?.kill(signal); };
   for (const signal of FORWARDED_SIGNALS) process.on(signal, onSignal);
-  // Isolate every cockpit state source, including tests that unset ROLES_STATE_DIR or AFC_DATA_DIR.
-  // The legacy override must replace inherited state paths too, so no test discovers personal files.
-  const env = {
-    ...process.env, TMPDIR: testTmp, KANBAN_TEST_TMP: testTmp, KANBAN_TMP_ROOT: join(testTmp, "cards"),
-    KANBAN_DATA_DIR: join(testTmp, "unified"),
-    ROLES_STATE_DIR: "", AFC_DATA_DIR: "", AFC_LEGACY_DATA_DIR: "",
-    // The suite asserts the Chinese text; see test/helpers/i18n-preload.ts.
-    KANBAN_LANGUAGE: "zh-CN",
-    // Legacy unit fixtures explicitly request a missing compatibility transport.
-    // Policy and real service tests remove these or inject a live channel.
-    KANBAN_POOL_STATUS: process.env.KANBAN_POOL_STATUS ?? join(testTmp, "absent-pools.json"),
-    KANBAN_DISPATCH_MATRIX: process.env.KANBAN_DISPATCH_MATRIX ?? join(testTmp, "absent-matrix.json"),
-  };
   try {
+    const env = { ...privateTestEnvironment(testTmp), KANBAN_LANGUAGE: "zh-CN" };
     for (const [name, ...args] of phases) {
       if (interruptedBy) break;
       console.log(`\n[${logPrefix}] ${name}`);
       const outcome = await new Promise(resolve => {
-        child = spawn(process.execPath, ["--import", import.meta.resolve("tsx"), ...CARD_PRELOAD_ARGS, ...PRELOAD_ARGS, "--test", ...extraTestArgs, ...args], { stdio: "inherit", cwd, env });
+        child = spawn(process.execPath, ["--import", import.meta.resolve("tsx"), ...CARD_PRELOAD_ARGS, ...PRELOAD_ARGS, "--test", ...testArgs, ...args], { stdio: "inherit", cwd, env });
         child.on("error", error => resolve({ error }));
         child.on("close", (status, signal) => resolve({ status, signal }));
       });

@@ -1,3 +1,4 @@
+import privacyRules from "../shared/privacy-rules.mjs";
 // Tests for check-private.mjs. Every sample is assembled at run time, so this file itself scans clean.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -10,7 +11,7 @@ import { compileRules, occurrenceFingerprint, unusedPublicOccurrences, defaultLi
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(here, "check-private.mjs");
-const compiled = compileRules(JSON.parse(readFileSync(join(here, "private-scan.rules.json"), "utf8")));
+const compiled = compileRules(privacyRules);
 const j = (...parts) => parts.join("");
 const rulesHit = (path, text, privateRules) => [...new Set(scanFile(path, text, compiled, privateRules).map((hit) => hit.rule))];
 

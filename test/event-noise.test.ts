@@ -24,7 +24,7 @@ const poolFile = join(dir, "pool-status.json");
 process.env.KANBAN_POOL_STATUS = poolFile;
 
 const profiles: Profile[] = [
-  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" },
+  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" },
   { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" },
 ];
 
@@ -35,7 +35,7 @@ function lockAuto(project: string, poolCap?: number): KanbanConfig {
     supervisors: {},
     concurrency: {
       global: DEFAULT_CONCURRENCY.global,
-      pools: { ...DEFAULT_CONCURRENCY.pools, ...(poolCap == null ? {} : { cursor: poolCap }) },
+      pools: { ...DEFAULT_CONCURRENCY.pools, ...(poolCap == null ? {} : { alternate: poolCap }) },
       roles: { ...DEFAULT_CONCURRENCY.roles },
     },
   };
@@ -55,7 +55,7 @@ function launcher(): TickOptions["launcher"] {
 }
 
 function writePools(cursorDispatchable: boolean): void {
-  writeFileSync(poolFile, JSON.stringify({ generatedAt: "2026-10-01T00:00:00.000Z", pools: { cursor: { dispatchable: cursorDispatchable }, "claude-max": { dispatchable: true } } }));
+  writeFileSync(poolFile, JSON.stringify({ generatedAt: "2026-10-01T00:00:00.000Z", pools: { alternate: { dispatchable: cursorDispatchable }, "claude-max": { dispatchable: true } } }));
 }
 
 function count(taskId: number, kind: string): number {

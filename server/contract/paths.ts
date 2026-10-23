@@ -1,6 +1,7 @@
 // Where each plugin keeps its data and its contract exports.
 // The plugin SDK has no data-directory API, so plugins use `$PASEO_HOME/plugin-data/<plugin-id>`.
 // Overrides, highest first: AFC_DATA_DIR / KANBAN_DATA_DIR (per plugin), then PASEO_HOME, then `~/.paseo`.
+import { assertTestSafePath } from "../storage/test-safety";
 import { unifiedDataRoot, fleetDataRoot } from "../storage/root";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -21,7 +22,9 @@ function envPath(env: Env, name: string, home: string): string | null {
 
 /** Paseo's home directory: `PASEO_HOME`, else `~/.paseo`. */
 export function paseoHome(env: Env = process.env, home: string = homedir()): string {
-  return envPath(env, "PASEO_HOME", home) ?? join(home, ".paseo");
+  const dir = envPath(env, "PASEO_HOME", home) ?? join(home, ".paseo");
+  assertTestSafePath(join(dir, "config.json"));
+  return dir;
 }
 
 /** A plugin's data directory, honouring its own override variable first. */

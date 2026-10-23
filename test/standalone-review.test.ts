@@ -38,7 +38,7 @@ function config(): KanbanConfig {
     supervisors: { solo: "proj-boss" },
     concurrency: {
       global: 50,
-      pools: { ...DEFAULT_CONCURRENCY.pools, cursor: 50 },
+      pools: { ...DEFAULT_CONCURRENCY.pools, alternate: 50 },
       roles: { ...DEFAULT_CONCURRENCY.roles, executor: 50, reviewer: 50 },
     },
   };
@@ -286,8 +286,8 @@ describe("standalone review cards", () => {
       },
       "scheduler",
       {
-        profiles: [{ id: "exec", name: zhCN("labels.role.executor"), role: "executor", provider: "cursor", model: "grok-4.7", pool: "cursor" }],
-        chosen: { id: "exec", name: zhCN("labels.role.executor"), role: "executor", provider: "cursor", model: "grok-4.7", pool: "cursor" },
+        profiles: [{ id: "exec", name: zhCN("labels.role.executor"), role: "executor", provider: "alternate", model: "grok-4.7", pool: "alternate" }],
+        chosen: { id: "exec", name: zhCN("labels.role.executor"), role: "executor", provider: "alternate", model: "grok-4.7", pool: "alternate" },
         reason: "Redispatch",
       },
     );

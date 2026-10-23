@@ -1,3 +1,5 @@
+import { canonicalPoolId } from "./x-ultra";
+import { isCursorChannel } from "./cursor-dispatch";
 import { providerBanned } from "./provider-policy";
 // Dispatch matrix, per-profile cost, and lineup order.
 // Thresholds live here. The functions are pure: callers pass data in and get data out.
@@ -149,6 +151,7 @@ function burnUnpaused(profile: DispatchProfile, pool: PoolFlags | undefined): bo
 
 /** A profile is paused when its pool cannot take work, its role is outside onlyRoles, its notes carry the pause mark, or it is a paused stand-in. */
 export function profilePaused(profile: DispatchProfile, pool: PoolFlags | undefined): boolean {
+  if (isCursorChannel(profile)) return true;
   if (pool && pool.dispatchable === false) return true;
   if (pool && !allowedByOnlyRoles(profile, pool.onlyRoles)) return true;
   if (burnUnpaused(profile, pool)) return false;
@@ -277,6 +280,7 @@ export function statusOf(
   const listed = burnUnpaused(profile, pool);
   const note = listed ? null : pauseNote(profile.notes);
   const notePaused = !listed && (Boolean(note) || (profile.role === "personal" && Boolean(profile.pausedCandidateFor)));
+  if (isCursorChannel(profile)) return { status: "paused", text: t("dispatch.status.cursorReserved") };
   if (pool && pool.dispatchable === false) {
     return { status: "paused", text: pool.reason ? pauseStatusText(pool.reason) : t("dispatch.status.paused") };
   }
@@ -816,13 +820,9 @@ export function classifyClaudeSpend(
       dirs.set(name, (dirs.get(name) ?? 0) + weekUsd);
     }
   }
-  const elapsed = pace.elapsedPct !== null && pace.elapsedPct > 0 ? pace.elapsedPct / 100 : null;
-  const projected =
-    pace.projectedPct !== null
-      ? pace.projectedPct
-      : pace.usedPct !== null && elapsed
-        ? pace.usedPct / elapsed
-        : null;
+  // The quota snapshot owns the recent forecast. Insufficient evidence stays unknown;
+  // falling back to a whole-cycle average would contradict the spending sentence.
+  const projected = pace.projectedPct;
   return {
     today: withShares(today),
     week: withShares(week),
@@ -858,12 +858,13 @@ export function profilesFromConfig(raw: unknown, bannedProviders: readonly strin
       role: typeof record.role === "string" ? record.role : undefined,
       candidateFor: typeof record.candidateFor === "string" ? record.candidateFor : null,
       pausedCandidateFor: typeof record.pausedCandidateFor === "string" ? record.pausedCandidateFor : null,
-      pool: typeof record.pool === "string" ? record.pool : null,
+      pool: typeof record.pool === "string" ? canonicalPoolId(record.pool)! : null,
       family: typeof record.family === "string" ? record.family : null,
       provider: typeof record.provider === "string" ? record.provider : "",
       model: typeof record.model === "string" ? record.model : null,
       thinkingOptionId: typeof record.thinkingOptionId === "string" ? record.thinkingOptionId : null,
       notes: typeof record.notes === "string" ? record.notes : "",
+      ...(isCursorChannel(record) ? { provider: "cursor" } : {}),
       ...(typeof record.dispatchId === "string" && record.dispatchId ? { dispatchId: record.dispatchId } : {}),
     });
   }

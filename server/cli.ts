@@ -55,10 +55,10 @@ const COMMANDS: Record<string, { flags: readonly string[]; positionals: "none" |
   comment: { flags: ["id", "text"], positionals: "rest" },
   complete: { flags: ["id", "summary", "handoff", "on-behalf"], positionals: "one" },
   block: { flags: ["id", "reason", "kind", "until"], positionals: "one" },
-  "wait-bg": { flags: ["card", "log"], positionals: "one" },
+  "wait-bg": { flags: ["card", "log", "pid", "timeout-ms"], positionals: "one" },
   approve: { flags: ["id", "summary"], positionals: "one" },
   "request-changes": { flags: ["id", "reason", "findings"], positionals: "one" },
-  create: { flags: ["project", "title", "role", "workspace", "profile", "brief", "brief-file", "parents", "parent", "contract", "max-retries", "tag", "effort", "tier", "reviews", "decision"], positionals: "none" },
+  create: { flags: ["project", "title", "role", "workspace", "profile", "brief", "brief-file", "parents", "parent", "contract", "max-retries", "tag", "effort", "tier", "reviews", "decision", "no-split-hint"], positionals: "none" },
   tag: { flags: ["id", "tag"], positionals: "one" },
   reject: { flags: ["id", "reason"], positionals: "one" },
   rework: { flags: ["id", "reason", "agent", "count-round"], positionals: "one" },
@@ -236,7 +236,7 @@ async function runKanbanInternal(
 async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEnv, identity: Identity, hooks?: KanbanHooks): Promise<unknown> {
   assertCliCommandAllowed(identity, parsed.cmd);
   if (parsed.cmd === "wait-bg") {
-    return registerBackgroundWait(resolveTaskId(parsed.flag("card") ?? ""), parsed.positionals[0] ?? "", parsed.flag("log"), identity);
+    return registerBackgroundWait(resolveTaskId(parsed.flag("card") ?? ""), parsed.positionals[0] ?? "", parsed.flag("log"), identity, { pid: parsed.flag("pid"), timeoutMs: parsed.flag("timeout-ms") });
   }
   if (parsed.cmd === "mcp-credential") return exportLeaderMcpCredential(identity, env, parsed.flag("out") ?? "");
   if (parsed.cmd === "supervise") {
@@ -441,6 +441,7 @@ async function runAuthenticatedCommand(parsed: ParsedArgs, env: NodeJS.ProcessEn
     contract: parsed.flag("contract"),
     profile: parsed.flag("profile"),
     maxRetries: parsed.flag("max-retries"),
+    noSplitHint: parsed.flag("no-split-hint") === "true",
     tags: parsed.all("tag"),
     effort: parsed.flag("effort"),
     tier: parsed.flag("tier"),

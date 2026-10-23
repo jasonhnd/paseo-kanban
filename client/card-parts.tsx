@@ -107,7 +107,7 @@ export function taskAlerts(task: AlertTask): Array<{ tone: "warning" | "danger";
   return alerts;
 }
 
-type FactTask = Pick<BoardCardView, "assigner" | "related" | "assignee" | "goal" | "acceptance" | "acceptanceMissing" | "workBytes" | "reviewStatus">;
+type FactTask = Pick<BoardCardView, "assigner" | "related" | "assignee" | "goal" | "acceptance" | "acceptanceMissing" | "workBytes" | "reviewStatus" | "dispatchReason">;
 
 export function FiveFacts({ s, task }: { s: Styles; task: FactTask }) {
   return (
@@ -115,6 +115,7 @@ export function FiveFacts({ s, task }: { s: Styles; task: FactTask }) {
       <Fact s={s} label={t("cardParts.fact.assigner")} value={task.assigner} />
       <Fact s={s} label={t("cardParts.fact.related")} value={task.related} />
       <Fact s={s} label={t("cardParts.fact.assignee")} value={task.assignee} />
+      {task.dispatchReason ? <Fact s={s} label={t("cardParts.fact.dispatchReason")} value={task.dispatchReason} /> : null}
       {task.reviewStatus ? <Fact s={s} label={t("reviewAssignment.fact")} value={task.reviewStatus} /> : null}
       <Fact s={s} label={t("cardParts.fact.goal")} value={task.goal} />
       <Fact s={s} label={t("cardParts.fact.acceptance")} value={task.acceptance} tone={task.acceptanceMissing ? "warning" : "text"} />

@@ -207,11 +207,13 @@ function gitApi(timeoutFor: () => number, repos: string[]): DoctorGit {
     async branches(repo: string): Promise<string[]> {
       const timeoutMs = timeoutFor();
       if (timeoutMs <= 0) throw new Error(t("doctorLive.timeout"));
-      const result = await runGit(repo, ["branch", "--list", "kanban/*"], (cwd, args) => command("git", args, cwd, timeoutMs));
+      // Human branch output marks other worktrees with '+' and can use colors/columns.
+      // Read exact local names; :short can become ambiguous when a tag has the same name.
+      const result = await runGit(repo, ["for-each-ref", "--format=%(refname:strip=2)", "refs/heads/kanban/"], (cwd, args) => command("git", args, cwd, timeoutMs));
       if (result.code !== 0) throw new Error((result.stderr || result.stdout || t("doctorLive.branchFailed")).trim());
       return result.stdout
         .split(/\r?\n/)
-        .map((line) => line.trim().replace(/^\* /, ""))
+        .map((line) => line.trim())
         .filter((line) => line.startsWith("kanban/"));
     },
     tip,

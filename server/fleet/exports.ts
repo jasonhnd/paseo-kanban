@@ -6,6 +6,7 @@
 // These files are written in addition to the legacy ones (pool-status.json, dispatch-matrix.json,
 // decisions.json in the data directory), which older consumers may still read.
 // A failed export is logged and never breaks the legacy write that triggered it.
+import { unknownQuotaPolicy } from "../../shared/fleet/unknown-quota";
 import { readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -90,10 +91,25 @@ export function contractPriorityMode(mode: unknown): "user" | "auto" {
 export function toPoolState(row: unknown): PoolState {
   const pool = isRecord(row) ? row : {};
   return {
+    ...(typeof pool.adapter === "string" ? { adapter: pool.adapter } : {}),
+    ...(Array.isArray(pool.providers) ? { providers: pool.providers.filter((p): p is string => typeof p === "string") } : {}),
+    ...(typeof pool.parent === "string" || pool.parent === null ? { parent: pool.parent } : {}),
+    ...(percentOrNull(pool.reservePct) !== null ? { reservePct: percentOrNull(pool.reservePct)! } : {}),
     ...(pool.quotaProtection === "pause" || pool.quotaProtection === "none" ? { quotaProtection: pool.quotaProtection, readingExpiresAt: isoOrNull(pool.readingExpiresAt) } : {}),
+    ...(pool.state === "known" || pool.state === "unknown" ? {
+      state: pool.state,
+      ...(pool.quotaStateExpiresAt !== undefined ? { quotaStateExpiresAt: isoOrNull(pool.quotaStateExpiresAt) } : {}),
+      unknownQuota: unknownQuotaPolicy(isRecord(pool.unknownQuota) ? pool.unknownQuota : undefined),
+    } : {}),
     dispatchable: pool.dispatchable === true,
     deprioritize: pool.deprioritize === true,
     prefer: pool.prefer === true,
+    ...(pool.forecastConfidence === "high" || pool.forecastConfidence === "low" || pool.forecastConfidence === "none" ? {
+      projectedPct: typeof pool.projectedPct === "number" && Number.isFinite(pool.projectedPct) && pool.projectedPct >= 0 ? pool.projectedPct : null,
+      runsOutAt: isoOrNull(pool.runsOutAt),
+      burnRatePctPerHour: typeof pool.burnRatePctPerHour === "number" && Number.isFinite(pool.burnRatePctPerHour) && pool.burnRatePctPerHour >= 0 ? pool.burnRatePctPerHour : null,
+      forecastConfidence: pool.forecastConfidence,
+    } : {}),
     usedPct: percentOrNull(pool.usedPct),
     resetsAt: isoOrNull(pool.resetsAt),
     onlyRoles: stringsOrNull(pool.onlyRoles),

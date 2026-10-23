@@ -7,7 +7,7 @@ export interface CloudCommandOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
 }
-export interface CloudCommandResult { code: number; stdout: string; stderr: string }
+export interface CloudCommandResult { code: number; stdout: string; stderr: string; truncated?: boolean }
 export type CloudCommand = (command: string, args: string[], options: CloudCommandOptions) => Promise<CloudCommandResult>;
 
 /** No shell interpolation. Abort and timeout terminate the complete local CLI process group. */

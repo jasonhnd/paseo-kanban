@@ -27,7 +27,7 @@ mkdirSync(process.env.KANBAN_AGENTS_DIR, { recursive: true });
 saveConfig({ ...loadConfig(), supervisorAgentId: "kanban-leader", supervisors: { adjudicate: "project-leader", other: "other-leader" } });
 const leader = { PASEO_AGENT_ID: "project-leader" };
 const identity = { role: "supervisor", taskId: null, agentId: "project-leader" };
-const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" };
+const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" };
 const reviewer: Profile = { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" };
 
 function card(status = "blocked", round = 3) {

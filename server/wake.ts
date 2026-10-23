@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { dataDir } from "./paths";
 import { wakeSummary } from "./wake-summary";
 import { leaderActionNote } from "./protocol";
 import { decisionBlock, readOpenDecisions, waitingOnDecision, type DecisionBlock } from "./decisions";
@@ -1004,4 +1005,35 @@ export function forgetBoardWakesInMemoryForTests(): void {
   boardWakeInflight.clear();
   boardWakeRetryAfter.clear();
   forgetBoardWakeMarkCache();
+}
+
+/** Board-wide inventory incidents have no required card. Use the ordinary AFC wake bus. */
+export async function notifyCloudReconcile(project: string, detail: string, recovered: boolean): Promise<void> {
+  const mark = `cloud-inventory:${project}`;
+  if (hasBoardWakeMark(mark) === !recovered) return;
+  const who = triageRecipient(project, loadConfig());
+  if (!who || !hasWakeSender()) return;
+  if (await deliverWake(who, `${project}: ${detail}\n${leaderActionNote()}`)) {
+    if (recovered) removeBoardWakeMark(mark);
+    else addBoardWakeMark(mark);
+  }
+}
+
+const cloudProjectRefusalInflight = new Set<string>();
+/** One delivered warning per project, including across reloads. Failed delivery retries on the next admission check. */
+export async function notifyCloudProjectRefusal(project: string, reason: string | null): Promise<void> {
+  const mark = `cloud-project-refused:${project}`;
+  if (!reason) { removeBoardWakeMark(mark); return; }
+  const key = `${dataDir()}:${project}`;
+  if (hasBoardWakeMark(mark) || cloudProjectRefusalInflight.has(key)) return;
+  const who = triageRecipient(project, loadConfig());
+  if (!who || !hasWakeSender()) return;
+  cloudProjectRefusalInflight.add(key);
+  try {
+    if (await deliverWake(who, `${project}: ${reason}\n${leaderActionNote()}`)) {
+      const settings = loadConfig();
+      const config = settings.projects?.[project]?.cloudRunner;
+      if (config?.enabled && config.source === "publicGithub" && !(settings.cloud?.allowedProjects ?? []).includes(project)) addBoardWakeMark(mark);
+    }
+  } finally { cloudProjectRefusalInflight.delete(key); }
 }

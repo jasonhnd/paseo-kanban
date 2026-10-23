@@ -59,5 +59,7 @@ test("a gemini plan is a pool by default and disappears only when providers are 
   const byProvider = poolStatus([planOf("search", ["google"], "Search demo")], { now: NOW, bannedProviders: ["google"] });
   assert.equal(byProvider.search, undefined);
   const bare = { ...planOf("supergrok", [], "SuperGrok"), providers: undefined } as unknown as UsagePlan;
-  assert.equal(typeof poolStatus([bare], { now: NOW }).supergrok, "object");
+  const barePool = poolStatus([bare], { now: NOW }).supergrok;
+  assert.equal(typeof barePool, "object");
+  assert.deepEqual(barePool.providers, []);
 });

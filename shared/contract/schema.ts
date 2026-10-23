@@ -40,6 +40,17 @@ export const CockpitInfo = Envelope.extend({ ...byCockpit, ...infoFields });
 export const KanbanInfo = Envelope.extend({ ...byKanban, ...infoFields });
 
 export const PoolState = z.object({
+  adapter: z.string().optional(),
+  providers: z.array(z.string()).optional(),
+  parent: z.string().nullable().optional(),
+  reservePct: z.number().min(0).max(100).optional(),
+  projectedPct: z.number().nonnegative().nullable().optional(),
+  runsOutAt: isoDateTime.nullable().optional(),
+  burnRatePctPerHour: z.number().nonnegative().nullable().optional(),
+  forecastConfidence: z.enum(["high", "low", "none"]).optional(),
+  state: z.enum(["known", "unknown"]).optional(),
+  quotaStateExpiresAt: isoDateTime.nullable().optional(),
+  unknownQuota: z.object({ maxAgeMs: z.number().positive(), maxConcurrent: z.number().int().nonnegative(), tiers: z.array(z.enum(["L1", "L2", "L3", "L4"])) }).optional(),
   quotaProtection: z.enum(["pause", "none"]).optional(),
   readingExpiresAt: isoDateTime.nullable().optional(),
   dispatchable: z.boolean(),

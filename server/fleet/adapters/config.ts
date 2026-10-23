@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { unknownQuotaPolicy, type UnknownQuotaPolicy } from "../../../shared/fleet/unknown-quota";
 import { bannedProviderTerms } from "../../../shared/fleet/provider-policy";
 // Optional adapter switches, from `afc.config.json` in the data directory:
 //   { "adapters": { "cursor-api": true, "keychain": true, "antigravity-cli": false } }
@@ -73,4 +74,10 @@ export function readLeaderThresholds(dir: string = STATE_DIR): LeaderThresholds 
 /** The board project receiving AFC's own notices and newly created default decisions. */
 export function readOpsProject(dir: string = STATE_DIR): string {
   return opsProject(readConfig(dir));
+}
+
+/** Unknown quota limits are part of the immutable policy input digest. */
+export function readUnknownQuotaPolicy(dir = STATE_DIR): UnknownQuotaPolicy {
+  const raw = readConfig(dir) as { unknownQuota?: Partial<UnknownQuotaPolicy> } | null;
+  return unknownQuotaPolicy(raw?.unknownQuota);
 }

@@ -7,12 +7,14 @@ import { after, describe, it } from "node:test";
 import { addBoardWakeMark, forgetBoardWakeMarkCache, hasBoardWakeMark } from "../server/board-wake-marks";
 
 const dir = mkdtempSync(join(tmpdir(), "board-wake-marks-"));
+const previousDataDir = process.env.KANBAN_DATA_DIR;
 process.env.KANBAN_DATA_DIR = dir;
 
 after(() => {
   forgetBoardWakeMarkCache();
   rmSync(dir, { recursive: true, force: true });
-  delete process.env.KANBAN_DATA_DIR;
+  if (previousDataDir === undefined) delete process.env.KANBAN_DATA_DIR;
+  else process.env.KANBAN_DATA_DIR = previousDataDir;
 });
 
 describe("skip marks do not push live alert marks out of the file", () => {

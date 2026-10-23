@@ -24,6 +24,7 @@ import { createTask } from "../server/store";
 import { loadConfig, saveConfig } from "../server/config";
 import { prepareTaskTmpEnv } from "../server/card-tmp-record";
 import { getTask } from "../server/store";
+import { performanceLoadGate, samplePerformanceLoad } from "./helpers/performance-load";
 
 const dir = mkdtempSync(join(tmpdir(), "tmpclean-data-"));
 process.env.KANBAN_DATA_DIR = dir;
@@ -838,6 +839,13 @@ describe("tmp cleanup", () => {
   });
 
   it("deletes a finished directory with more than a million nodes", { timeout: 600_000 }, async (t) => {
+    // This scale regression creates and removes a million real files. Skip before
+    // allocating them on an overloaded host; the smaller functional cases still run.
+    const gate = performanceLoadGate([samplePerformanceLoad()]);
+    if (gate.skip) {
+      t.skip(`Million-node scale fixture: ${gate.reason}`);
+      return;
+    }
     const base = mkdtempSync(join(tmpdir(), "cleanup-million-"));
     t.after(() => rmSync(base, { recursive: true, force: true }));
     const c = card("done", T0);

@@ -67,7 +67,7 @@ const NOW = new Date("2026-10-01T03:00:00.000Z");
 const files = new Map<string, string>();
 const directories = new Set<string>();
 const denied = new Map<string, string>();
-const envKeys = ["KANBAN_DATA_DIR", "KANBAN_AGENTIC_ROOT", "KANBAN_AGENTS_DIR", "KANBAN_WORKTREES_ROOT", "KANBAN_DOCTOR_BOARD_FAIL"];
+const envKeys = ["KANBAN_DATA_DIR", "KANBAN_PROJECTS_ROOT", "KANBAN_AGENTS_DIR", "KANBAN_WORKTREES_ROOT", "KANBAN_DOCTOR_BOARD_FAIL"];
 let oldEnv: Array<string | undefined>;
 let wakes: string[];
 let gitCalls: string[];
@@ -112,7 +112,7 @@ beforeEach(() => {
   wakes = []; gitCalls = []; repoStatCalls = 0;
   oldEnv = envKeys.map((key) => process.env[key]);
   process.env.KANBAN_DATA_DIR = join(ROOT, "data");
-  process.env.KANBAN_AGENTIC_ROOT = join(ROOT, "repos");
+  process.env.KANBAN_PROJECTS_ROOT = join(ROOT, "repos");
   process.env.KANBAN_AGENTS_DIR = join(ROOT, "agents");
   process.env.KANBAN_WORKTREES_ROOT = TREES;
   process.env.KANBAN_DOCTOR_BOARD_FAIL = "1";

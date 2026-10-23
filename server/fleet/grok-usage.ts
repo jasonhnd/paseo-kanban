@@ -34,7 +34,7 @@ import { validQuotaTime } from "../../shared/fleet/quota-time";
 export const GROK_USAGE_FILE = join(STATE_DIR, "grok-usage.json");
 /** At most one CLI read per hour, including failed attempts. */
 export const GROK_CLI_EVERY_MS = QUOTA_SAMPLE_MS;
-/** A successful CLI reading may be carried through failures for at most two hours. */
+/** Reuse a successful CLI reading for at most two hours, until a failed capture invalidates it. */
 export const GROK_CLI_MAX_AGE_MS = 2 * 60 * 60_000;
 /** Homepage yellow starts once a live percent has been missing this long. */
 export const SUPERGROK_UNREAD_ALARM_MS = 60 * 60_000;
@@ -64,10 +64,10 @@ export function msgLoginScreen(): string {
   return t("screen.loginScreen");
 }
 export function msgNoPrompt(): string {
-  return t("grok.usage.noPrompt");
+  return `[grok_prompt_timeout] ${t("grok.usage.noPrompt")}`;
 }
 export function msgNoPct(): string {
-  return t("grok.usage.noPct");
+  return `[grok_usage_timeout] ${t("grok.usage.noPct")}`;
 }
 export function msgLoginLost(): string {
   return t("grok.usage.loginLost");
@@ -177,16 +177,22 @@ export function frameSaysGrokLogin(raw: string): boolean {
  * Older guessed phrases stay, so a screen that really says "Awaiting your input" still counts.
  */
 function frameSaysGrokReady(text: string): boolean {
-  if (/awaiting your input|type a message/i.test(text)) return true;
+  if (/awaiting (?:your )?input|type a message/i.test(text)) return true;
   if (/weekly\s+limit|\besc close\b|\btab switch\b/i.test(text)) return false;
   const prompt = /│\s*❯/.test(text);
   const chrome = /always-approve|enter:\s*send|grok build\s+\d|quit\s+ctrl\+q/i.test(text);
   return prompt && chrome;
 }
 
+/** Newer Grok releases gate scratch directories before showing the composer. */
+function frameSaysGrokTrust(raw: string): boolean {
+  return /do you trust the contents of this directory\?/i.test(stripAnsi(raw));
+}
+
 /** What the captured screen is asking. A login word wins, and it is never answered. */
-export function interpretGrokScreen(raw: string): "login" | "usage" | "ready" | "wait" {
+export function interpretGrokScreen(raw: string): "login" | "trust" | "usage" | "ready" | "wait" {
   if (frameSaysGrokLogin(raw)) return "login";
+  if (frameSaysGrokTrust(raw)) return "trust";
   if (parseGrokUsageScreen(raw)) return "usage";
   if (frameSaysGrokReady(stripAnsi(raw))) return "ready";
   return "wait";
@@ -520,6 +526,7 @@ export async function readGrokScreenVia(
   const onFrame = async (frame: string): Promise<FrameVerdict<GrokCliReading>> => {
     lastFrame = frame;
     if (frameSaysGrokLogin(frame)) return { kind: "fail", error: msgLoginScreen() };
+    if (frameSaysGrokTrust(frame)) return { kind: "fail", error: "[grok_folder_trust] Grok requires directory trust; /usage show not typed" };
     const parsed = parseGrokUsageScreen(frame);
     if (parsed) return { kind: "done", value: frameReading(readAt, parsed) };
     if (!sent && interpretGrokScreen(frame) === "ready") {
@@ -655,7 +662,7 @@ function storedFrom(reading: GrokCliReading, lastAttemptAt: string | null, unrea
  * The grok screen is the truth: a CLI reading at most once an hour, even when Paseo has a number.
  * Paseo's percent is the fallback when no current CLI reading exists, unless it looks stuck.
  * `capture` must be true to open the screen; the quota page leaves it false and only reads the file.
- * A failed capture keeps the previous reading while `cliCurrent` still accepts it, and only refreshes lastAttemptAt and error.
+ * A failed capture stays failed; the previous successful sample is retained only as lastKnown.
  * `cliRead: false` never opens the screen and does not keep an old screen percent.
  */
 export async function settleSuperGrokChoice(input: {
@@ -685,20 +692,13 @@ export async function settleSuperGrokChoice(input: {
   if (enabled && input.capture === true) {
     const sample = await sampleQuota("grok-screen", () => input.hooks?.capture ? input.hooks.capture() : readGrokScreen(),
       { now, statePath: input.hooks?.statePath, errorOf: reading => reading.error });
-    const captured = sample.value && sample.error ? { ...sample.value, ok: false, error: sample.error } : sample.value;
+    const captured = sample.error
+      ? sample.value
+        ? { ...sample.value, ok: false, usedPct: null, resetsAt: null, error: sample.error }
+        : emptyReading(sample.attemptedAt ?? new Date(now).toISOString(), sample.error, false)
+      : sample.value;
     if (captured && sample.attemptedAt !== lastAttemptAt) {
-      const prior = storedReading(previous);
-      if (!captured.ok && cliCurrent(prior, now) && prior) {
-        cli = {
-          ...prior,
-          error: captured.error,
-          loggedOut: captured.loggedOut || prior.loggedOut,
-          loginLost: captured.loginLost || prior.loginLost,
-          homeAlarm: captured.homeAlarm ?? prior.homeAlarm,
-        };
-      } else {
-        cli = captured;
-      }
+      cli = captured;
       loginLost = !providerUsable && cli.loginLost === true;
       loginAlarm = loginLost ? cli.homeAlarm : null;
       lastAttemptAt = sample.attemptedAt;
@@ -768,10 +768,13 @@ async function grokModelsLogin(): Promise<GrokLogin> {
 
 /** Screen session for one read. Keys are sent only by `readGrokScreenVia`. Close does not type. `bin` is a test seam for a fake `screen`. */
 export function liveGrokScreenIo(bin?: string): GrokScreenIo {
-  const cwd = join(STATE_DIR, "tmp");
+  // Grok 1.0.67 asks for folder trust in the fleet scratch directory. HOME is
+  // inherently trusted by the CLI, so quota reads need no persistent trust grant
+  // or permission bypass. Only /usage show is sent; scratch files stay in STATE_DIR.
+  const cwd = homedir();
   const session = createScreenSession({
     session: SESSION,
-    dir: join(cwd, "grok-usage-run"),
+    dir: join(STATE_DIR, "tmp", "grok-usage-run"),
     cwd,
     launch: GROK_BIN,
     bin,

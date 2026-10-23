@@ -1,4 +1,6 @@
 /// <reference types="node" />
+import { localCloudReceipt } from "./cloud-record";
+import { LOCAL_GIT_OPTIONS, disabledGitFilters } from "./cloud-git-policy";
 import { resolve } from "node:path";
 import { t } from "../shared/i18n";
 import { cardMark } from "./card-ref";
@@ -107,7 +109,28 @@ function withRepoLock<T>(root: string, run: () => Promise<T>): Promise<T> {
  * Two accepts on the same repository wait, so they do not fight over HEAD.
  */
 export async function landLocalBranch(task: TaskRow, owned: OwnedWorktree, actor: string, run: GitRunner = (cwd, args) => runGit(cwd, args)): Promise<LandResult> {
-  return withRepoLock(owned.root, () => landLocalBranchInner(task, owned, actor, run));
+  return withRepoLock(owned.root, async () => {
+    const receipt = localCloudReceipt(task.id);
+    if (!receipt) return landLocalBranchInner(task, owned, actor, run);
+    // A cloud tree can add attributes naming a host filter; landing must keep the same import boundary.
+    const policies = new Map<string, string[]>();
+    const local: GitRunner = async (cwd, args) => {
+      if (!policies.has(cwd)) {
+        const keys = await run(cwd, [...LOCAL_GIT_OPTIONS, "config", "--null", "--name-only", "--list"]);
+        if (keys.code !== 0) return keys;
+        policies.set(cwd, [...LOCAL_GIT_OPTIONS, ...disabledGitFilters(keys.stdout)]);
+      }
+      return run(cwd, [...policies.get(cwd)!, ...args]);
+    };
+    // The writable delivery branch must still be the L that was submitted for review.
+    // Check inside the repository lock, including when resuming a dirty-main queue,
+    // before the normal landing flow is allowed to fast-forward or rebase it.
+    const tip = await local(owned.root, ["rev-parse", "--verify", `${headRef(owned.branch)}^{commit}`]);
+    if (tip.code !== 0 || tip.stdout.trim() !== receipt.localHead) {
+      return { kind: "refuse", message: "Local cloud delivery no longer matches its reviewed commit" };
+    }
+    return landLocalBranchInner(task, owned, actor, local);
+  });
 }
 
 async function landLocalBranchInner(task: TaskRow, owned: OwnedWorktree, actor: string, run: GitRunner): Promise<LandResult> {

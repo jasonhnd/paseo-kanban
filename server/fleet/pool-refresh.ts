@@ -1,10 +1,13 @@
 /// <reference types="node" />
+import { deliverPoolExhaustionNotices } from "./pool-exhaustion";
+import type { RankingPool } from "../../shared/fleet/pool-ranking";
 // Keeps pool-status.json fresh for Paseo Kanban even when nobody has AFC open (docs/KANBAN-CONTRACT.md §1).
 // Plugin code only gets a Paseo handle inside RPC handlers and hooks, and a plugin reload or daemon restart
 // drops it. Until 09-27 the timer then skipped every run without a word and the snapshot stood still.
 // Now the timer falls back to its own connection to the local daemon and logs every failure.
 import type { PaseoApi } from "./paseo-api";
 import { createPaseoClient } from "./paseo-client.bundle.mjs";
+import { deliverUnknownQuotaNotices } from "./unknown-quota";
 import { stat } from "node:fs/promises";
 import { CONFIG, type Json, readJson } from "./util";
 import { POOL_STATUS } from "./pools";
@@ -103,6 +106,11 @@ export function startPoolRefresh(handle: () => PaseoApi | null, options: { allow
     } catch (e) {
       console.error("[afc] pool refresh: refresh failed, the quota snapshot was not updated this round:", String(e).slice(0, 300));
     } finally {
+      try {
+        const file = await readJson<{ pools?: Record<string, RankingPool> }>(POOL_STATUS, {});
+        await deliverUnknownQuotaNotices(file.pools ?? {});
+        await deliverPoolExhaustionNotices(file.pools ?? {});
+      } catch (error) { console.error("[afc] unknown quota:", String(error).slice(0, 160)); }
       running = false;
       if (!closed && queued) {
         queued = false;

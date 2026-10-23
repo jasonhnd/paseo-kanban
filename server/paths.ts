@@ -1,5 +1,6 @@
 /// <reference types="node" />
-import { unifiedDataRoot } from "./storage/root";
+import { assertTestSafePath } from "./storage/test-safety";
+import { requestedUnifiedDataRoot, unifiedDataRoot } from "./storage/root";
 import { homedir, tmpdir } from "node:os";
 import { t } from "../shared/i18n";
 import * as pathFs from "./perf-fs";
@@ -84,7 +85,7 @@ export function describeDataDir(choice: DataDirChoice = dataDirChoice()): string
 
 /** The data directory this process asks for, before the test isolation guard. Only getDb uses it, to recognise its open handle. */
 export function requestedDataDir(): string {
-  return unifiedDataRoot();
+  return requestedUnifiedDataRoot();
 }
 
 export function dataDir(): string {
@@ -97,7 +98,8 @@ let testRoots: { key: string; temporary: string[]; production: string[] } | null
 
 /** Test subprocesses inherit the runner marker even when Node drops NODE_TEST_CONTEXT. */
 export function assertTestDataPath(path: string): void {
-  const testing = process.env.NODE_TEST_CONTEXT !== undefined || process.env.KANBAN_TEST_TMP !== undefined
+  assertTestSafePath(path);
+  const testing = process.env.KANBAN_TEST_RUN === "1" || process.env.NODE_TEST_CONTEXT !== undefined || process.env.KANBAN_TEST_TMP !== undefined
     || /(?:^|[/\\])kanban-test-\d+-/.test(process.env.TMPDIR ?? "");
   if (!testing) return;
   const refuse = () => {
@@ -131,8 +133,9 @@ export function assertTestDataPath(path: string): void {
 /** Paseo's config file with the agent profiles and plugins. Tests can point it elsewhere with KANBAN_PASEO_CONFIG. */
 export function paseoConfigPath(env: NodeJS.ProcessEnv = process.env, home = HOME): string {
   const override = env.KANBAN_PASEO_CONFIG?.trim();
-  if (override) return override;
-  return join(paseoHome(env, home), "config.json");
+  const path = override || join(paseoHome(env, home), "config.json");
+  assertTestSafePath(path);
+  return path;
 }
 
 /** Parsed `plugins` of Paseo's config, keyed by file identity so a busy caller does not re-parse an unchanged file. */

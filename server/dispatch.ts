@@ -1,3 +1,5 @@
+import { cursorPaidModel, isCursorChannel } from "../shared/fleet/cursor-dispatch";
+import { isQaReview } from "./qa-review";
 /// <reference types="node" />
 import { resolveReviewTarget, reviewFamilyBlock, deliveryRun, authorizeReviewRecovery } from "./review-target";
 import { assertReviewStartAvailable } from "./review-assignment";
@@ -14,6 +16,9 @@ import { archiveInFlight } from "./cleanup";
 import { inspectAgentState, type AgentInspector } from "./agent-check";
 import { getDb } from "./db";
 import { withConfigLock } from "./config-lock";
+import { unknownPoolOccupancy } from "./unknown-quota";
+import { quotaUnknown } from "../shared/fleet/unknown-quota";
+import { resolveTier } from "./tier";
 import { readPolicy } from "./application/policy-snapshot";
 import { clearExternalWait } from "./external-wait";
 import { confirmEffort, effortCatalogHold, effortForOwnRole, effortReason } from "./effort";
@@ -33,7 +38,7 @@ import { capacityHoldReason } from "./capacity-guard";
 import { assertProjectInPaseo } from "./paseo-projects";
 import { quotaWaitLabel } from "../shared/blocked";
 import { noteQueueHold } from "./queue-hold";
-import { onlyRolesBlock, quotaBrief, readPoolSnapshot, type PoolSnapshot, type QuotaBrief } from "./pools";
+import { unknownQuotaBlock, onlyRolesBlock, quotaBrief, readPoolSnapshot, type PoolSnapshot, type QuotaBrief } from "./pools";
 import { cardRouteContext } from "./profile-rules";
 import { actualFamily, buildAgentConfig, findProfile, GOOGLE_DISPATCH_POLICY, isGoogleProfile, readProfiles, type Profile } from "./profiles";
 import { currentOccupancy, holdsWorkspace, profilePoolRole, recordedExecutorFacts, routeProfile } from "./routing";
@@ -58,7 +63,7 @@ import { RECREATE_FAILED, recreateReviewCopy, recreateWorkspace, worktreeDirecto
 import { PASEO_ARCHIVED, liveWorkspace } from "./paseo-archiving";
 import { recordReworkStartup, recoverReworkStartup, workspaceFateReader, type StartupEvidence } from "./lost-workspace";
 import { cloudExecutionEnabled, launchCloudTask } from "./cloud-runner";
-import { cloudDelivery } from "./cloud-record";
+import { cloudDelivery, localCloudReceipt, isCloudDeliveryRun } from "./cloud-record";
 
 export interface AgentLauncher {
   /** Plugin startup reconciliation must finish before starting or resuming work. */
@@ -217,7 +222,10 @@ async function placeWorktree(
     if (task.workspace_path && !samePath(task.workspace_path, directory)) {
       getDb().prepare("UPDATE tasks SET workspace_path = ?, updated_at = ? WHERE id = ?").run(directory, new Date().toISOString(), task.id);
     }
-    const workspaceId = live.workspaceId;
+    let workspaceId = live.workspaceId;
+    if (!workspaceId && launcher.listWorkspaces && launcher.createDirectoryWorkspace) {
+      workspaceId = (await launcher.createDirectoryWorkspace({ cwd: directory })).id;
+    }
     if (launcher.listWorkspaces && !workspaceId) {
       throw new KanbanError("workspace_missing", t("dispatch.worktreeNoWorkspace"));
     }
@@ -961,9 +969,9 @@ export async function startTask(
     const settings = loadConfig();
     const matrix = options?.readMatrix?.() ?? loadDispatchMatrix();
     const snapshot = options?.snapshot ?? options?.readSnapshot?.() ?? readPoolSnapshot();
-    const occupancy = currentOccupancy(profiles);
+    const occupancy = currentOccupancy(profiles, id);
     const input: RouteInput = {
-      ...options?.routing, profiles, role: "executor", review: false,
+      ...options?.routing, task, routingConfig: settings, profiles, role: "executor", review: false,
       profileOverride: options?.chosen?.id ?? task.profile_override,
       byPool: occupancy.byPool, poolLimits: settings.concurrency.pools, snapshot,
       matrix: matrix.state === "ok" ? matrix.matrix : null,
@@ -976,19 +984,37 @@ export async function startTask(
       else setHold(id, decision.reason);
       return { message: decision.reason };
     }
-    const effort = options?.effortSource ? options.effort ?? decision.profile.thinkingOptionId ?? null
+    const effort = decision.effortSource === "quota" ? decision.effort ?? null
+      : options?.effortSource ? options.effort ?? decision.profile.thinkingOptionId ?? null
       : decision.effort ?? task.effort ?? decision.profile.thinkingOptionId ?? null;
-    return await launchCloudTask({ task, profile: decision.profile, profiles, effort, guard: () => {
+    return await launchCloudTask({ task, profile: decision.profile, profiles, effort, reason: decision.reason, guard: () => {
       if (!holdsStartClaim(id, claimToken) || getTask(id).status !== task.status) throw new KanbanError("start_lost", alreadyStarting());
       const stamp = snapshot.policy;
       if (stamp) {
         const policy = readPolicy();
         if (policy.state !== "ok" || policy.snapshot.revision !== stamp.revision || policy.snapshot.policyDigest !== stamp.digest) throw new KanbanError("policy_changed", t("dispatch.policyChanged"));
       }
+      const latest = stamp ? readPoolSnapshot() : snapshot;
+      if (decision.effortSource === "quota") {
+        const checked = routeProfile({ ...input, task: getTask(id), now: Date.now(), snapshot: latest,
+          profileOverride: decision.profile.id, byPool: currentOccupancy(profiles, id).byPool,
+          supportsEffort: (profile, depth) => profile.id === decision.profile.id && depth === effort });
+        if (!checked.ok) throw new KanbanError("quota_wait", checked.reason, { pool: decision.profile.pool ?? null });
+      }
+      const row = latest.entry(decision.profile.pool ?? null);
+      const denied = unknownQuotaBlock(row, resolveTier(task.tier, input.tags ?? [], input.matrix?.defaultTier ?? null),
+        decision.profile.pool ? unknownPoolOccupancy(decision.profile.pool, profiles, id) : 0);
+      if (denied || quotaUnknown(row, Date.now()) && !row.dispatchable) throw new KanbanError("quota_wait", denied ?? row.reason ?? t("dispatch.policyChanged"), { pool: decision.profile.pool ?? null });
     } });
   }
   // Cloud implementations are artifacts in a bare mirror. Local reviewers inspect
   // a disposable copy at the submitted commit, never the mirror's default HEAD.
+  const localSource = (task.status === "in_review" || task.role === "reviewer") ? localCloudReceipt(task.review_of ?? task.id) : null;
+  if (localSource && (!isCloudDeliveryRun(task.review_of ?? task.id, localSource.runId) ||
+      !getTask(task.review_of ?? task.id).workspace_path ||
+      (await runGit(getTask(task.review_of ?? task.id).workspace_path!, ["rev-parse", "HEAD"])).stdout.trim() !== localSource.localHead)) {
+    throw new KanbanError("cloud_local_review_changed", "Local cloud delivery no longer matches its reviewed commit");
+  }
   const cloudSource = (task.status === "in_review" || task.role === "reviewer") ? cloudDelivery(task.review_of ?? task.id) : null;
   const cloudCopy = cloudSource ? readWorktreeCreated(task.id) : null;
   if (cloudSource && cloudCopy?.directory && cloudCopy.head !== cloudSource.head) {
@@ -1087,6 +1113,27 @@ export async function startTask(
   }
   if (phase === "resume") {
     if (!task.executor_agent_id) throw new KanbanError("missing_agent", t("dispatch.noExecutorAgent"));
+    const resumeProfiles = options?.profiles ?? readProfiles();
+    const resumeProfile = resumeProfiles.find(profile => profile.name === task.executor_profile);
+    const resumeSnapshot = options?.snapshot ?? options?.readSnapshot?.() ?? readPoolSnapshot();
+    const priorRun = deliveryRun(task);
+    const actualResume = { provider: priorRun?.provider ?? "", model: priorRun?.model ?? null };
+    const paidResume = cursorPaidModel(actualResume) || !!resumeProfile && cursorPaidModel(resumeProfile);
+    if (paidResume || isCursorChannel(actualResume) || !!resumeProfile && isCursorChannel(resumeProfile)) {
+      const reason = t(paidResume ? "routing.cursorPaidModel" : "routing.cursorReserved");
+      setHold(id, reason); return { message: reason };
+    }
+    const resumeRow = resumeSnapshot.entry(resumeProfile?.pool ?? null);
+    if (resumeProfile && quotaUnknown(resumeRow, Date.now())) {
+      const matrix = options?.readMatrix?.() ?? loadDispatchMatrix();
+      const context = cardRouteContext(task, loadConfig().profileRules);
+      const denied = unknownQuotaBlock(resumeRow, resolveTier(task.tier, context.tags ?? [], matrix.state === "ok" ? matrix.matrix.defaultTier : null),
+        resumeProfile.pool ? unknownPoolOccupancy(resumeProfile.pool, resumeProfiles, id) : 0);
+      if (!resumeRow.dispatchable || denied) {
+        const reason = denied ?? resumeRow.reason ?? t("dispatch.policyChanged");
+        setHold(id, reason); return { message: reason };
+      }
+    }
     // Resume checks this card's own worker, including standalone reviewers. Automatic review
     // routing separately resolves the target delivery and must not supply its run here.
     const resumedRun = deliveryRun(task);
@@ -1106,7 +1153,7 @@ export async function startTask(
       }
       const matrix = options?.readMatrix?.() ?? loadDispatchMatrix();
       const checked = routeProfile({ profiles, role: task.role, review: false, profileOverride: previous.id,
-        tier: task.tier, ...cardRouteContext(task, loadConfig().profileRules), byPool: currentOccupancy(profiles).byPool,
+        tier: task.tier, ...cardRouteContext(task, loadConfig().profileRules), byPool: currentOccupancy(profiles, id).byPool,
         poolLimits: loadConfig().concurrency.pools, snapshot: options?.snapshot ?? options?.readSnapshot?.() ?? readPoolSnapshot(),
         matrix: matrix.state === "ok" ? matrix.matrix : null });
       if (!checked.ok) { setHold(id, checked.reason); return { message: checked.reason }; }
@@ -1165,9 +1212,24 @@ export async function startTask(
   let pickReason = options?.reason ?? "";
   let routedEffort: string | null | undefined = options?.effort;
   let routedSource: EffortSource | undefined = options?.effortSource;
-  let seenSnapshot = options?.snapshot ?? null;
+  let seenSnapshot = options?.snapshot ?? options?.readSnapshot?.() ?? readPoolSnapshot();
   const recheckPolicy = () => {
     const stamp = seenSnapshot?.policy;
+    const latest = stamp ? readPoolSnapshot() : seenSnapshot;
+    const poolRow = latest?.entry(chosen!.pool ?? null);
+    if (poolRow && quotaUnknown(poolRow, Date.now())) {
+      const context = routingInput();
+      const denied = unknownQuotaBlock(poolRow, resolveTier(task.tier, context.tags ?? [], context.matrix?.defaultTier ?? null),
+        chosen!.pool ? unknownPoolOccupancy(chosen!.pool, profiles, id) : 0);
+      if (!poolRow.dispatchable || denied) throw new KanbanError("quota_wait", denied ?? poolRow.reason ?? t("dispatch.policyChanged"), { pool: chosen!.pool ?? null });
+    }
+    if (routedSource === "quota") {
+      const input = routingInput();
+      const checked = routeProfile({ ...input, task: getTask(id), now: Date.now(), snapshot: latest!,
+        profileOverride: chosen!.id, byPool: currentOccupancy(profiles, id).byPool,
+        supportsEffort: (profile, effort) => profile.id === chosen!.id && effort === routedEffort });
+      if (!checked.ok) throw new KanbanError("quota_wait", checked.reason, { pool: chosen!.pool ?? null });
+    }
     if (!stamp) return; // Explicit trusted compatibility/dependency injection only.
     const current = readPolicy();
     if (current.state !== "ok" || current.snapshot.revision !== stamp.revision || current.snapshot.policyDigest !== stamp.digest) {
@@ -1183,13 +1245,14 @@ export async function startTask(
     quotaBrief({ snapshot: seenSnapshot, pool, matrixGeneratedAt });
   let routing = options?.routing;
   const routingInput = (): RouteInput => {
-    if (routing) return { ...routing, review: reviewing, role, reviewTarget: resolveReviewTarget(getTask(id), review) };
-    const occ = currentOccupancy(profiles);
+    if (routing) return { ...routing, task: getTask(id), routingConfig: loadConfig(), review: reviewing, role, reviewTarget: resolveReviewTarget(getTask(id), review) };
+    const occ = currentOccupancy(profiles, id);
     const settings = loadConfig();
     const matrix = options?.readMatrix?.() ?? loadDispatchMatrix();
     seenSnapshot ??= options?.readSnapshot?.() ?? readPoolSnapshot();
     matrixGeneratedAt = matrix.state === "ok" ? matrix.matrix.generatedAt : null;
     routing = {
+      task, routingConfig: settings,
       profiles: reassignment ? profiles.filter((profile) =>
         !((profile.role === role || (profile.role === "candidate" && profile.candidateFor === role)) &&
           (profile.name === reassignment.oldProfile || (reassignment.oldPool && profile.pool === reassignment.oldPool)))) : profiles,
@@ -1214,10 +1277,10 @@ export async function startTask(
   };
   // Both security boundaries recheck scheduler selections before launch.
   const facts = recordedExecutorFacts(task.review_of ?? task.id);
-  const needsCheck = chosen && (isGoogleProfile(chosen) || (reviewing &&
+  const needsCheck = chosen && (isCursorChannel(chosen) || isGoogleProfile(chosen) || (reviewing &&
     (task.executor_family === "google" || (facts.executorProvider && isGoogleProfile({ provider: facts.executorProvider, model: facts.executorModel ?? undefined })) ||
       profiles.some(p => p.name === task.executor_profile && isGoogleProfile(p)))));
-  if (!chosen || (reviewing && resolveReviewTarget(getTask(id), review)) || needsCheck) {
+  if (!chosen || loadConfig().quotaRouting?.enabled !== false || (reviewing && resolveReviewTarget(getTask(id), review)) || needsCheck) {
     const input = { ...routingInput(), ...facts, role, review: reviewing, tier: task.tier };
     const preselected = Boolean(chosen);
     const decision = routeProfile(chosen ? { ...input, profileOverride: chosen.id, profiles: [chosen, ...input.profiles.filter(p => p.id !== chosen!.id)] } : input);
@@ -1237,8 +1300,8 @@ export async function startTask(
       throw new KanbanError("not_ready", decision.reason);
     }
     chosen = decision.profile;
-    if (!preselected || !pickReason) pickReason = decision.reason;
-    if (decision.effortSource && !routedSource) {
+    if (!preselected || !pickReason || decision.effortSource === "quota") pickReason = decision.reason;
+    if (decision.effortSource && (!routedSource || decision.effortSource === "quota")) {
       routedEffort = decision.effort ?? null;
       routedSource = decision.effortSource;
     }
@@ -1402,6 +1465,7 @@ export async function startTask(
         KANBAN_TOKEN: token,
         KANBAN_TASK: String(id),
         KANBAN_ROLE: role,
+        ...(isQaReview(task) ? { KANBAN_QA: "1" } : {}),
         ...prepareTaskTmpEnv(getTask(id), actor),
         ...((task.workspace_kind === "worktree" || task.workspace_kind === "lane") && role === "executor" ? { KANBAN_WORKTREE: "1" } : {}),
       },
@@ -1532,6 +1596,12 @@ export async function startTask(
     throw err instanceof KanbanError ? err : new KanbanError("start_failed", err instanceof Error ? err.message : String(err));
   }
   } catch (err) {
+    if (err instanceof KanbanError && err.code === "quota_wait") {
+      const pool = typeof err.details.pool === "string" ? err.details.pool : null;
+      const reason = quotaWaitLabel(pool, err.message);
+      noteQueueHold(getTask(id), "quota", reason, actor, { quotaWait: true });
+      return { message: reason };
+    }
     if (err instanceof KanbanError && err.code === "start_lost") return { message: alreadyStarting() };
     throw err;
   } finally {

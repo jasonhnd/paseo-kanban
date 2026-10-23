@@ -22,7 +22,7 @@ const only = (...paths: string[]) => (path: string) => paths.includes(path);
 
 describe("locateCompiler", () => {
   test("skips with every place it tried when no compiler exists", () => {
-    const found = locateCompiler({ pluginDir: "/srv/plugin", env: { PATH: "" }, home: "/home/demo", platform: "linux", exists: () => false });
+    const found = locateCompiler({ pluginDir: "/srv/plugin", env: { PATH: "" }, home: "/home/example", platform: "linux", exists: () => false });
     assert.equal(found.compiler, undefined);
     assert.match(found.skip ?? "", /no Paseo plugin compiler found/);
     assert.match(found.skip ?? "", /node_modules/);
@@ -35,10 +35,10 @@ describe("locateCompiler", () => {
   });
 
   test("runs a compiler inside a macOS app bundle under the app's Electron helper", () => {
-    const resources = join("/home/demo", "Applications", "Paseo.app", "Contents", "Resources");
+    const resources = join("/home/example", "Applications", "Paseo.app", "Contents", "Resources");
     const helper = join(resources, "..", "Frameworks", "Paseo Helper.app", "Contents", "MacOS", "Paseo Helper");
     const found = locateCompiler({
-      pluginDir: "/srv/plugin", env: { PATH: "" }, home: "/home/demo", platform: "darwin",
+      pluginDir: "/srv/plugin", env: { PATH: "" }, home: "/home/example", platform: "darwin",
       exists: only(join(resources, "app.asar"), helper),
     });
     assert.equal(found.compiler, join(resources, "app.asar", "node_modules", ...COMPILER_IN_PACKAGE));

@@ -50,7 +50,7 @@ mkdirSync(agentic, { recursive: true });
 process.env.KANBAN_DATA_DIR = dir;
 process.env.KANBAN_AGENTS_DIR = agents;
 process.env.KANBAN_WORKTREES_ROOT = trees;
-process.env.KANBAN_AGENTIC_ROOT = agentic;
+process.env.KANBAN_PROJECTS_ROOT = agentic;
 
 const root = join(import.meta.dirname, "..");
 const profile: Profile = {
@@ -58,9 +58,9 @@ const profile: Profile = {
   name: zhCN("labels.role.executor"),
   role: "executor",
   family: "xai",
-  provider: "cursor",
+  provider: "alternate",
   model: "grok-4.7",
-  pool: "cursor",
+  pool: "alternate",
 };
 
 function writeAgent(id: string, cwd: string, extra: { archivedAt?: string | null; labels?: Record<string, string>; title?: string; provider?: string } = {}): void {
@@ -71,7 +71,7 @@ function writeAgent(id: string, cwd: string, extra: { archivedAt?: string | null
       id,
       cwd,
       title: extra.title ?? id,
-      provider: extra.provider ?? "cursor",
+      provider: extra.provider ?? "alternate",
       labels: extra.labels ?? {},
       archivedAt: extra.archivedAt ?? null,
       lastActivityAt: "2026-09-27T00:00:00.000Z",
@@ -125,7 +125,7 @@ async function settle(id: number, directory: string, dirty = false): Promise<str
 }
 
 function cliEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, KANBAN_DATA_DIR: dir, KANBAN_AGENTS_DIR: agents, KANBAN_WORKTREES_ROOT: trees, KANBAN_AGENTIC_ROOT: agentic };
+  const env: NodeJS.ProcessEnv = { ...process.env, KANBAN_DATA_DIR: dir, KANBAN_AGENTS_DIR: agents, KANBAN_WORKTREES_ROOT: trees, KANBAN_PROJECTS_ROOT: agentic };
   delete env.KANBAN_TOKEN;
   delete env.PASEO_AGENT_ID;
   delete env.KANBAN_TASK;
@@ -142,7 +142,7 @@ function runCheck(args: string[], agentsRoot: string): Promise<{ code: number | 
         KANBAN_DATA_DIR: dir,
         KANBAN_AGENTS_DIR: agentsRoot,
         KANBAN_WORKTREES_ROOT: trees,
-        KANBAN_AGENTIC_ROOT: agentic,
+        KANBAN_PROJECTS_ROOT: agentic,
         KANBAN_MISSING_CWD_LIST: join(dir, "missing-cwd-list.md"),
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -367,9 +367,9 @@ describe("missing cwd guard", { concurrency: false }, () => {
     const foreign = join(dir, "foreign-missing");
     getDb().prepare("UPDATE tasks SET agent_id = 'patrol-card' WHERE id = ?").run(card);
     const agentsOnDisk: CwdAgent[] = [
-      { id: "patrol-card", cwd: underTree, provider: "cursor", title: "demo fixture", archived: false, lastActivityAt: null, labels: { kanban: "1" } },
-      { id: "patrol-free", cwd: underAgentic, provider: "cursor", title: "None sample", archived: false, lastActivityAt: null, labels: {} },
-      { id: "patrol-foreign", cwd: foreign, provider: "cursor", title: "Elsewhere", archived: false, lastActivityAt: null, labels: {} },
+      { id: "patrol-card", cwd: underTree, provider: "alternate", title: "demo fixture", archived: false, lastActivityAt: null, labels: { kanban: "1" } },
+      { id: "patrol-free", cwd: underAgentic, provider: "alternate", title: "None sample", archived: false, lastActivityAt: null, labels: {} },
+      { id: "patrol-foreign", cwd: foreign, provider: "alternate", title: "Elsewhere", archived: false, lastActivityAt: null, labels: {} },
     ];
     const added: string[] = [];
     const logs: string[] = [];
@@ -405,7 +405,7 @@ describe("missing cwd guard", { concurrency: false }, () => {
       {
         id: "patrol-done",
         cwd: underTree,
-        provider: "cursor",
+        provider: "alternate",
         title: "Done",
         archived: false,
         lastActivityAt: null,
@@ -851,15 +851,15 @@ describe("missing cwd guard", { concurrency: false }, () => {
     const missingFile = join(bucket, "missing-one.json");
     writeFileSync(
       missingFile,
-      JSON.stringify({ id: "missing-one", cwd: missing, title: "Directory missing", provider: "cursor", archivedAt: "2026-09-27T00:00:00.000Z", labels: {} }),
+      JSON.stringify({ id: "missing-one", cwd: missing, title: "Directory missing", provider: "alternate", archivedAt: "2026-09-27T00:00:00.000Z", labels: {} }),
     );
     writeFileSync(
       join(bucket, "placeholder-one.json"),
-      JSON.stringify({ id: "placeholder-one", cwd: placeholder, title: "Sample text", provider: "cursor", archivedAt: null, labels: { kanban: "1" } }),
+      JSON.stringify({ id: "placeholder-one", cwd: placeholder, title: "Sample text", provider: "alternate", archivedAt: null, labels: { kanban: "1" } }),
     );
     writeFileSync(
       join(bucket, "healthy-one.json"),
-      JSON.stringify({ id: "healthy-one", cwd: healthy, title: "demo fixture", provider: "cursor", archivedAt: null, labels: {} }),
+      JSON.stringify({ id: "healthy-one", cwd: healthy, title: "demo fixture", provider: "alternate", archivedAt: null, labels: {} }),
     );
     const stamp = statSync(missingFile).mtimeMs;
     const listPath = join(dir, "missing-cwd-list.md");

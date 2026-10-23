@@ -74,13 +74,23 @@ after(() => {
 });
 
 describe("Cursor read-only dispatch", () => {
-  it("keeps a Cursor executor on agent mode and does not rewrite a Claude reviewer's mode", async () => {
+  it("refuses the reserved Cursor executor before opening an agent", async () => {
+    const exec = launcher();
+    const worker = createTask({ project: "cursor-ro", title: "Reserved executor", role: "executor", workspacePath: room("reserved") });
+    const result = await startTask(worker.id, exec.api, "test", { profiles: [cursorExec, claudeReview] });
+    assert.equal(exec.configs.length, 0);
+    assert.equal(getTask(worker.id).status, "blocked");
+    assert.equal(getTask(worker.id).blocked_kind, "needs_human");
+    assert.ok(result.message.includes(zhCN("routing.cursorReserved")));
+  });
+
+  it("keeps an allowed executor mode and features and does not rewrite a Claude reviewer's mode", async () => {
     const exec = launcher();
     const worker = createTask({ project: "cursor-ro", title: "Executor", role: "executor", workspacePath: room("exec") });
-    await startTask(worker.id, exec.api, "test", { profiles: [cursorExec, claudeReview] });
+    await startTask(worker.id, exec.api, "test", { profiles: [{ ...cursorExec, name: "Executor · Grok", provider: "grok", pool: "x-ultra" }, claudeReview] });
     assert.equal(exec.configs.length, 1);
     assert.equal(exec.configs[0]?.config.modeId, "agent");
-    assert.equal(exec.configs[0]?.config.provider, "cursor/grok-4.7");
+    assert.equal(exec.configs[0]?.config.provider, "grok/grok-4.7");
     assert.equal(exec.configs[0]?.config.featureValues?.auto_accept, true);
 
     const review = launcher();

@@ -9,8 +9,8 @@ import { after, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const GATES = ["scripts/check-private.mjs", "scripts/private-identifiers.mjs", "scripts/git-objects.mjs", "scripts/check-identity.mjs", "scripts/private-scan.rules.json", "scripts/check-publication.mjs", "scripts/verify-ref.mjs", "scripts/isolated-environment.mjs", "scripts/shared-runtime.mjs", "scripts/test-node.mjs", ".githooks/pre-commit", ".githooks/pre-push"];
-GATES.push("shared/privacy-denylist.mjs", "shared/public-identity.mjs");
+const GATES = ["scripts/check-private.mjs", "scripts/private-identifiers.mjs", "scripts/git-objects.mjs", "scripts/check-identity.mjs", "scripts/check-publication.mjs", "scripts/verify-ref.mjs", "scripts/isolated-environment.mjs", "scripts/shared-runtime.mjs", "scripts/test-node.mjs", ".githooks/pre-commit", ".githooks/pre-push"];
+GATES.push("test/helpers/test-environment.mjs", "server/storage/test-safety.ts", "shared/privacy-denylist.mjs", "shared/public-identity.mjs", "server/privacy-scanner.mjs", "shared/privacy-rules.mjs");
 const j = (...parts) => parts.join("");
 const PLACEHOLDER = "noreply@example.invalid";
 const PERSONAL = j("someone", "@", "mail.test.org");

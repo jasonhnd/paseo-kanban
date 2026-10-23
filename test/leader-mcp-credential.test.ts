@@ -44,7 +44,9 @@ async function credential(agentId: string) {
 }
 async function call(name: string, args: Record<string, unknown> = {}, headers: Record<string, string> = {}) {
   const response = await fetch(`${server.url}/mcp`, {
-    method: "POST", headers: { "content-type": "application/json", ...headers },
+    // This fixture also runs synchronous CLI children on the server's event loop.
+    // Do not leave pooled idle sockets across those blocking operations.
+    method: "POST", headers: { "content-type": "application/json", ...headers, connection: "close" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
   });
   assert.equal(response.status, 200);

@@ -37,6 +37,7 @@ import { pathToFileURL } from "node:url";
 import { word } from "./helper";
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   console.log("${name}", word, ...process.argv.slice(2));
+  if (process.argv.includes("--parent")) console.log("parent:" + process.ppid);
   if (process.argv.includes("--fail")) process.exitCode = 7;
 }
 `);
@@ -56,6 +57,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   assert.match(run("check-missing-cwd", "--json").stdout, /check-missing-cwd ready --json/);
   assert.match(run("check-missing-cwd", "--help").stdout, /Usage: check-missing-cwd/);
   assert.equal(run("paseo-kanban.mjs", "--fail").status, 7);
+  for (const args of [["wait-bg", "--parent"], ["--json", "wait-bg", "--parent"]]) {
+    assert.match(run("paseo-kanban.mjs", ...args).stdout, new RegExp(`parent:${process.pid}\\b`));
+  }
   assert.doesNotMatch(readFileSync(join(root, "bin/cli.bundle.mjs"), "utf8"), /from ["']\.\/helper/);
 });
 
@@ -114,4 +118,15 @@ console.log(z.object({ text: z.string() }).safeParse({ text: 42 }).error.issues[
   assert.match(out.stdout, /expected string/);
   const bundle = readFileSync(join(root, "bin/cli.bundle.mjs"), "utf8");
   assert.doesNotMatch(bundle, /locales\/de\.js|classic\/from-json-schema\.js/);
+});
+
+test("CLI loads the canonical packaged privacy policy without embedding path-bound approvals", async () => {
+  const root = fixture(); mkdirSync(join(root, "shared"));
+  writeFileSync(join(root, "shared/privacy-rules.mjs"), 'export default { marker: "demo-policy-sentinel" };\n');
+  for (const name of ENTRIES) writeFileSync(join(root, "server", `${name}.ts`), 'import rules from "../shared/privacy-rules.mjs"; console.log(rules.marker);\n');
+  await buildCli(root);
+  const bundle = readFileSync(join(root, "bin/cli.bundle.mjs"), "utf8");
+  assert.doesNotMatch(bundle, /demo-policy-sentinel/);
+  const out = spawnSync(process.execPath, [join(root, "bin/cli.bundle.mjs")], {encoding:"utf8"});
+  assert.equal(out.status, 0, out.stderr); assert.equal(out.stdout.trim(), "demo-policy-sentinel");
 });

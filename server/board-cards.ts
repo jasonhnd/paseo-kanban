@@ -72,6 +72,7 @@ export interface BoardCard {
   blockedReason: string | null;
   startedAt: string | null;
   currentText: string | null;
+  dispatchReason?: string | null;
   executorText: string | null;
   executorAgentId: string | null;
   nextStep: string | null;
@@ -205,8 +206,18 @@ export interface CardContext {
   agentTitles: Map<string, string | null>;
   reviewWaits: Map<number, AcceptanceReviewWait>;
   reviewAssignments: Map<number, ReviewAssignment[]>;
+  dispatchReasons?: Map<string, string>;
 }
 
+
+/** A resumed executor uses its own start reason, even if a later review used another pool. */
+function loadDispatchReasons(): Map<string, string> {
+  const rows = getDb().prepare(`SELECT task_id, json_extract(data_json, '$.agentId') AS agent_id,
+    json_extract(data_json, '$.runId') AS run_id, json_extract(data_json, '$.reason') AS reason FROM events
+    WHERE kind IN ('started', 'cloud_run_started') AND json_type(data_json, '$.reason') = 'text' ORDER BY id`)
+    .all() as Array<{ task_id: number; agent_id: string | null; run_id: number | null; reason: string }>;
+  return new Map(rows.map(r => [`${r.task_id}:${r.agent_id ? `agent:${r.agent_id}` : `run:${r.run_id}`}`, r.reason]));
+}
 
 export function loadCardContext(): CardContext {
   const config = loadConfig();
@@ -219,6 +230,7 @@ export function loadCardContext(): CardContext {
     agentTitles: new Map(),
     reviewWaits: loadAcceptanceReviewWaits(),
     reviewAssignments: loadReviewAssignments(),
+    dispatchReasons: loadDispatchReasons(),
   };
 }
 
@@ -280,6 +292,7 @@ function cardHead(facts: CardFacts) {
     agentId: task.agent_id,
     startedAt: first?.started_at ?? run?.started_at ?? null,
     currentText,
+    dispatchReason: facts.context.dispatchReasons?.get(`${task.id}:${run?.agent_id ? `agent:${run.agent_id}` : `run:${run?.id}`}`) ?? null,
     executorText: showExecutor
       ? personText(executor?.role ?? "executor", executor?.profile_name ?? task.executor_profile, modelOf(executor), task.executor_agent_id)
       : null,

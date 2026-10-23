@@ -48,15 +48,16 @@ const grok: Profile = {
   pool: "supergrok",
   thinkingOptionId: "high",
 };
-const cursorLocal: Profile = {
+// A separate demo Grok account exercises generic fallback ordering; Cursor transport is reserved.
+const alternateGrok: Profile = {
   id: "cl",
-  name: "Executor · Cursor Local (candidate)",
+  name: "Executor · Grok Alternate (candidate)",
   role: "candidate",
   candidateFor: "executor",
   family: "xai",
-  provider: "cursor",
+  provider: "grok",
   model: "grok-4.7",
-  pool: "cursor",
+  pool: "demo-grok-alt",
   thinkingOptionId: "high",
 };
 const opus: Profile = {
@@ -110,7 +111,7 @@ const xaiReview: Profile = {
   family: "xai",
   provider: "grok",
   model: "grok-4.7",
-  pool: "cursor",
+  pool: "demo-grok-alt",
   thinkingOptionId: "high",
 };
 const cursorReview: Profile = {
@@ -121,7 +122,7 @@ const cursorReview: Profile = {
   family: "xai",
   provider: "cursor",
   model: "grok-4.7",
-  pool: "cursor",
+  pool: "demo-grok-alt",
   thinkingOptionId: "high",
 };
 const reader: Profile = {
@@ -157,10 +158,10 @@ function matrix(patch: Partial<DispatchMatrix> = {}): DispatchMatrix {
     defaultTier: "L2",
     downgradeWhenTight: ["L1", "L2"],
     executor: {
-      L1: [item("Executor · Cursor Local (candidate)", "low"), item(zhCN("labels.role.executor"), "low"), item(zhCN("labels.role.batch"), null)],
-      L2: [item("Executor · Cursor Local (candidate)", "medium"), item(zhCN("labels.role.executor"), "medium")],
-      L3: [item("Executor · Cursor Local (candidate)", "high"), item(zhCN("labels.role.executor"), "high"), item(complexDocsProfileName, "high")],
-      L4: [item("Executor · Cursor Local (candidate)", "xhigh"), item(complexDocsProfileName, "xhigh"), item(zhCN("labels.role.executor"), "xhigh")],
+      L1: [item("Executor · Grok Alternate (candidate)", "low"), item(zhCN("labels.role.executor"), "low"), item(zhCN("labels.role.batch"), null)],
+      L2: [item("Executor · Grok Alternate (candidate)", "medium"), item(zhCN("labels.role.executor"), "medium")],
+      L3: [item("Executor · Grok Alternate (candidate)", "high"), item(zhCN("labels.role.executor"), "high"), item(complexDocsProfileName, "high")],
+      L4: [item("Executor · Grok Alternate (candidate)", "xhigh"), item(complexDocsProfileName, "xhigh"), item(zhCN("labels.role.executor"), "xhigh")],
     },
     reviewerFamilies: {
       xai: {
@@ -209,7 +210,7 @@ function snapshot(pools: Record<string, Partial<PoolEntry>> = {}): PoolSnapshot 
 
 function route(patch: Partial<RouteInput> = {}) {
   return routeProfile({
-    profiles: [grok, cursorLocal, opus, chore, review, fable, xaiReview, cursorReview, reader, otherReader],
+    profiles: [grok, alternateGrok, opus, chore, review, fable, xaiReview, cursorReview, reader, otherReader],
     role: "executor",
     review: false,
     byPool: {},
@@ -346,12 +347,12 @@ describe("dispatch matrix selection", () => {
   it("picks the first dispatchable profile for the tier, with prefer first and deprioritize last", () => {
     const closed = must(
       route({
-        matrix: { ...base, executor: { ...base.executor, L3: [item(zhCN("labels.role.executor"), "high"), item("Executor · Cursor Local (candidate)", "high")] } },
+        matrix: { ...base, executor: { ...base.executor, L3: [item(zhCN("labels.role.executor"), "high"), item("Executor · Grok Alternate (candidate)", "high")] } },
         tier: "L3",
-        snapshot: snapshot({ supergrok: { dispatchable: false, reason: "Ahead" }, cursor: {} }),
+        snapshot: snapshot({ supergrok: { dispatchable: false, reason: "Ahead" }, "demo-grok-alt": {} }),
       }),
     );
-    assert.equal(closed.profile.name, cursorLocal.name);
+    assert.equal(closed.profile.name, alternateGrok.name);
     assert.match(closed.reason, /L3/);
     assert.match(closed.reason, new RegExp("high" + localePattern(zhCNPart("missingCwd.none", 0, 1)) + zhCN("routing.effortSource.matrix") + localePattern(zhCNPart("missingCwd.none", 3, 4))));
     assert.match(closed.reason, new RegExp(localePattern(zhCNPart("routing.sum.skipped", 0, 2))));
@@ -361,7 +362,7 @@ describe("dispatch matrix selection", () => {
       route({
         matrix: base,
         tier: "L2",
-        snapshot: snapshot({ supergrok: { prefer: true }, cursor: {} }),
+        snapshot: snapshot({ supergrok: { prefer: true }, "demo-grok-alt": {} }),
       }),
     );
     assert.equal(preferred.profile.name, grok.name);
@@ -370,7 +371,7 @@ describe("dispatch matrix selection", () => {
       route({
         matrix: base,
         tier: "L2",
-        snapshot: snapshot({ cursor: { deprioritize: true }, supergrok: {} }),
+        snapshot: snapshot({ "demo-grok-alt": { deprioritize: true }, supergrok: {} }),
       }),
     );
     assert.equal(later.profile.name, grok.name);
@@ -379,26 +380,26 @@ describe("dispatch matrix selection", () => {
       route({
         matrix: {
           ...base,
-          executor: { ...base.executor, L2: [item(zhCN("labels.role.executor"), "medium"), item("Executor · Cursor Local (candidate)", "medium")] },
+          executor: { ...base.executor, L2: [item(zhCN("labels.role.executor"), "medium"), item("Executor · Grok Alternate (candidate)", "medium")] },
         },
         tier: "L2",
-        snapshot: snapshot({ supergrok: { deprioritize: true }, cursor: {} }),
+        snapshot: snapshot({ supergrok: { deprioritize: true }, "demo-grok-alt": {} }),
       }),
     );
-    assert.equal(demoted.profile.name, cursorLocal.name);
+    assert.equal(demoted.profile.name, alternateGrok.name);
   });
 
   // TEST_0287: EX sorts each list by the user's pool order while matrix.priority is in force.
   describe("matrix priority", () => {
     const NOW = Date.parse("2026-10-08T00:00:00.000Z");
-    const order = { order: ["cursor", "claude-max", "supergrok"], until: "2026-10-10T04:26:56Z", untilMs: Date.parse("2026-10-10T04:26:56Z") };
+    const order = { order: ["demo-grok-alt", "claude-max", "supergrok"], until: "2026-10-10T04:26:56Z", untilMs: Date.parse("2026-10-10T04:26:56Z") };
     const expired = { ...order, until: "2026-10-07T00:00:00Z", untilMs: Date.parse("2026-10-07T00:00:00Z") };
-    const list = [item("Executor · Cursor Local (candidate)", "medium"), item(complexDocsProfileName, "medium"), item(zhCN("labels.role.executor"), "medium")];
+    const list = [item("Executor · Grok Alternate (candidate)", "medium"), item(complexDocsProfileName, "medium"), item(zhCN("labels.role.executor"), "medium")];
     const withPriority = (priority: DispatchMatrix["priority"]) => ({ ...base, executor: { ...base.executor, L2: list }, priority });
-    const claudePrefer = snapshot({ cursor: {}, "claude-max": { prefer: true }, supergrok: {} });
+    const claudePrefer = snapshot({ "demo-grok-alt": {}, "claude-max": { prefer: true }, supergrok: {} });
 
     it("keeps the matrix order while priority is in force, even when a later pool is prefer", () => {
-      assert.equal(must(route({ matrix: withPriority(order), tier: "L2", snapshot: claudePrefer, now: NOW })).profile.name, cursorLocal.name);
+      assert.equal(must(route({ matrix: withPriority(order), tier: "L2", snapshot: claudePrefer, now: NOW })).profile.name, alternateGrok.name);
     });
 
     it("moves prefer first again once priority has expired", () => {
@@ -411,26 +412,26 @@ describe("dispatch matrix selection", () => {
     });
 
     it("still puts deprioritize and a just-rate-limited pool last while priority is in force", () => {
-      const demoted = snapshot({ cursor: { deprioritize: true }, "claude-max": {}, supergrok: {} });
+      const demoted = snapshot({ "demo-grok-alt": { deprioritize: true }, "claude-max": {}, supergrok: {} });
       assert.equal(must(route({ matrix: withPriority(order), tier: "L2", snapshot: demoted, now: NOW })).profile.name, opus.name);
-      const avoided = must(route({ matrix: withPriority(order), tier: "L2", snapshot: claudePrefer, avoidPools: ["cursor"], now: NOW }));
+      const avoided = must(route({ matrix: withPriority(order), tier: "L2", snapshot: claudePrefer, avoidPools: ["demo-grok-alt"], now: NOW }));
       assert.equal(avoided.profile.name, opus.name);
     });
 
     it("A, B picks A and B, A picks B when both can go and priority is in force", () => {
-      const ab = { ...base, priority: order, executor: { ...base.executor, L2: [item("Executor · Cursor Local (candidate)", "medium"), item(zhCN("labels.role.executor"), "medium")] } };
-      const ba = { ...base, priority: order, executor: { ...base.executor, L2: [item(zhCN("labels.role.executor"), "medium"), item("Executor · Cursor Local (candidate)", "medium")] } };
-      const flags = snapshot({ supergrok: { prefer: true }, cursor: { prefer: true } });
-      assert.equal(must(route({ matrix: ab, tier: "L2", snapshot: flags, now: NOW })).profile.name, cursorLocal.name);
+      const ab = { ...base, priority: order, executor: { ...base.executor, L2: [item("Executor · Grok Alternate (candidate)", "medium"), item(zhCN("labels.role.executor"), "medium")] } };
+      const ba = { ...base, priority: order, executor: { ...base.executor, L2: [item(zhCN("labels.role.executor"), "medium"), item("Executor · Grok Alternate (candidate)", "medium")] } };
+      const flags = snapshot({ supergrok: { prefer: true }, "demo-grok-alt": { prefer: true } });
+      assert.equal(must(route({ matrix: ab, tier: "L2", snapshot: flags, now: NOW })).profile.name, alternateGrok.name);
       assert.equal(must(route({ matrix: ba, tier: "L2", snapshot: flags, now: NOW })).profile.name, grok.name);
     });
   });
 
   it("queues when nobody in the list can go, and does not pick a profile outside the list", () => {
     const held = route({
-      matrix: { ...base, executor: { ...base.executor, L3: [item(zhCN("labels.role.executor"), "high"), item("Executor · Cursor Local (candidate)", "high")] } },
+      matrix: { ...base, executor: { ...base.executor, L3: [item(zhCN("labels.role.executor"), "high"), item("Executor · Grok Alternate (candidate)", "high")] } },
       tier: "L3",
-      snapshot: snapshot({ supergrok: { dispatchable: false }, cursor: { dispatchable: false } }),
+      snapshot: snapshot({ supergrok: { dispatchable: false }, "demo-grok-alt": { dispatchable: false } }),
     });
     assert.equal(held.ok, false);
     if (!held.ok) {
@@ -450,7 +451,7 @@ describe("dispatch matrix selection", () => {
         supportsEffort: supports,
       }),
     );
-    assert.equal(tight.profile.name, cursorLocal.name);
+    assert.equal(tight.profile.name, alternateGrok.name);
     assert.equal(tight.effort, "low");
     assert.equal(tight.effortSource, "downgrade");
     assert.match(tight.reason, new RegExp("low" + localePattern(zhCNPart("missingCwd.none", 0, 1)) + zhCN("routing.effortSource.downgrade") + localePattern(zhCNPart("missingCwd.none", 3, 4))));
@@ -458,7 +459,7 @@ describe("dispatch matrix selection", () => {
     const blocked = route({
       matrix: base,
       tier: "L2",
-      snapshot: snapshot({ supergrok: { dispatchable: false }, cursor: { dispatchable: false }, "claude-max": { dispatchable: false } }),
+      snapshot: snapshot({ supergrok: { dispatchable: false }, "demo-grok-alt": { dispatchable: false }, "claude-max": { dispatchable: false } }),
     });
     assert.equal(blocked.ok, false);
     if (!blocked.ok) assert.match(blocked.reason, new RegExp(zhCN("routing.downgradedStill")));
@@ -522,7 +523,7 @@ describe("dispatch matrix selection", () => {
       route({
         matrix: { ...base, executor: { ...base.executor, L1: [item(zhCN("labels.role.executor"), null)] } },
         tier: "L1",
-        snapshot: snapshot({ cursor: { dispatchable: false } }),
+        snapshot: snapshot({ "demo-grok-alt": { dispatchable: false } }),
       }),
     );
     assert.equal(byProfile.profile.name, grok.name);
@@ -537,7 +538,7 @@ describe("dispatch matrix selection", () => {
         matrix: base,
         tier: "L3",
         profileOverride: zhCN("labels.role.executor"),
-        snapshot: snapshot({ cursor: { prefer: true } }),
+        snapshot: snapshot({ "demo-grok-alt": { prefer: true } }),
       }),
     );
     assert.equal(pinned.profile.name, grok.name);
@@ -727,7 +728,7 @@ describe("dispatch matrix onlyRoles", () => {
   };
   const limited = snapshot({
     "claude-max": { dispatchable: true, onlyRoles: ["reviewer"] },
-    cursor: {},
+    "demo-grok-alt": {},
     supergrok: {},
   });
 
@@ -753,12 +754,12 @@ describe("dispatch matrix onlyRoles", () => {
     const executor = must(
       route({
         tier: "L3",
-        matrix: matrix({ executor: { L3: [item(complexDocsProfileName, "high"), item("Executor · Cursor Local (candidate)", "high")] } }),
+        matrix: matrix({ executor: { L3: [item(complexDocsProfileName, "high"), item("Executor · Grok Alternate (candidate)", "high")] } }),
         snapshot: limited,
-        profiles: [grok, cursorLocal, opus, review],
+        profiles: [grok, alternateGrok, opus, review],
       }),
     );
-    assert.equal(executor.profile.name, cursorLocal.name);
+    assert.equal(executor.profile.name, alternateGrok.name);
     assert.match(executor.reason, new RegExp(localePattern(complexDocsProfileName) + ".*" + localePattern(zhCN("pools.onlyFor", { pool: "claude-max", roles: zhCN("labels.role.reviewer") }))));
   });
 
@@ -803,26 +804,26 @@ describe("matrix start", () => {
       autoStart: { "matrix-start": true },
       supervisorAgentId: null,
       supervisors: {},
-      concurrency: { global: 20, pools: { cursor: 20, supergrok: 20, "claude-max": 20 }, roles: { executor: 20, reviewer: 20 } },
+      concurrency: { global: 20, pools: { "demo-grok-alt": 20, supergrok: 20, "claude-max": 20 }, roles: { executor: 20, reviewer: 20 } },
     };
     saveConfig(config);
     const room = join(dir, "matrix-start-room");
     mkdirSync(room, { recursive: true });
     const task = createTask({ project: "matrix-start", title: "Follow matrix", role: "executor", workspacePath: room, tier: "L3" });
     const result = await runTick({
-      profiles: [grok, cursorLocal, review],
+      profiles: [grok, alternateGrok, review],
       launcher,
       config,
-      pools: snapshot({ supergrok: { dispatchable: false, reason: "Ahead" }, cursor: {} }),
+      pools: snapshot({ supergrok: { dispatchable: false, reason: "Ahead" }, "demo-grok-alt": {} }),
       matrix: {
         state: "ok",
-        matrix: matrix({ executor: { L3: [item(zhCN("labels.role.executor"), "high"), item("Executor · Cursor Local (candidate)", "high")] } }),
+        matrix: matrix({ executor: { L3: [item(zhCN("labels.role.executor"), "high"), item("Executor · Grok Alternate (candidate)", "high")] } }),
         path: join(dir, "memory.json"),
       },
     });
     const fresh = getTask(task.id);
     assert.ok(result.started.includes(task.id), `${fresh.status} ${fresh.hold_reason ?? ""} ${fresh.blocked_reason ?? ""}`);
-    assert.equal(getTask(task.id).executor_profile, cursorLocal.name);
+    assert.equal(getTask(task.id).executor_profile, alternateGrok.name);
     assert.equal(seen[0], "high");
     const row = getDb().prepare("SELECT effort, thinking_option_id FROM runs WHERE task_id = ?").get(task.id) as {
       effort: string | null;
@@ -832,7 +833,7 @@ describe("matrix start", () => {
     assert.equal(row.thinking_option_id, "high");
     const started = getDb().prepare("SELECT data_json FROM events WHERE task_id = ? AND kind = 'started'").get(task.id) as { data_json: string };
     assert.match(started.data_json, /L3/);
-    assert.match(started.data_json, new RegExp("Executor · Cursor Local \\(candidate\\)"));
+    assert.match(started.data_json, new RegExp("Executor · Grok Alternate \\(candidate\\)"));
     assert.match(started.data_json, new RegExp("high" + localePattern(zhCNPart("missingCwd.none", 0, 1)) + zhCN("routing.effortSource.matrix") + localePattern(zhCNPart("missingCwd.none", 3, 4))));
     assert.match(started.data_json, new RegExp(localePattern(zhCNPart("routing.sum.skipped", 0, 2))));
     assert.match(started.data_json, new RegExp(localePattern(zhCNPart("routing.poolClosed", 7, 10))));
@@ -841,11 +842,11 @@ describe("matrix start", () => {
     mkdirSync(lowDir, { recursive: true });
     const forced = createTask({ project: "matrix-start", title: "demo fixture", role: "executor", workspacePath: lowDir, tier: "L3", effort: "low" });
     const file = join(dir, "start-matrix.json");
-    writeFileSync(file, JSON.stringify({ version: 1, defaultTier: "L2", downgradeWhenTight: ["L1", "L2"], roles: { executor: { L3: [{ profile: "Executor · Cursor Local (candidate)", effort: "high" }] }, reviewer: { byExecutorFamily: { xai: { L3: [{ profile: zhCN("labels.role.reviewer"), effort: "high" }] } } } } }));
+    writeFileSync(file, JSON.stringify({ version: 1, defaultTier: "L2", downgradeWhenTight: ["L1", "L2"], roles: { executor: { L3: [{ profile: "Executor · Grok Alternate (candidate)", effort: "high" }] }, reviewer: { byExecutorFamily: { xai: { L3: [{ profile: zhCN("labels.role.reviewer"), effort: "high" }] } } } } }));
     const previous = process.env.KANBAN_DISPATCH_MATRIX;
     process.env.KANBAN_DISPATCH_MATRIX = file;
     try {
-      const again = await startTask(forced.id, launcher, "scheduler", { profiles: [grok, cursorLocal, review] });
+      const again = await startTask(forced.id, launcher, "scheduler", { profiles: [grok, alternateGrok, review] });
       assert.match(again.message, new RegExp(zhCN("cardDrawer.settings.start")));
       const low = getDb().prepare("SELECT effort FROM runs WHERE task_id = ?").get(forced.id) as { effort: string | null };
       assert.equal(low.effort, "low");
@@ -933,7 +934,7 @@ describe("high-risk review roster", () => {
 
   it("keeps execution on the stored tier when the card is high-risk", () => {
     const picked = must(route({ matrix: fableOnly, tier: "L3", tags: ["high-risk"] }));
-    assert.equal(picked.profile.name, cursorLocal.name);
+    assert.equal(picked.profile.name, alternateGrok.name);
     assert.equal(picked.effort, "high");
     assert.match(picked.reason, new RegExp("^L3" + zhCN("common.comma")));
     assert.doesNotMatch(picked.reason, new RegExp("high-risk " + localePattern(zhCNPart("routing.highRiskNote", 10, 14))));
@@ -942,12 +943,12 @@ describe("high-risk review roster", () => {
   it("does not start an L3 high-risk executor when the L4 Fable pool cannot be reserved", () => {
     const held = route({
       matrix: matrix({
-        executor: { L3: [item("Executor · Cursor Local (candidate)", "high"), item(zhCN("labels.role.executor"), "high")] },
+        executor: { L3: [item("Executor · Grok Alternate (candidate)", "high"), item(zhCN("labels.role.executor"), "high")] },
         reviewerFamilies: fableOnly.reviewerFamilies,
       }),
       tier: "L3",
       tags: ["high-risk"],
-      snapshot: snapshot({ "claude-fable": { dispatchable: false, reason: "Quota exhausted" }, "claude-max": {}, cursor: {}, supergrok: {} }),
+      snapshot: snapshot({ "claude-fable": { dispatchable: false, reason: "Quota exhausted" }, "claude-max": {}, "demo-grok-alt": {}, supergrok: {} }),
     });
     assert.equal(held.ok, false);
     if (!held.ok) {
@@ -965,10 +966,10 @@ describe("high-risk review roster", () => {
         matrix: fableOnly,
         tier: "L3",
         tags: ["high-risk"],
-        snapshot: snapshot({ "claude-fable": {}, "claude-max": {}, cursor: {} }),
+        snapshot: snapshot({ "claude-fable": {}, "claude-max": {}, "demo-grok-alt": {} }),
       }),
     );
-    assert.equal(picked.profile.name, cursorLocal.name);
+    assert.equal(picked.profile.name, alternateGrok.name);
     assert.equal(picked.effort, "high");
     assert.equal(picked.effortSource, "matrix");
     assert.match(picked.reason, new RegExp("^L3" + zhCN("common.comma")));
@@ -981,10 +982,10 @@ describe("high-risk review roster", () => {
         matrix: fableOnly,
         tier: "L3",
         tags: [],
-        snapshot: snapshot({ "claude-fable": { dispatchable: false, reason: "Quota exhausted" }, "claude-max": {}, cursor: {} }),
+        snapshot: snapshot({ "claude-fable": { dispatchable: false, reason: "Quota exhausted" }, "claude-max": {}, "demo-grok-alt": {} }),
       }),
     );
-    assert.equal(picked.profile.name, cursorLocal.name);
+    assert.equal(picked.profile.name, alternateGrok.name);
     assert.equal(picked.effort, "high");
     assert.match(picked.reason, new RegExp("^L3" + zhCN("common.comma")));
     assert.doesNotMatch(picked.reason, new RegExp("high-risk " + localePattern(zhCNPart("routing.highRiskNote", 10, 14))));
@@ -1002,7 +1003,7 @@ describe("high-risk review roster", () => {
         tags: ["high-risk"],
       }),
     );
-    assert.equal(picked.profile.name, cursorLocal.name);
+    assert.equal(picked.profile.name, alternateGrok.name);
     assert.equal(picked.effort, "high");
     assert.match(picked.reason, new RegExp("^L3" + zhCN("common.comma")));
     assert.doesNotMatch(picked.reason, new RegExp(zhCN("routing.highRiskNote")));
@@ -1104,11 +1105,11 @@ describe("high-risk review roster", () => {
       autoStart: { "high-risk-review": true },
       supervisorAgentId: null,
       supervisors: {},
-      concurrency: { global: 20, pools: { cursor: 20, supergrok: 20, "claude-max": 20, "claude-fable": 20 }, roles: { executor: 20, reviewer: 20 } },
+      concurrency: { global: 20, pools: { "demo-grok-alt": 20, supergrok: 20, "claude-max": 20, "claude-fable": 20 }, roles: { executor: 20, reviewer: 20 } },
     };
     saveConfig(config);
     const result = await runTick({
-      profiles: [grok, cursorLocal, review, fable, xaiReview],
+      profiles: [grok, alternateGrok, review, fable, xaiReview],
       launcher: {
         async create() {
           return { id: "fable-reviewer" };
@@ -1137,7 +1138,7 @@ describe("high-risk review roster", () => {
       supervisors: {},
       concurrency: {
         global: 20,
-        pools: { cursor: 20, supergrok: 20, "claude-max": 20, "claude-fable": 20 },
+        pools: { "demo-grok-alt": 20, supergrok: 20, "claude-max": 20, "claude-fable": 20 },
         roles: { executor: 20, reviewer: 20 },
       },
     };
@@ -1158,7 +1159,7 @@ describe("high-risk review roster", () => {
     const config = reserveConfig(project);
     saveConfig(config);
     const result = await runTick({
-      profiles: [grok, cursorLocal, review, fable, xaiReview],
+      profiles: [grok, alternateGrok, review, fable, xaiReview],
       launcher: {
         async create() {
           return { id: "should-not-start" };
@@ -1169,7 +1170,7 @@ describe("high-risk review roster", () => {
         },
       },
       config,
-      pools: snapshot({ "claude-fable": { dispatchable: false, reason: "Quota exhausted" }, "claude-max": {}, cursor: {}, supergrok: {} }),
+      pools: snapshot({ "claude-fable": { dispatchable: false, reason: "Quota exhausted" }, "claude-max": {}, "demo-grok-alt": {}, supergrok: {} }),
       matrix: { state: "ok", matrix: fableOnly, path: join(dir, "reserve-closed.json") },
     });
     assert.equal(result.started.includes(task.id), false);
@@ -1197,7 +1198,7 @@ describe("high-risk review roster", () => {
     const config = reserveConfig(project);
     saveConfig(config);
     const result = await runTick({
-      profiles: [grok, cursorLocal, review, fable, xaiReview],
+      profiles: [grok, alternateGrok, review, fable, xaiReview],
       launcher: {
         async create() {
           return { id: "cursor-executor" };
@@ -1208,7 +1209,7 @@ describe("high-risk review roster", () => {
         },
       },
       config,
-      pools: snapshot({ "claude-fable": {}, "claude-max": {}, cursor: {}, supergrok: {} }),
+      pools: snapshot({ "claude-fable": {}, "claude-max": {}, "demo-grok-alt": {}, supergrok: {} }),
       matrix: { state: "ok", matrix: fableOnly, path: join(dir, "reserve-open.json") },
     });
     assert.ok(result.started.includes(task.id), getTask(task.id).hold_reason ?? getTask(task.id).status);

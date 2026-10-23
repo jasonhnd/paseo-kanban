@@ -40,7 +40,7 @@ export async function checkSingleSource(root, scope) {
     // This independent contract prevents a modified verifier from approving its own substituted command.
     const commands = {
       "typecheck": ["scripts/typecheck.mjs"],
-      "test (scripts)": ["--test", ...readdirSync(join(root, "scripts")).filter(name => name.endsWith(".test.mjs")).sort().map(name => `scripts/${name}`)],
+      "test (scripts)": ["scripts/test-scripts.mjs", ...readdirSync(join(root, "scripts")).filter(name => name.endsWith(".test.mjs")).sort().map(name => `scripts/${name}`)],
       "build (CLI)": ["scripts/build-cli.mjs"],
       "build (Paseo)": ["scripts/paseo-build-check.mjs", "--strict"],
       "test (plugin)": ["scripts/test-plugin.mjs"],

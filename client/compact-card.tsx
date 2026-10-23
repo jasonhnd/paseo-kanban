@@ -21,6 +21,7 @@ export type CompactTask = ViewTask & {
   assignerShort?: string;
   /** Short model name, the profile name, or "not assigned". */
   modelShort?: string;
+  dispatchReason?: string | null;
 };
 
 /** The badge as printed on the card: a wait on parents says only "waiting for parents"; the card numbers live in the hint and the drawer. */
@@ -95,6 +96,7 @@ export function CompactCard({ s, task, onOpen, note, showProject = false }: {
           <View style={s.compactLine}>{title}</View>
         </>
       )}
+      {task.dispatchReason ? <Text testID="card-dispatch-reason" numberOfLines={2} style={s.muted}>{task.dispatchReason}</Text> : null}
       {task.reviewStatus ? <Text testID="card-review-status" style={s.muted}>{task.reviewStatus}</Text> : null}
       <View testID="card-dispatch" style={[s.compactLine, { gap: 0 }]}>
         <Text testID="card-dispatch-who" numberOfLines={1} style={[s.muted, { flexShrink: 1, minWidth: 0 }]}>

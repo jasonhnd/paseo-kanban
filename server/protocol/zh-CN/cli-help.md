@@ -7,6 +7,7 @@
 卡住: block <卡号> --kind needs_human --reason "<需要人处理的权限或用户决定>"。kind 支持 dependency、needs_human、capability、quota、rate_limit、transient、scheduled。执行者用 dependency 报等 PR／等别的卡会被拒绝：「这不算卡住，请交活并在交接写明等什么（handoff.waitingOn）」。等 CI 时照常交活，在 handoff.waitingOn 写明等待。
 等用户: wait-user <卡号> --decision <待拍板编号>（本项目<leader>或 Kanban <leader>）。支持 ready 或 blocked(needs_human)，后者在同一事务中直接转换成 ready＋等待编号，无需先 unblock；其他阻塞类别及活动状态拒绝；有启动 claim、仍可恢复 agent 或未满足前置依赖的人手阻塞卡也保留阻塞。卡留在 ready；调度器不自动开工、不催，也不算卡住；看板和 list／show 显示「等用户：<编号>」。待拍板编号格式 [dk]\d{4}-\d{6}-\d+：看板的编号如 d1005-091216-1，看板本地清单的编号如 k1005-091216-1，不合格式拒绝。解除：unwait <卡号>，之后照常可开工。记 wait_user／wait_user_cleared 事件。暂停自己建的卡用 wait-user，不用 block（block 只给真的需要人处理的卡住）。
 建卡带待拍板: create ... --decision <待拍板编号>（d1005-091216-1 或 k1005-091216-1；可选，记进卡片的 created 事件）。看板自动提醒（Paseo 定时任务开的 agent，以及标题或简报里含「看板自动提醒」的）建卡必须带 --decision，且该编号在看板的 decisions.json（环境变量 ROLES_STATE_DIR 可指定目录）里存在、状态是用户已定（done）（没装看板时查看板本地清单，即 k 开头的编号）；否则拒绝。其他身份建卡不受影响。
+建卡提示：多个并列动作、至少三项编号动作或明确预计超过 1 小时，可能返回「建议拆分」；不阻止建卡。--no-split-hint 只关闭此提示。
 删前置: unlink <子卡> --parent <前置卡>（也接受 --parents 逗号分隔或重复；本项目<leader>或 Kanban <leader>）。删除后重新评估能否开工。
 授予项目只读: grant-read <卡号> --scope project（仅已登记的本项目<leader>或 Kanban <leader>）。该卡的 agent 可 show／list 本项目全部卡，包含已完成、已归档卡、评论及脱敏事件；其他项目和全部写操作权限不变。show 的 readScope 显示当前权限，交活、完成或归档时自动失效。卡令牌、执行者、审查者、定时任务和未登记身份不能授予。
 
@@ -67,4 +68,4 @@
 
 加 `--settle-missing-land --reason "<已核对的证据>"` 可在确切自有分支不存在后，关闭已验收且已完成或已归档卡的待合回记录。仅已登记的项目 leader 或全局看板 leader 可授权；未登记的创建者、其他项目 leader、卡片令牌和匿名终端均不行。理由必填，不能与 --discard-unmerged 同用。会写 land_settled，记录 leader、理由、保存的尖端（或 null）、未保留提交证据和原排队事件。不合并，也不授权丢弃文件；分支仍存在会拒绝。正常清理保留独立检查。调度器只在现存本地分支、远程跟踪分支或标签包含已保存的排队尖端，且副本不存在或未变化且干净时自动收束；否则停止合回并通知 leader。没有保存尖端的旧记录必须显式检查。
 
-后台等待：wait-bg "<KANBAN_TMP 内退出码标记绝对路径>" --card <卡号> [--log "<KANBAN_TMP 内日志绝对路径>"]。仅当前负责本卡的活动 agent 可登记。脱离终端的命令退出后原子重命名写入退出码（0..255），登记成功后结束回合。看板检查完成时不调用模型，只在结束时唤醒一次。缺标记继续等；坏标记携错误唤醒。所属 leader 用 unblock 取消。
+后台等待：wait-bg "<KANBAN_TMP 内退出码标记绝对路径>" --card <卡号> --pid <pid> [--timeout-ms <毫秒>] [--log "<KANBAN_TMP 内日志绝对路径>"]。仅当前负责本卡的活动 agent 可登记。脱离终端的命令退出后原子重命名写入退出码（0..255），登记成功后结束回合。看板检查完成时不调用模型，只在结束时唤醒一次。在同一次 shell 调用中启动并登记，--pid 使用负责写标记的 shell PID（$!），须存活、属于当前用户且为调用 shell 的后代或同会话进程。缺标记只在原进程身份仍存活且未超时时继续等；默认墙钟三小时，可由全局／项目 backgroundWaitMaxMs 或单次 --timeout-ms 覆盖。进程死亡未写标记或超时会携最多 8 KiB 日志尾唤醒一次，超时不杀进程；睡眠或重启后第一个 tick 复查。坏标记携错误唤醒。所属 leader 用 unblock 取消。

@@ -31,6 +31,7 @@ export interface SchedulerDeps {
   backgroundWaiting?: TickOptions["backgroundWaiting"];
   now?: Date;
   pools?: PoolSnapshot;
+  matrix?: TickOptions["matrix"];
 }
 
 interface ActiveLoop {
@@ -133,6 +134,7 @@ export function bindScheduler(options: {
               backgroundWaiting: deps.backgroundWaiting,
               now: deps.now,
               pools: deps.pools,
+              matrix: deps.matrix,
               watchDaemonRestart: true,
             });
             if (result.errors.length > 0) noteTickFailure(result.errors[0]);

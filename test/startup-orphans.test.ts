@@ -9,7 +9,8 @@ import type { PaseoApi } from "@getpaseo/client";
 import { DEFAULT_CONCURRENCY, saveConfig, type KanbanConfig } from "../server/config";
 import { closeDb, getDb } from "../server/db";
 import { startTask } from "./helpers/compat-dispatch";
-import { bindScheduler, resetSchedulerForTests } from "../server/loop";
+import { resetSchedulerForTests } from "../server/loop";
+import { bindScheduler } from "./helpers/compat-loop";
 import { launcherFrom, listActivePaseoAgents, type AgentListItem } from "../server/paseo";
 import type { PoolSnapshot } from "../server/pools";
 import type { Profile } from "../server/profiles";
@@ -19,7 +20,7 @@ import { appendEvent, createTask, getTask } from "../server/store";
 const dir = mkdtempSync(join(tmpdir(), "test-0079-orphans-"));
 process.env.KANBAN_DATA_DIR = dir;
 const profiles: Profile[] = [
-  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" },
+  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "grok", model: "grok-4.7", pool: "x-ultra" },
   { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" },
 ];
 const pools: PoolSnapshot = {

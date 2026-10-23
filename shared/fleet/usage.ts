@@ -60,6 +60,10 @@ const windowSchema = z.object({
 
 /** One pool of pool-status.json, as shown on the quota page (see docs/KANBAN-CONTRACT.md §1). */
 const poolSchema = z.object({
+  projectedPct: z.number().nullable().optional(),
+  runsOutAt: z.string().nullable().optional(),
+  burnRatePctPerHour: z.number().nullable().optional(),
+  forecastConfidence: z.enum(["high", "low", "none"]).optional(),
   dispatchable: z.boolean(),
   deprioritize: z.boolean(),
   prefer: z.boolean(),
@@ -110,6 +114,7 @@ const planSchema = z.object({
   cycleDay: z.number().optional(),
   quotaCycle: quotaCycleSchema.optional(),
   quotaProtection: z.enum(["pause", "none"]).optional(),
+  xUltraReserve: z.object({ botPct: z.number().nullable().optional(), userPct: z.number().nullable().optional() }).optional(),
   priceUsdMonthly: z.number().nullable(),
   dispatch: z.boolean(),
   /**
@@ -263,6 +268,7 @@ export const resetCouponsRefreshRpc = defineRpc({
 
 /** Ahead-limited / normal / behind-use-first, plus stopped when a hard stop (not the progress line) closed the pool. */
 export function paceStatusLabel(pool: { dispatchable: boolean; prefer?: boolean; paceState?: string | null }): string {
+  if (pool.paceState === "unknown") return t("quota.unknown.label");
   if (!pool.dispatchable && pool.paceState === "ahead") return t("usage.pace.ahead");
   if (pool.prefer || pool.paceState === "behind") return t("usage.pace.behind");
   if (!pool.dispatchable) return t("usage.pace.stopped");

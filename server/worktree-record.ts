@@ -5,6 +5,7 @@ import { existsSync } from "./perf-fs";
 import { getDb } from "./db";
 import { refOk, runGit, type GitRunner } from "./git";
 import { samePath } from "./placement";
+import { cloudRunRecord, isCloudRunning } from "./cloud-record";
 import { holdsStartClaim } from "./start-claim";
 import { branchOwnedByCard } from "./workspace";
 import { deleteReadOnlyBranch, readOnlyBranchName, readOnlyCopyError } from "./readonly-worktree";
@@ -98,11 +99,24 @@ function sameDirectory(left: string | undefined, right: string): boolean {
  * Another directory already stored is returned so the caller can remove that copy.
  * Its event stays visible until that removal succeeds.
  */
-export function commitWorktree(input: WorktreeWrite): { ok: true; intruders: RivalWorktree[] } | { ok: false } {
+export function commitWorktree(input: WorktreeWrite): ReturnType<typeof writeWorktree> {
+  return writeWorktree(input, () => holdsStartClaim(input.taskId, input.token));
+}
+
+/** A cloud worker has outlived its start claim; only its current running generation may register a delivery. */
+export function commitCloudWorktree(input: Omit<WorktreeWrite, "token"> & { runId: number; generation: number }): ReturnType<typeof writeWorktree> {
+  return writeWorktree(input, () => {
+    const record = cloudRunRecord(input.taskId);
+    return record?.source === "localMirror" && record.runId === input.runId && record.generation === input.generation &&
+      isCloudRunning({ id: input.taskId, status: "running" }) &&
+      (getDb().prepare("SELECT status FROM tasks WHERE id = ?").get(input.taskId) as { status: string })?.status === "running";
+  });
+}
+function writeWorktree(input: Omit<WorktreeWrite, "token">, authorized: () => boolean): { ok: true; intruders: RivalWorktree[] } | { ok: false } {
   const db = getDb();
   db.exec("BEGIN IMMEDIATE");
   try {
-    if (!holdsStartClaim(input.taskId, input.token)) {
+    if (!authorized()) {
       db.exec("ROLLBACK");
       return { ok: false };
     }

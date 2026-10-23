@@ -1,3 +1,4 @@
+import { isQaReview, notifyQaSignoff } from "./qa-review";
 /// <reference types="node" />
 import { assertRunBudgetSettled, resetRunBudget } from "./run-budget-control";
 import { guardCard, safeParse } from "./guard";
@@ -35,6 +36,8 @@ import { isProjectDormant } from "./paused";
 import { completionHandoffWarnings } from "./write-source";
 import { isGoogleProfile } from "./profiles";
 import { t } from "../shared/i18n";
+import { LOCAL_GIT_OPTIONS, disabledGitFilters } from "./cloud-git-policy";
+import { localCloudReceipt } from "./cloud-record";
 import { recordCardWorkBytes } from "./capacity-guard";
 
 const COMPLETERS = new Set(["executor", "reader", "decision", "batch"]);
@@ -97,7 +100,9 @@ function reserveAutomaticReview<T>(id: number, submit: () => T): T {
 /** Advisory only: a dirty or unreadable checkout must not prevent handoff. */
 function completionWorkspaceWarning(task: TaskRow): string | null {
   if (!task.workspace_path) return null;
-  const result = runGitSync(task.workspace_path, ["status", "--short", "--untracked-files=all"]);
+  const keys = localCloudReceipt(task.id) ? runGitSync(task.workspace_path, [...LOCAL_GIT_OPTIONS, "config", "--null", "--name-only", "--list"]) : null;
+  if (keys && keys.code !== 0) return null;
+  const result = runGitSync(task.workspace_path, [...(keys ? [...LOCAL_GIT_OPTIONS, ...disabledGitFilters(keys.stdout)] : []), "status", "--short", "--untracked-files=all"]);
   if (result.code !== 0) return null;
   const entries = result.stdout.split(/\r?\n/).filter(Boolean);
   if (entries.length === 0) return null;
@@ -346,11 +351,16 @@ function approveNow(id: number, summary: string, actor: string, approval: Linked
       if (linked.target) addComment(linked.target.id, actor, note);
       appendEvent(id, "linked_review_approval_held", null, "acceptance", actor, { targetId: task.review_of, reason: linked.reason });
     }
+    if (isQaReview(next)) {
+      db.prepare("UPDATE tasks SET handoff_json = ? WHERE id = ?").run(JSON.stringify({ summary, handoff: { verdictTable: summary } }), next.id);
+      next = getTask(next.id);
+    }
     if (ownsTransaction) db.exec("COMMIT");
   } catch (err) {
     if (ownsTransaction) db.exec("ROLLBACK");
     throw err;
   }
+  if (passed) notifyQaSignoff(next, passed.task, summary);
   notifyAcceptance(next.id);
   if (passed) finishPassedAcceptance(passed.task, passed.actor);
   else promoteParents(actor);
@@ -447,6 +457,8 @@ function releaseSupersededExecutor(taskId: number, agentId: string | null): void
 }
 
 export function appendRejectBrief(task: TaskRow, reason: string): void {
+  // Local cloud feedback is sent separately. The host handoff includes private paths and source mappings.
+  if (localCloudReceipt(task.id)) return;
   const prior = task.handoff_json?.trim() || t("flow.brief.noPriorHandoff");
   const addition = `\n\n${t("flow.brief.rejected")}\n${reason.trim()}\n\n${t("flow.brief.priorHandoff")}\n${prior}\n`;
   getDb().prepare("UPDATE tasks SET brief = ? WHERE id = ?").run(`${task.brief ?? ""}${addition}`, task.id);
@@ -543,10 +555,10 @@ export async function leaderReworkTask(
   if (present && agentId) hookObjects.rememberAgent(agentId);
   if (present && agentReleaseRequested(id, agentId)) appendEvent(id, "release_agent_canceled", null, null, actor, { agentId });
   appendEvent(id, "leader_rework", task.status, to, actor, { reason: text, fromStatus: task.status, countRound: options.countRound === true, agentId, presence });
+  closeLeaderRuns(id, "leader_rework", ts);
   resetRunBudget(id);
   if (!present) recordReworkReplacement(task, agentId ?? null, presence, text, actor, ts);
   addComment(id, actor, text);
-  closeLeaderRuns(id, "leader_rework", ts);
   // The binding no longer points at the old executor (replaced, or departed and reopened): retire it.
   const oldExecutor = task.executor_agent_id ?? prior?.agent_id;
   if (oldExecutor && next.agentId !== oldExecutor) releaseSupersededExecutor(id, oldExecutor);

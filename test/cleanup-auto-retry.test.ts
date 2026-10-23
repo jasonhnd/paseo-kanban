@@ -3,6 +3,7 @@ import { zhCNPart } from "./helpers/locale";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { after, beforeEach, describe, it } from "node:test";
 import { setWakeSender } from "../server/bus";
 import {
@@ -21,7 +22,8 @@ import { closeDb, getDb } from "../server/db";
 import { createTask } from "../server/store";
 import { resetAgentAliveCheck, resetBoardWakeForTests, setAgentAliveCheck } from "../server/wake";
 
-const dir = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "cleanup-auto-retry-"));
+const dir = mkdtempSync(join(tmpdir(), "cleanup-auto-retry-"));
+const previousDataDir = process.env.KANBAN_DATA_DIR;
 process.env.KANBAN_DATA_DIR = dir;
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -35,7 +37,8 @@ after(() => {
   setWakeSender(() => {});
   closeDb();
   rmSync(dir, { recursive: true, force: true });
-  delete process.env.KANBAN_DATA_DIR;
+  if (previousDataDir === undefined) delete process.env.KANBAN_DATA_DIR;
+  else process.env.KANBAN_DATA_DIR = previousDataDir;
 });
 
 beforeEach(() => {

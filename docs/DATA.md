@@ -21,6 +21,45 @@ Server and all command entries resolve one canonical data root independently of 
 
 A Git revision changes code location, not this external root. Keep runtime id `paseo-kanban`, `PASEO_HOME` and `KANBAN_DATA_DIR` unchanged when changing sources. Refresh installed CLI paths; do not bind `KANBAN_HOME` to an old managed directory. This is a storage contract, not proof that a production conversion has been performed. Old data is not automatically transferred.
 
+## Per-run cost observations
+
+`kanban.db` keeps `run_cost_snapshots`, one row per run. Start and end triggers capture
+identity and the latest `fleet/pool-status.json` reading inside the run transaction.
+All end kinds use this path, including submission, failure, reclaim, archive/cancel
+and the run-budget brake. Resuming a braked agent opens a new run. A canceled host
+turn that only replaces a prompt keeps the existing run and budget generation.
+
+`fleet/run-costs.json` is the version 1 projection: `records` contains the agreed
+run identity, model/effort/type, input/output/cached tokens, quota percentages,
+wall time, turns, source and finish time; `averages` groups model, effort and card
+type. The export runs after commit and retries on each scheduler tick. SQLite is
+the durable source; failed exports do not lose records. Older runs keep the
+legacy transcript fallback in dispatch statistics. Durable rows with missing or invalid
+tokens also retain transcript tokens and prices. Valid durable tokens replace
+the count and are repriced using their model and cached input; an unknown price
+stays null. These are base list-price estimates, without per-call context tiers. No historical measurements
+are invented for runs whose metadata was already cleaned up.
+
+Tokens and turns reuse the run-budget generation snapshot, never `lastUsage` or a
+second collector. Input already includes cached input. Missing values are null.
+`quotaObservedBefore`, `quotaObservedAfter` and `notes` explain the evidence:
+`measured` requires a complete token snapshot observed within two minutes before
+the end and distinct quota readings within thirty minutes of their endpoints.
+This allows the scheduler sampling interval before ordinary completion. An
+older, undated or incomplete token observation remains a lower bound; reusing
+one quota sample leaves the delta null. Missing/stale
+readings, partial tokens or a quota reset yield `partial` when any evidence
+exists; no evidence yields `unknown`. A reset never produces a negative cost.
+Quota deltas are pool-wide: overlapping runs and personal usage can contribute.
+
+Routing consumers import `costEstimate({ model, effort, cardType, role?, tier? })`
+from `server/run-cost.ts`, or use `estimateRunCost(records, query)` from
+`shared/fleet/run-cost.ts`. Results contain `avgQuotaPct`, `avgTokens`, `samples`,
+`quotaSamples` and `tokenSamples`. Each metric divides by its own available
+sample count; missing values never dilute an average. Unknown/legacy files give
+null averages and zero samples. Partial measurements remain lower-bound inputs,
+so consumers should consider evidence quality and sample counts before routing.
+
 ## Which projects exist: Paseo decides
 
 Paseo's project list (`paseo project ls`) is the only list of projects. The board keeps its own project settings, leader table and `fleet/paused-projects.json`, but a board project is shown, woken and dispatched only while its directory is a Paseo project.
@@ -76,7 +115,7 @@ Before an update, downgrade, uninstall/reinstall or source switch:
 4. Save Paseo host plugin settings, language and enabled state separately. A data-root backup does not include these host-owned values or every client-local preference. Keep credentials private and handle their restoration yourself.
 5. Preserve the backup outside a managed source directory, with restricted access and a recorded code/schema version. Validate recoverability using anonymous test data before depending on the procedure.
 
-`plugin remove` deletes managed source files and may remove host settings; it does not itself reset this external data root. Reinstall using the same id/home/root and deliberately restore settings/enabled state. Check actual roots for server, board, Fleet, CLI and exports before resuming writers.
+`plugin remove` deletes managed source files and may remove host settings; it does not itself reset this external data root. Reinstall using the same id, home and root and deliberately restore settings/enabled state. Check actual roots for server, board, Fleet, CLI and exports before resuming writers.
 
 **Code rollback and data restore are separate.** Downgrading to a previous Git SHA leaves current data in place. If the old code cannot use that data/schema, do not start it against the root. A separately authorized data restore requires stopped writers and a consistent compatible backup, after preserving the current state. It returns data to the backup time and can lose later writes. Do not automatically restore a backup just because an update failed.
 

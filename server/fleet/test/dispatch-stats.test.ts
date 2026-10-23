@@ -1,3 +1,4 @@
+import { canonicalPoolId } from "../../../shared/fleet/x-ultra";
 // Synthetic fixtures only. Provider formats: openai/codex protocol.rs (TokenUsage),
 // xai-org/grok-build usage_file.rs (SessionUsageFile), and Paseo 0.11 agent-storage.
 import assert from "node:assert/strict";
@@ -60,7 +61,7 @@ before(async () => {
     for (let i = 0; i < 4; i++) {
       const agentId = `agent-${profile.provider}-${i}`;
       const sessionId = `${profile.provider}-session-${i}`;
-      insert.run(agentId, profile.name, "medium", at(runStart), at(runStart + hourMs), agentId);
+      insert.run(String(profiles.indexOf(profile) * 4 + i + 1), profile.name, "medium", at(runStart), at(runStart + hourMs), agentId);
       // Both root-level and project-level records are supported by Paseo's storage reader.
       put(join(paseoDir, "agents", ...(i === 1 ? [] : ["demo"]), `${agentId}.json`), {
         id: agentId, title: profile.name,
@@ -174,7 +175,7 @@ test("published pools count every window run and estimate costs from stable quot
   assert.equal(stats.byProfileEffort.length, 3);
   for (const profile of profiles) {
     const row = stats.byProfileEffort.find((r) => r.profile === profile.name)!;
-    const pool = stats.byPool.find((r) => r.pool === profile.pool)!;
+    const pool = stats.byPool.find((r) => r.pool === canonicalPoolId(profile.pool))!;
     assert.equal(pool.runs, row.runs);
     assert.equal(pool.runs, 4);
     assert.equal(pool.perRunPct, 2);
@@ -254,4 +255,50 @@ test("incomplete Grok bills and undated session totals stay unavailable, even al
     });
     await (await import("../scan")).ensureScan(0);
   }
+});
+
+test("durable run costs override transcript matching after session cleanup", async () => {
+  const path = join(fleetDir, "run-costs.json");
+  try {
+    put(path, { version: 1, records: [5, 6, 7].map(runId => ({ runId, tokensIn: 1800, tokensOut: 200 })) });
+    const row = (await published()).byProfileEffort.find(r => r.profile === "Demo Codex")!;
+    assert.equal(row.usageSamples, 3); assert.equal(row.avgTokens, 2000);
+    assert.equal(row.pricedSamples, 3); assert.equal(row.avgUsd, 0.002);
+  } finally { rmSync(path, { force: true }); }
+});
+
+for (const tokens of [
+  { tokensIn: null, tokensOut: null },
+  { tokensIn: 900, tokensOut: null },
+  { tokensIn: -1, tokensOut: 200 },
+  { tokensIn: "900", tokensOut: 200 },
+]) test(`unusable durable tokens preserve transcript usage and price: ${JSON.stringify(tokens)}`, async () => {
+  const path = join(fleetDir, "run-costs.json");
+  try {
+    put(path, { version: 1, records: [5, 6, 7].map(runId => ({ runId, ...tokens })) });
+    const row = (await published()).byProfileEffort.find(r => r.profile === "Demo Codex")!;
+    assert.equal(row.usageSamples, 3); assert.equal(row.avgTokens, 1000);
+    assert.equal(row.pricedSamples, 3); assert.equal(row.avgUsd, 0.001);
+  } finally { rmSync(path, { force: true }); }
+});
+test("durable tokens use actual model rates and cached input without retaining the old bill", async () => {
+  const path = join(fleetDir, "run-costs.json");
+  const plans = join(fleetDir, "plans.json");
+  const previous = readFileSync(plans, "utf8");
+  try {
+    const config = JSON.parse(previous);
+    config.prices["actual-demo"] = { input: 2, output: 8, cacheRead: 0.5 };
+    put(plans, config);
+    put(path, { version: 1, records: [5, 6, 7].map(runId => ({ runId, provider: "codex", model: "actual-demo", tokensIn: 1800, tokensOut: 200, tokensCached: 600 })) });
+    const row = (await published()).byProfileEffort.find(r => r.profile === "Demo Codex")!;
+    assert.equal(row.avgTokens, 2000); assert.equal(row.pricedSamples, 3); assert.equal(row.avgUsd, 0.0043);
+  } finally { rmSync(path, { force: true }); writeFileSync(plans, previous); }
+});
+test("unpriced durable tokens still count without borrowing a transcript bill", async () => {
+  const path = join(fleetDir, "run-costs.json");
+  try {
+    put(path, { version: 1, records: [5, 6, 7].map(runId => ({ runId, provider: "unknown-demo", model: "unpriced-demo", tokensIn: 1800, tokensOut: 200 })) });
+    const row = (await published()).byProfileEffort.find(r => r.profile === "Demo Codex")!;
+    assert.equal(row.avgTokens, 2000); assert.equal(row.usageSamples, 3); assert.equal(row.pricedSamples, 0); assert.equal(row.avgUsd, null);
+  } finally { rmSync(path, { force: true }); }
 });

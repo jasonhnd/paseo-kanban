@@ -1,3 +1,5 @@
+import { canonicalPoolId, canonicalPoolCounts, X_ULTRA, X_ULTRA_ALIASES } from "../shared/fleet/x-ultra";
+import { cursorPaidModel, isCursorChannel } from "../shared/fleet/cursor-dispatch";
 /// <reference types="node" />
 import { actualModel, differentReviewModels } from "../shared/fleet/review-model";
 import { gptExecutionEffort, lightExecutionProfile, operationalExecution } from "../shared/fleet/executor-effort";
@@ -5,10 +7,13 @@ import { t } from "../shared/i18n";
 import { getDb } from "./db";
 import { resolveReviewTarget, reviewFamilyBlock, type ReviewTarget } from "./review-target";
 import { submitsToReview } from "./flow";
-import { fleetRules, loadConfig } from "./config";
+import { qualificationForNewAgent, qualificationReworkCount as qualificationForRework } from "./qualification";
+import { rankPools, type RankingPool } from "../shared/fleet/pool-ranking";
+import { routingCost, routingCostFits, routingReserve } from "./quota-routing";
+import { fleetRules, loadConfig, type KanbanConfig } from "./config";
 import { familyRuleFor, isBannedProfile, type BannedProfiles, type FamilyRule } from "./fleet-rules";
 import { isOpsRole, isWildcardRole, loadDispatchMatrix, priorityActive, type DispatchMatrix, type MatrixItem } from "./matrix";
-import { onlyRolesBlock, readPoolSnapshot, staleMinutes, unmarkedPool, type PoolSnapshot } from "./pools";
+import { unknownQuotaBlock, onlyRolesBlock, readPoolSnapshot, staleMinutes, unmarkedPool, type PoolSnapshot } from "./pools";
 import { cardRouteContext, checkRule, ruleFor, type ProfileRules, type RuleVerdict } from "./profile-rules";
 import { actualFamily, isGoogleProfile, officialAntigravityAcp, readProfiles, type Profile } from "./profiles";
 import { setProfileHintSource, type ProfilePriorityHint } from "./task-create";
@@ -28,6 +33,9 @@ function findProfile(profiles: Profile[], override: string): Profile | undefined
 }
 
 export interface RouteInput {
+  /** Required by real fresh-agent callers; absent only in legacy selection/continuation helpers. */
+  task?: TaskRow;
+  routingConfig?: KanbanConfig;
   profiles: Profile[];
   role: string;
   review: boolean;
@@ -77,7 +85,7 @@ export interface RouteInput {
   now?: number;
 }
 
-export type EffortSource = "card" | "matrix" | "profile" | "downgrade" | "execution";
+export type EffortSource = "card" | "matrix" | "profile" | "downgrade" | "execution" | "quota";
 
 export type RouteDecision =
   | {
@@ -222,6 +230,7 @@ export function familyDispatchBlock(
   snapshot: PoolSnapshot,
   families: Readonly<Record<string, FamilyRule>> = fleetRules().families,
 ): string | null {
+  if (cursorPaidModel(profile)) return t("routing.cursorPaidModel");
   if (profileUsesFastMode(profile)) return fastNotAllowed();
   const rule = familyRuleFor({ ...profile, family: actualFamily(profile) }, families);
   if (!rule) return null;
@@ -276,10 +285,11 @@ function reviewerOk(profile: Profile, executor: Profile, input: RouteInput, effo
   if (isDispatchBanned(profile)) return profileBannedReason();
   const google = googleDispatchBlock(profile, { ...input, role: "reviewer", review: true });
   if (google) return google;
-  if (profile.provider === "cursor") return cursorReadonlyReason();
+  if (isCursorChannel(profile)) return cursorReadonlyReason();
   const entry = snapshot.entry(profile.pool ?? null);
   if (!entry.dispatchable) return poolClosed(profile.pool, entry.reason);
-  const limited = onlyRolesBlock(entry, profile.pool ?? null, "reviewer");
+  const limited = onlyRolesBlock(entry, profile.pool ?? null, "reviewer")
+    ?? unknownQuotaBlock(entry, cardTier(input, input.matrix ?? null), input.byPool[canonicalPoolId(profile.pool) ?? ""] ?? 0, input.now);
   if (limited) return limited;
   if (profile.paused || !differentReviewModels(executor.model, profile.model)) return t("routing.reviewModelUnavailable");
   return null;
@@ -301,6 +311,11 @@ function ruleVerdict(profile: Profile, input: RouteInput, executorFamily: string
 
 /** Whether some reviewer could take this executor's card. Null when yes, otherwise the skip. */
 function reviewerGap(executor: Profile, input: RouteInput): { why: string; fatal: SkipKind } | null {
+  if (input.task && (input.routingConfig ?? loadConfig()).quotaRouting?.enabled !== false) {
+    const result = routeProfile({ ...input, role: "reviewer", review: true, profileOverride: null, reviewTarget: null,
+      cardEffort: null, executorModel: executor.model, executorFamily: actualFamily(executor), reviewsExecutor: true });
+    return result.ok ? null : { why: result.reason, fatal: "reserve" };
+  }
   if (input.matrix) return matrixReviewerGap(executor, input);
   const listed = roster(input.profiles, "reviewer");
   const reviewers = listed.filter((profile) => reviewerOk(profile, executor, input) === null);
@@ -517,8 +532,12 @@ function consider(profile: Profile, input: RouteInput, skips: Skip[], scoped: bo
     skips.push({ profile, why: google, fatal: google === t("routing.google.quota") ? "snapshot" : "rule" });
     return REJECTED;
   }
-  if (profile.provider === "cursor" && assignsReadOnly(input)) {
+  if (isCursorChannel(profile) && assignsReadOnly(input)) {
     skips.push({ profile, why: cursorReadonlyReason(), fatal: "cursor" });
+    return REJECTED;
+  }
+  if (isCursorChannel(profile)) {
+    skips.push({ profile, why: t("routing.cursorReserved"), fatal: "cursor" });
     return REJECTED;
   }
   const entry = input.snapshot.entry(profile.pool ?? null);
@@ -527,7 +546,8 @@ function consider(profile: Profile, input: RouteInput, skips: Skip[], scoped: bo
     skips.push({ profile, why, fatal: loggedOutReason(entry.reason) ? "login" : "pool" });
     return REJECTED;
   }
-  const limited = onlyRolesBlock(entry, profile.pool ?? null, profilePoolRole(profile, input.review));
+  const limited = onlyRolesBlock(entry, profile.pool ?? null, profilePoolRole(profile, input.review))
+    ?? unknownQuotaBlock(entry, cardTier(input, input.matrix ?? null), input.byPool[canonicalPoolId(profile.pool) ?? ""] ?? 0, input.now);
   if (limited) {
     skips.push({ profile, why: limited, fatal: "pool" });
     return REJECTED;
@@ -564,8 +584,8 @@ function consider(profile: Profile, input: RouteInput, skips: Skip[], scoped: bo
     }
   }
   if (profile.pool) {
-    const cap = input.poolLimits[profile.pool];
-    if (cap != null && (input.byPool[profile.pool] ?? 0) >= cap) {
+    const cap = input.poolLimits[canonicalPoolId(profile.pool)!];
+    if (cap != null && (input.byPool[canonicalPoolId(profile.pool)!] ?? 0) >= cap) {
       skips.push({ profile, why: poolFullReason(profile.pool), fatal: "concurrency" });
       return REJECTED;
     }
@@ -662,7 +682,7 @@ export function matrixFirstChoice(input: RouteInput): { profile: Profile; tier: 
   const resolved = withExecutorFamily({ ...input, tags, profileOverride: null });
   if ("ok" in resolved) return null;
   const next = resolved;
-  const via = routeByMatrix(next, input.matrix);
+  const via = next.task ? routeResolved(next) : routeByMatrix(next, input.matrix);
   if ("fallback" in via || !via.ok) return null;
   return { profile: via.profile, tier: cardTier(next, input.matrix) };
 }
@@ -698,6 +718,19 @@ export function recordedExecutorFacts(taskId: number): { executorProvider?: stri
 }
 
 export function routeProfile(input: RouteInput): RouteDecision {
+  input = { ...input, byPool: canonicalPoolCounts(input.byPool), poolLimits: canonicalPoolCounts(input.poolLimits, true) };
+  // Injected compatibility snapshots may still expose old keys; production readers canonicalize them.
+  const snapshot = input.snapshot;
+  const keyOf = (pool: string | null) => {
+    const key = canonicalPoolId(pool) ?? null;
+    if (snapshot.hasPool?.(pool)) return pool;
+    if (snapshot.hasPool?.(key)) return key;
+    // Dependency-injected compatibility snapshots can still expose the legacy Grok key.
+    if (key === X_ULTRA) return X_ULTRA_ALIASES.find(id => id !== "cursor" && snapshot.hasPool?.(id)) ?? pool;
+    return pool;
+  };
+  input = { ...input, snapshot: { ...snapshot, entry: pool => snapshot.entry(keyOf(pool)),
+    dispatchable: pool => snapshot.dispatchable(keyOf(pool)), hasPool: pool => snapshot.hasPool?.(keyOf(pool)) ?? false } };
   const decision = routeResolved(input);
   const target = input.reviewTarget;
   if (!target?.ok) return decision;
@@ -709,6 +742,10 @@ function routeResolved(input: RouteInput): RouteDecision {
   if ("ok" in resolved) return resolved;
   const tags = highRiskTags(resolved);
   const next = tags === resolved.tags ? resolved : { ...resolved, tags };
+  if (next.task) {
+    const config = next.routingConfig ?? loadConfig();
+    if (config.quotaRouting?.enabled !== false) return routeByQuota(next, config);
+  }
   if (next.matrix) {
     const via = routeByMatrix(next, next.matrix);
     if ("fallback" in via) {
@@ -721,6 +758,7 @@ function routeResolved(input: RouteInput): RouteDecision {
 }
 
 const EFFORT_SOURCE_KEYS = {
+  quota: "routing.effortSource.execution",
   execution: "routing.effortSource.execution",
   card: "routing.effortSource.card",
   downgrade: "routing.effortSource.downgrade",
@@ -804,6 +842,12 @@ function ghost(name: string, role: string): Profile {
   return { id: name, name, provider: "missing", role };
 }
 
+function cursorDispatchSkip(profile: Profile): Skip | null {
+  return isCursorChannel(profile)
+    ? { profile, why: t(cursorPaidModel(profile) ? "routing.cursorPaidModel" : "routing.cursorReserved"), fatal: "cursor" }
+    : null;
+}
+
 interface Pick {
   profile: Profile;
   effort: string | null;
@@ -830,6 +874,8 @@ function pickFromList(items: MatrixItem[], input: RouteInput, tier: Tier, lowere
     });
   const skips: Skip[] = [];
   for (const entry of ordered) {
+    const cursor = entry.profile && cursorDispatchSkip(entry.profile);
+    if (cursor) { skips.push(cursor); continue; }
     if (matrixPaused(entry.item, input.snapshot, input.matrix)) {
       skips.push({ profile: entry.profile ?? ghost(entry.item.profile, input.role), why: t("routing.matrixPaused"), fatal: "pool" });
       continue;
@@ -1085,6 +1131,107 @@ function routeByMatrix(input: RouteInput, matrix: DispatchMatrix): RouteDecision
   return annotate(selectList(listed.items, input, matrix, tier), roster.note);
 }
 
+/** One admission gate for scheduler, manual starts, replacements and cloud starts. */
+function routeByQuota(input: RouteInput, config: KanbanConfig): RouteDecision {
+  const chosenOverride = input.profileOverride ? findProfile(input.profiles, input.profileOverride) : undefined;
+  // Transport refusals also apply to pins outside the matrix, before quota eligibility.
+  const cursorOverride = chosenOverride && cursorDispatchSkip(chosenOverride);
+  if (cursorOverride) return permanentDecision([cursorOverride], "", input.snapshot);
+  const stored = cardTier(input, input.matrix ?? null);
+  const review = isReviewRoute(input);
+  const rosterInfo = input.matrix ? reviewRoster(input, input.matrix, stored) : { tier: stored, note: null };
+  const tier = rosterInfo.tier;
+  const role = review ? "reviewer" : input.role;
+  const task = { ...input.task!, tier };
+  const qualified = qualificationForNewAgent(task, input.review && input.task!.role !== "reviewer", config, input.matrix?.defaultTier ?? null);
+  let listed = input.matrix ? listForRole(input, input.matrix, tier) : null;
+  if (listed && "unavailable" in listed && input.matrix && input.reviewTarget?.ok && input.reviewTarget.source === "leader-profile") {
+    // Existing leader authorization still needs a qualified profile on the live high-risk roster.
+    listed = reviewList({ ...input, reviewsExecutor: false }, input.matrix, tier);
+  }
+  if (listed && "unavailable" in listed) return { ok: false, action: "hold", kind: "quota", quotaWait: true, reason: listed.unavailable };
+  // A missing matrix bucket retains the existing roster fallback. A present empty list stays closed.
+  const items = listed && "items" in listed ? listed.items : roster(input.profiles, role).map(p => ({ profile: p.name, effort: null, paused: false }));
+  if (items.length === 0) return annotate({ ok: false, action: "hold", kind: "quota", quotaWait: true,
+    reason: t("routing.noCandidates", { tier, role: roleLabel(role) }) }, rosterInfo.note);
+  const skips: Skip[] = [];
+  const viable: Array<{ profile: Profile; effort: string; priority: number; cost: ReturnType<typeof routingCost> }> = [];
+  const now = input.now ?? Date.now();
+  const settings = config.quotaRouting ?? {};
+  const pools: Record<string, RankingPool> = {};
+  const occupancy = { ...input.byPool };
+  // A child spends every ancestor allowance. Count each active run once at each level.
+  for (const [id, count] of Object.entries(input.byPool)) {
+    const seen = new Set([id]);
+    let parent = input.snapshot.entry(id).parent;
+    while (parent && !seen.has(parent)) {
+      seen.add(parent); occupancy[parent] = (occupancy[parent] ?? 0) + count;
+      parent = input.snapshot.entry(parent).parent;
+    }
+  }
+  const addPool = (id: string, profile?: Profile) => {
+    if (pools[id]) return;
+    const entry = input.snapshot.entry(id);
+    const row: RankingPool = { ...entry, eligible: false, activeRuns: occupancy[canonicalPoolId(id)!] ?? 0,
+      providers: entry.providers ?? (profile ? [profile.provider] : undefined),
+      ...(input.snapshot.state !== "fresh" ? { state: "unknown" as const, usedPct: null } : {}),
+      dispatchable: entry.dispatchable && (!input.snapshot.policy || entry.parent !== undefined && entry.reservePct !== undefined)
+        && (input.poolLimits[canonicalPoolId(id)!] == null || (occupancy[canonicalPoolId(id)!] ?? 0) < input.poolLimits[canonicalPoolId(id)!]) };
+    pools[id] = row;
+    row.reservePct = routingReserve(id, row, settings);
+    if (row.parent) addPool(row.parent);
+  };
+  // Pins stay within the live list as well as the model/depth quality table.
+  for (const item of items) {
+    const profile = findProfile(input.profiles, item.profile);
+    if (chosenOverride && profile?.id !== chosenOverride.id) continue;
+    if (!profile) { skips.push({ profile: ghost(item.profile, role), why: t("routing.profileMissing"), fatal: "missing" }); continue; }
+    if (input.profileOverride && !chosenOverride) continue;
+    const cursor = cursorDispatchSkip(profile);
+    if (cursor) { skips.push(cursor); continue; }
+    if (matrixPaused(item, input.snapshot, input.matrix) || profile.paused || opsProfileBlock(profile, input)) {
+      skips.push({ profile, why: t("routing.matrixPaused"), fatal: "pool" }); continue;
+    }
+    const candidate = qualified.find(q => q.provider === profile.provider.trim().toLowerCase() && q.model === actualModel(profile.model));
+    if (!candidate || profile.provider === "cursor" || !profile.pool) {
+      skips.push({ profile, why: t("quotaRoute.notQualified"), fatal: "rule" }); continue;
+    }
+    const evidence = input.snapshot.entry(profile.pool);
+    if (input.snapshot.policy && (evidence.parent === undefined || evidence.reservePct === undefined)) {
+      skips.push({ profile, why: t("quotaRoute.metadata"), fatal: "snapshot" }); continue;
+    }
+    if (!consider(profile, input, skips, !input.matrix, candidate.effort).ok) continue;
+    if (input.supportsEffort && !input.supportsEffort(profile, candidate.effort)) {
+      skips.push({ profile, why: t("routing.noEffortSupport", { effort: candidate.effort }), fatal: "effort" }); continue;
+    }
+    addPool(profile.pool, profile);
+    const cardType = review ? "review" : operationalExecution(input) ? "ops" : role === "executor" ? "code" : role === "reader" ? "read" : role;
+    const query = { model: profile.model!, effort: candidate.effort, cardType, role, tier: stored };
+    const cost = routingCost({ ...query, pool: profile.pool }, settings);
+    if (!routingCostFits(profile.pool, pools, cost.pct, now, parent => routingCost({ ...query, pool: parent }, settings).pct)) {
+      skips.push({ profile, why: t("quotaRoute.costRejected", { cost: +cost.pct.toFixed(2), source: t(cost.source === "observed" ? "quotaRoute.observed" : "quotaRoute.default"), samples: cost.samples }), fatal: "pool" }); continue;
+    }
+    pools[profile.pool].eligible = true;
+    viable.push({ profile, effort: candidate.effort, priority: qualified.indexOf(candidate), cost });
+  }
+  const ranked = rankPools({ pools, now, tier: stored, role, dispatchPriority: settings.dispatchPriority ?? null });
+  // Keep a recent actual rate limit behind other non-Claude pools without restoring the fixed order.
+  const avoid = new Set(input.avoidPools ?? []);
+  ranked.sort((a, b) => Number(avoid.has(a.pool)) - Number(avoid.has(b.pool)));
+  const pool = ranked[0];
+  const pick = pool && viable.filter(v => canonicalPoolId(v.profile.pool) === pool.pool).sort((a, b) => a.priority - b.priority)[0];
+  if (!pick) {
+    for (const v of viable) skips.push({ profile: v.profile, why: t("quotaRoute.poolLimited"), fatal: "pool" });
+    return annotate(noneLeft(skips, t("quotaRoute.empty"), input.snapshot, review, input.reviewTarget?.ok), rosterInfo.note);
+  }
+  const count = input.review && input.task!.role !== "reviewer" ? 0 : qualificationForRework(input.task!.id);
+  const minimum = input.cardEffort || input.tags?.includes("needs-max") && !input.review ? t("quotaRoute.request") : t("quotaRoute.minimum");
+  const reason = t("quotaRoute.reason", { tier, profile: pick.profile.name, pool: pool.pool, poolReason: pool.reason,
+    effort: pick.effort, depthReason: count ? t("quotaRoute.returns", { reason: minimum, count }) : minimum,
+    cost: +pick.cost.pct.toFixed(2), source: t(pick.cost.source === "observed" ? "quotaRoute.observed" : "quotaRoute.default"), samples: pick.cost.samples });
+  return annotate({ ok: true, profile: pick.profile, effort: pick.effort, effortSource: "quota", reason }, rosterInfo.note);
+}
+
 function withRosterNote(why: string, note: string | null): string {
   if (!note || why.includes(note)) return why;
   return t("routing.noteThen", { note, rest: why });
@@ -1155,24 +1302,29 @@ export function holdsWorkspace(role: string): boolean {
   return !READ_ONLY_ROLES.has(role);
 }
 
-export function currentOccupancy(profiles: Profile[]): Occupancy {
+export function currentOccupancy(profiles: readonly Profile[], excludeTaskId: number | null = null): Occupancy {
   const rows = getDb()
     .prepare(
       `SELECT t.workspace_path, t.workspace_kind,
          CASE WHEN t.status = 'blocked' AND t.blocked_kind != 'background' THEN t.blocked_from ELSE t.status END AS status,
-         t.blocked_from, t.role AS task_role, r.role, r.profile_name
+         t.blocked_from, t.role AS task_role,
+         coalesce(json_extract(e.data_json, '$.role'), r.role) AS role,
+         coalesce(json_extract(e.data_json, '$.profile'), r.profile_name, t.executor_profile) AS profile_name
        FROM tasks t
        LEFT JOIN runs r ON r.id = (
          SELECT id FROM runs WHERE task_id = t.id ORDER BY id DESC LIMIT 1
        )
-       WHERE t.status IN ('running', 'reviewing') OR (t.status = 'blocked' AND (t.blocked_kind = 'background' OR EXISTS (
+       LEFT JOIN events e ON e.id = (
+         SELECT id FROM events WHERE task_id = t.id AND kind = 'agent_creating' AND json_valid(data_json) ORDER BY id DESC LIMIT 1
+       ) AND (r.id IS NULL OR e.at > r.started_at)
+       WHERE t.id != coalesce(?, -1) AND (t.status IN ('running', 'reviewing') OR (t.status = 'blocked' AND (t.blocked_kind = 'background' OR EXISTS (
          SELECT 1 FROM run_budget_state b WHERE b.task_id = t.id
            AND json_extract(b.state_json, '$.agentId') = t.agent_id
            AND json_extract(b.state_json, '$.phase') IN ('braking', 'braked')
            AND coalesce(json_extract(b.state_json, '$.interrupted'), 0) = 0
-       )))`,
+       ))))`,
     )
-    .all() as unknown as Array<{
+    .all(excludeTaskId) as unknown as Array<{
     workspace_path: string | null;
     workspace_kind: string | null;
     status: string;
@@ -1194,7 +1346,7 @@ export function currentOccupancy(profiles: Profile[]): Occupancy {
     const role = row.role ?? (row.status === "reviewing" ? "reviewer" : row.task_role);
     occ.byRole[role] = (occ.byRole[role] ?? 0) + 1;
     const profile = row.profile_name ? profiles.find((item) => item.name === row.profile_name) : undefined;
-    const pool = profile?.pool ?? null;
+    const pool = canonicalPoolId(profile?.pool) ?? null;
     if (pool) occ.byPool[pool] = (occ.byPool[pool] ?? 0) + 1;
     const kind = row.workspace_kind ?? "dir";
     const writes = row.status === "running" && holdsWorkspace(role);
@@ -1224,12 +1376,13 @@ export function profilePriorityHint(task: TaskRow): ProfilePriorityHint | null {
   let byPool: Record<string, number> = {};
   let poolLimits: Record<string, number> = {};
   try {
-    byPool = currentOccupancy(profiles).byPool;
+    byPool = currentOccupancy(profiles, task.id).byPool;
     poolLimits = settings.concurrency.pools;
   } catch {
     // The hint is advisory: an occupancy read failure must not prevent card creation.
   }
   const first = matrixFirstChoice({
+    task, routingConfig: settings,
     profiles,
     role: task.role,
     review: task.role === "reviewer",

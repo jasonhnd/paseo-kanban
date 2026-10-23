@@ -1,0 +1,954 @@
+{
+  "executor": {
+    "L1": [
+      {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      }
+    ],
+    "L2": [
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "medium",
+          "high"
+        ]
+      }
+    ],
+    "L3": [
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "high"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-opus-5-5",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      }
+    ],
+    "L4": [
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      }
+    ]
+  },
+  "reviewer": {
+    "L1": [
+      {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "efforts": [
+          "high"
+        ]
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "codex",
+        "model": "gpt-6-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "medium",
+          "high"
+        ]
+      }
+    ],
+    "L2": [
+      {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "efforts": [
+          "high"
+        ]
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "codex",
+        "model": "gpt-6-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "medium",
+          "high"
+        ]
+      }
+    ],
+    "L3": [
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-opus-5-5",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "efforts": [
+          "high"
+        ]
+      },
+      {
+        "provider": "codex",
+        "model": "gpt-6-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "high"
+        ]
+      }
+    ],
+    "L4": [
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-opus-5-5",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "efforts": [
+          "high"
+        ]
+      },
+      {
+        "provider": "codex",
+        "model": "gpt-6-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-fable-5-1",
+        "efforts": [
+          "high"
+        ]
+      }
+    ]
+  },
+  "reader": {
+    "L1": [
+      {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5[1m]",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      }
+    ],
+    "L2": [
+      {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5[1m]",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      }
+    ],
+    "L3": [
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-opus-5-5",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5[1m]",
+        "efforts": [
+          "high"
+        ]
+      }
+    ],
+    "L4": [
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-opus-5-5",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5[1m]",
+        "efforts": [
+          "high"
+        ]
+      }
+    ]
+  },
+  "decision": {
+    "L1": [
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-opus-5-5",
+        "efforts": [
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-fable-5-1",
+        "efforts": [
+          "high"
+        ]
+      }
+    ],
+    "L2": [
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-opus-5-5",
+        "efforts": [
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-fable-5-1",
+        "efforts": [
+          "high"
+        ]
+      }
+    ],
+    "L3": [
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-opus-5-5",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-fable-5-1",
+        "efforts": [
+          "high"
+        ]
+      }
+    ],
+    "L4": [
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-opus-5-5",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-fable-5-1",
+        "efforts": [
+          "high"
+        ]
+      }
+    ]
+  },
+  "batch": {
+    "L1": [
+      {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      }
+    ],
+    "L2": [
+      {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "efforts": [
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "medium",
+          "high"
+        ]
+      }
+    ],
+    "L3": [
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-opus-5-5",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "high"
+        ]
+      }
+    ],
+    "L4": [
+      {
+        "provider": "codex",
+        "model": "gpt-6.1-sol",
+        "efforts": [
+          "high",
+          "xhigh"
+        ],
+        "allowExplicitMax": true
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-opus-5-5",
+        "efforts": [
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "high"
+        ]
+      }
+    ]
+  },
+  "ops": {
+    "L1": [
+      {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "efforts": [
+          "low"
+        ]
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L2": [
+      {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "efforts": [
+          "low"
+        ]
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L3": [
+      {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "efforts": [
+          "low"
+        ]
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L4": [
+      {
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "efforts": [
+          "low"
+        ]
+      },
+      {
+        "provider": "grok",
+        "model": "grok-4.7",
+        "efforts": [
+          "low"
+        ]
+      }
+    ]
+  },
+  "ops_vercel": {
+    "L1": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L2": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L3": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L4": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ]
+  },
+  "ops_cloudflare": {
+    "L1": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L2": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L3": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L4": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ]
+  },
+  "ops_github": {
+    "L1": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L2": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L3": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L4": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ]
+  },
+  "ops_notion": {
+    "L1": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L2": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L3": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ],
+    "L4": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "efforts": [
+          "low"
+        ]
+      }
+    ]
+  }
+}

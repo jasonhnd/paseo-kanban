@@ -46,11 +46,11 @@ describe("readPoolSnapshot onlyRoles", () => {
   it("reads a role list and mentions it on the snapshot line", () => {
     write({
       "claude-max": { dispatchable: true, onlyRoles: ["reviewer"] },
-      cursor: { dispatchable: true },
+      "demo-pool": { dispatchable: true },
     });
     const snapshot = readPoolSnapshot();
     assert.deepEqual(snapshot.entry("claude-max").onlyRoles, ["reviewer"]);
-    assert.equal(snapshot.entry("cursor").onlyRoles, null);
+    assert.equal(snapshot.entry("demo-pool").onlyRoles, null);
     assert.equal(snapshot.entry("missing").onlyRoles, null);
     assert.equal(snapshot.dispatchable("claude-max"), true);
     assert.match(snapshot.message, new RegExp(zhCN("pools.freshMessage")));
@@ -81,12 +81,12 @@ describe("readPoolSnapshot onlyRoles", () => {
 
 describe("quotaBrief", () => {
   it("keeps usedPct when the snapshot wrote a number", () => {
-    write({ cursor: { dispatchable: false, usedPct: 91, onlyRoles: ["executor"] }, "claude-max": { dispatchable: true, usedPct: "91" } });
+    write({ "demo-pool": { dispatchable: false, usedPct: 91, onlyRoles: ["executor"] }, "claude-max": { dispatchable: true, usedPct: "91" } });
     const snapshot = readPoolSnapshot();
-    assert.equal(snapshot.entry("cursor").usedPct, 91);
+    assert.equal(snapshot.entry("demo-pool").usedPct, 91);
     assert.equal(snapshot.entry("claude-max").usedPct, null);
-    assert.equal(snapshot.dispatchable("cursor"), false);
-    const brief = quotaBrief({ snapshot, pool: "cursor", matrixGeneratedAt: "2026-10-01T01:00:00.000Z" });
+    assert.equal(snapshot.dispatchable("demo-pool"), false);
+    const brief = quotaBrief({ snapshot, pool: "demo-pool", matrixGeneratedAt: "2026-10-01T01:00:00.000Z" });
     assert.equal(brief.generatedAt, "2026-09-30T00:00:00.000Z");
     assert.equal(brief.state, "fresh");
     assert.equal(brief.dispatchable, false);
@@ -96,16 +96,16 @@ describe("quotaBrief", () => {
   });
 
   it("returns null fields when the snapshot is missing", () => {
-    const brief = quotaBrief({ snapshot: null, pool: "cursor", matrixGeneratedAt: null });
+    const brief = quotaBrief({ snapshot: null, pool: "demo-pool", matrixGeneratedAt: null });
     assert.equal(brief.generatedAt, null);
     assert.equal(brief.state, null);
     assert.equal(brief.dispatchable, null);
     assert.equal(brief.usedPct, null);
     assert.equal(brief.onlyRoles, null);
-    assert.equal(brief.pool, "cursor");
+    assert.equal(brief.pool, "demo-pool");
     assert.equal(brief.matrixGeneratedAt, null);
     process.env.KANBAN_POOL_STATUS = join(dir, "gone.json");
-    const unread = quotaBrief({ snapshot: readPoolSnapshot(), pool: "cursor" });
+    const unread = quotaBrief({ snapshot: readPoolSnapshot(), pool: "demo-pool" });
     assert.equal(unread.generatedAt, null);
     assert.equal(unread.state, null);
     assert.equal(unread.dispatchable, null);

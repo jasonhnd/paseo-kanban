@@ -4,9 +4,8 @@
 //
 // Usage: node scripts/test-plugin.mjs [--root <repository>]
 // Exit: the node --test exit code, 0 when there is nothing to run, 2 setup problem.
-import { spawnSync } from "node:child_process";
+import { runPhasesInPrivateTmp as runPrivatePhases } from "../test/helpers/test-tmp.mjs";
 import { existsSync, readdirSync } from "node:fs";
-import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -65,9 +64,8 @@ async function main() {
     return runPhasesInPrivateTmp(phases, { cwd: options.root, logPrefix: "test-plugin" });
   }
   // A parent node --test (this script's own tests) sets NODE_TEST_CONTEXT; the child must report on its own.
-  const { NODE_TEST_CONTEXT: _parent, ...env } = process.env;
-  const out = spawnSync(process.execPath, ["--import", createRequire(join(DEFAULT_ROOT, "package.json")).resolve("tsx"), "--test", ...files], { cwd: options.root, env, stdio: ["ignore", "inherit", "inherit"] });
-  return out.status ?? 1;
+  delete process.env.NODE_TEST_CONTEXT;
+  return runPrivatePhases([["tests", ...files]], { cwd: options.root, logPrefix: "test-plugin" });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = await main();

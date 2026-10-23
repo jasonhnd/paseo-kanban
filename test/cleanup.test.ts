@@ -15,7 +15,8 @@ import { type AgentLauncher } from "../server/dispatch";
 import { startTask } from "./helpers/compat-dispatch";
 import { applyFailure } from "../server/failures";
 import { acceptTask, approveTask, completeTask, rejectTask, requestChanges } from "../server/flow";
-import { bindScheduler, resetSchedulerForTests } from "../server/loop";
+import { resetSchedulerForTests } from "../server/loop";
+import { bindScheduler } from "./helpers/compat-loop";
 import { HOME } from "../server/paths";
 import { cleanupOps } from "../server/paseo";
 import type { ListedWorkspace } from "../server/placement";
@@ -37,7 +38,7 @@ const previousWorktreesRoot = process.env.KANBAN_WORKTREES_ROOT;
 process.env.KANBAN_WORKTREES_ROOT = join(dir, "managed-worktrees");
 mkdirSync(process.env.KANBAN_WORKTREES_ROOT, { recursive: true });
 
-const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" };
+const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "grok", model: "grok-4.7", pool: "x-ultra" };
 const claudeExec: Profile = { id: "gg", name: "Executor · Claude", role: "executor", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" };
 const reviewer: Profile = { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" };
 const pools: PoolSnapshot = {

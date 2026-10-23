@@ -28,13 +28,13 @@ const executor: Profile = {
   name: zhCN("labels.role.executor"),
   role: "executor",
   family: "xai",
-  provider: "cursor",
+  provider: "alternate",
   model: "grok-4.7",
-  pool: "cursor",
+  pool: "alternate",
 };
 
 function shutAuto(): void {
-  const config: KanbanConfig = { autoStart: {}, supervisorAgentId: null, supervisors: {}, concurrency: { global: 4, pools: { cursor: 4 }, roles: { executor: 4, reviewer: 4 } } };
+  const config: KanbanConfig = { autoStart: {}, supervisorAgentId: null, supervisors: {}, concurrency: { global: 4, pools: { alternate: 4 }, roles: { executor: 4, reviewer: 4 } } };
   saveConfig(config);
 }
 
@@ -155,7 +155,7 @@ describe("lost agents.create response", () => {
     getDb().prepare("UPDATE tasks SET status = 'running', agent_id = NULL, updated_at = ? WHERE id = ?").run(now.toISOString(), task.id);
     writeAgent("lostagent03", task.id, cwd);
     issueToken("executor", task.id, null);
-    const config = { autoStart: { "lost-grace": false }, supervisorAgentId: null, supervisors: {}, concurrency: { global: 4, pools: { cursor: 4 }, roles: { executor: 4 } } } as KanbanConfig;
+    const config = { autoStart: { "lost-grace": false }, supervisorAgentId: null, supervisors: {}, concurrency: { global: 4, pools: { alternate: 4 }, roles: { executor: 4 } } } as KanbanConfig;
     saveConfig(config);
     await runTick({ profiles: [executor], launcher: { async create() { return { id: "should-not" }; }, async send() {} }, now, config, agentState: () => "missing" });
     assert.equal(getTask(task.id).agent_id, null);
@@ -261,7 +261,7 @@ describe("lost agents.create response", () => {
     const claimedAt = new Date(now.getTime() - 3 * 60 * 1000);
     getDb().prepare("UPDATE tasks SET status = 'running', agent_id = NULL, updated_at = ? WHERE id = ?").run(claimedAt.toISOString(), task.id);
     appendEvent(task.id, "agent_creating", null, null, "scheduler", {
-      role: "executor", profile: zhCN("labels.role.executor"), family: "xai", provider: "cursor", model: "grok-4.7", autoAccept: 1, effort: "high",
+      role: "executor", profile: zhCN("labels.role.executor"), family: "xai", provider: "alternate", model: "grok-4.7", autoAccept: 1, effort: "high",
     }, claimedAt.toISOString());
     writeAgent("profiled01", task.id, cwd, { createdAt: new Date(claimedAt.getTime() + 2_000).toISOString() });
     const config = { autoStart: {}, supervisorAgentId: null, supervisors: {}, concurrency: { global: 4, pools: {}, roles: {} } } as KanbanConfig;
@@ -302,8 +302,8 @@ describe("lost agents.create response", () => {
     mkdirSync(cwd, { recursive: true });
     const task = createTask({ project: "lost-nofamily", title: "Executor family empty", role: "executor", workspacePath: cwd });
     getDb().prepare("UPDATE tasks SET status = 'in_review', executor_profile = NULL, executor_family = NULL, executor_agent_id = 'gone01' WHERE id = ?").run(task.id);
-    const sameFamily: Profile = { id: "rv", name: "Reviewer · Same family", role: "reviewer", family: "xai", provider: "grok", model: "grok-4.7", pool: "cursor" };
-    const config = { autoStart: { "lost-nofamily": true }, supervisorAgentId: null, supervisors: {}, concurrency: { global: 4, pools: { cursor: 4 }, roles: { executor: 4, reviewer: 4 } } } as KanbanConfig;
+    const sameFamily: Profile = { id: "rv", name: "Reviewer · Same family", role: "reviewer", family: "xai", provider: "grok", model: "grok-4.7", pool: "alternate" };
+    const config = { autoStart: { "lost-nofamily": true }, supervisorAgentId: null, supervisors: {}, concurrency: { global: 4, pools: { alternate: 4 }, roles: { executor: 4, reviewer: 4 } } } as KanbanConfig;
     saveConfig(config);
     let created = 0;
     const launcher: AgentLauncher = { async create() { created += 1; return { id: "review-should-not" }; }, async send() {} };

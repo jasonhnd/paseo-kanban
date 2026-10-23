@@ -1,4 +1,6 @@
 /// <reference types="node" />
+import { publishRunCosts } from "./run-cost";
+import { resolveTier } from "./tier";
 import { resolveReviewTarget } from "./review-target";
 import { t } from "../shared/i18n";
 import { leaderActionNote } from "./protocol";
@@ -26,7 +28,7 @@ import { recoverLostCreate } from "./lost-agent";
 import { blockLostWorkspace, recoverReworkStartup, reworkStartupInFlight, workspaceFateReader } from "./lost-workspace";
 import { agentLiveness, agentsDir, readAgentRecord, type AgentLiveness } from "./open";
 import { isQuotaWaitReason, quotaWaitLabel } from "../shared/blocked";
-import { onlyRolesBlock, quotaBrief, readPoolSnapshot, STALE_WAKE_MS, staleMinutes, type PoolSnapshot, type QuotaBrief } from "./pools";
+import { unknownQuotaBlock, onlyRolesBlock, quotaBrief, readPoolSnapshot, STALE_WAKE_MS, staleMinutes, type PoolSnapshot, type QuotaBrief } from "./pools";
 import { cardRouteContext } from "./profile-rules";
 import type { Profile } from "./profiles";
 import { parentsBlockReason, taskParents } from "./parents";
@@ -164,9 +166,10 @@ function plannedRole(task: TaskRow): string {
 function routeFor(task: TaskRow, profiles: Profile[], pools: PoolSnapshot, config: KanbanConfig, matrix: MatrixLoad, now = Date.now(), reassignment?: ReworkReassignment) {
   const role = plannedRole(task);
   const review = role === "reviewer";
-  const occ = currentOccupancy(profiles);
+  const occ = currentOccupancy(profiles, task.id);
   const replacement = pendingReworkReplacement(task.id);
   const input: RouteInput = {
+    task, routingConfig: config, now,
     // avoidPools only deprioritizes a pool. Reassignment must exclude the old pool entirely,
     // while retaining reviewer profiles so the usual cross-family reservation still runs.
     profiles: reassignment ? profiles.filter((profile) =>
@@ -393,7 +396,7 @@ async function tryStart(
         ? routed.decision.reason
         : "";
   const pool = profile?.pool ?? poolOf(profiles, task.executor_profile);
-  const occ = routed?.occ ?? currentOccupancy(profiles);
+  const occ = routed?.occ ?? currentOccupancy(profiles, task.id);
   const avoid = avoidedPools(task.id);
   const switching = Boolean(pool && avoid.length > 0 && !avoid.includes(pool));
   const startRole = sendBack ? task.role : role;
@@ -410,7 +413,8 @@ async function tryStart(
   // Rework and a login reopen skip the matrix. The pool-wide flag is not enough: onlyRoles still applies.
   const direct = Boolean(sendBack || pinned);
   const entry = pools.entry(pool);
-  const limited = direct && entry.dispatchable ? onlyRolesBlock(entry, pool, profilePoolRole(profile, !sendBack && role === "reviewer")) : null;
+  const limited = direct && entry.dispatchable ? onlyRolesBlock(entry, pool, profilePoolRole(profile, !sendBack && role === "reviewer"))
+    ?? unknownQuotaBlock(entry, resolveTier(task.tier, cardRouteContext(task, config.profileRules).tags ?? [], matrix.state === "ok" ? matrix.matrix.defaultTier : null), occ.byPool[pool ?? ""] ?? 0, now) : null;
   const gate = gateHold({
     auto: true,
     pool,
@@ -465,8 +469,8 @@ async function tryStart(
     // wait-user landed inside the start window. The card is correctly parked: no failure, no hold rewrite, no wake.
     if (err instanceof KanbanError && err.code === WAITING_USER) return;
     const message = err instanceof KanbanError ? err.message : err instanceof Error ? err.message : String(err);
-    if (err instanceof KanbanError && err.code === "policy_changed") {
-      // No provider request was sent. Queue for a fresh revision without failure alarms.
+    if (err instanceof KanbanError && (err.code === "policy_changed" || err.code === "quota_wait")) {
+      // No provider request was sent. Queue for a fresh revision or quota slot without failure alarms.
       setHold(task.id, message);
       held.push({ id: task.id, reason: message });
       return;
@@ -688,7 +692,7 @@ export async function runTick(options: TickOptions): Promise<TickResult> {
   // Every phase is its own failure domain: one that throws is recorded and the rest of the round still runs.
   const phase = (name: string, fn: () => Promise<unknown> | unknown): Promise<void> =>
     stage(name, () => guardStage(name, errors, fn, now.getTime()));
-  await phase("tick.cloudReconcile", reconcileCloudMachines);
+  await phase("tick.cloudReconcile", () => reconcileCloudMachines(now.getTime()));
   await phase("tick.wakeStale", () => {
     wakeOnStalePools(pools);
     wakeOnBadMatrix(matrix);
@@ -705,6 +709,7 @@ export async function runTick(options: TickOptions): Promise<TickResult> {
     }
   });
   await phase("tick.runBudget", () => scanRunBudgets({ now, config, read: options.agentBudget, interrupt: options.interruptAgent, backgroundWaiting: options.backgroundWaiting }));
+  await phase("tick.runCosts", () => publishRunCosts(getDb()));
   await phase("tick.reconcile", () => reconcile(now, agentState, options.launcher.inspectAgent, options.launcher));
   await phase("tick.stall", () => scanStalled({
     now,

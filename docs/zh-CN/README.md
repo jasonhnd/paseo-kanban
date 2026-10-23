@@ -1,6 +1,9 @@
 # Paseo Kanban
 
-默认关闭的一卡一机云执行要求项目开关及 `cloud` 标签，目前支持公开 `paseo-clear-chat` 项目的 Codex/Grok 执行卡。参见[云执行](CLOUD-RUNNER.md)、[运行预算刹车](RUN-BUDGET.md)及[后台等待](WORKFLOW.md)。
+默认关闭的一卡一机云执行已进入后续候选版本开发线。项目开关开启且带 `cloud`
+标签的 Codex/Grok 执行卡，只有项目在 `cloud.allowedProjects` 名单内且 GitHub 仓库可匿名公开读取时才能按公开模式派云；
+localMirror 仍仅限显式启用的 `paseo-kanban`。配置与试跑前提见
+[云执行说明](CLOUD-RUNNER.md)。
 
 用于 [Paseo](https://github.com/getpaseo/paseo) 的单插件，把跨项目代码 agent 看板与 Fleet 阵容、额度、决定和设置放在一起。执行者交活，使用不同实际模型的审查者核对，最后由项目 leader 验收。
 
@@ -192,3 +195,7 @@ npm run shared:check
 ## 许可
 
 [MIT](../../LICENSE)
+
+## 测试隔离与并发
+
+插件回归默认并发运行 4 个测试文件；可用 `KANBAN_TEST_CONCURRENCY`（1–64）覆盖文件并发。全部断言和超时保留，普通回归结束后另起隔离性能阶段。测试运行器使用私有 HOME、PASEO_HOME 与数据根，并拒绝测试模式访问真实个人状态目录。

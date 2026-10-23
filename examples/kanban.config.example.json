@@ -1,6 +1,15 @@
 {
   "language": "system",
   "autoStart": {},
+  "qualification": {},
+  "quotaRouting": {
+    "enabled": true,
+    "minSamples": 3,
+    "defaultCostPct": 5,
+    "safetyFactor": 1.5,
+    "reserves": {},
+    "dispatchPriority": null
+  },
   "disabledPools": [],
   "staleStopPct": {},
   "families": {},
@@ -23,6 +32,11 @@
       "batch": 1,
       "supervisor": 1
     }
+  },
+  "cloud": {
+    "maxMachines": 3,
+    "deleteTimeoutSec": 180,
+    "deletePollIntervalSec": 5
   },
   "capacity": {
     "maxWorkGiB": 10,

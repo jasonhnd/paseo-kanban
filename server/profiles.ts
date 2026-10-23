@@ -1,3 +1,4 @@
+import { canonicalPoolId } from "../shared/fleet/x-ultra";
 /// <reference types="node" />
 import { t } from "../shared/i18n";
 import { hasGoogleFacts } from "./execution-family";
@@ -70,7 +71,7 @@ export function profilesFromText(text: string): Profile[] {
     if (profile.featureValues != null && (typeof profile.featureValues !== "object" || Array.isArray(profile.featureValues))) {
       throw new Error(t("profiles.featureValuesNotObject", { name: profile.name }));
     }
-    return profile;
+    return { ...profile, ...(profile.pool ? { pool: canonicalPoolId(profile.pool)! } : {}) };
   });
 }
 

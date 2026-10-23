@@ -86,9 +86,10 @@ describe("command line", () => {
       mkdirSync(dirname(join(root, path)), { recursive: true });
       writeFileSync(join(root, path), body);
     }
+    writeFileSync(join(root, "fixture-denylist.txt"), "AnonymousPrivateProject\n");
     return root;
   }
-  const cli = (root, ...args) => spawnSync(process.execPath, [SCRIPT, "--root", root, ...args], { encoding: "utf8" });
+  const cli = (root, ...args) => spawnSync(process.execPath, [SCRIPT, "--root", root, ...args], { encoding: "utf8", env: { ...process.env, FLEET_PRIVATE_DENYLIST: join(root, "fixture-denylist.txt") } });
 
   test("a clean root package passes and --print lists its files", () => {
     const out = cli(plugin(), "--print");
@@ -142,7 +143,7 @@ describe("command line", () => {
     const root = plugin(); const tools = join(root, "tools"); mkdirSync(tools);
     symlinkSync(process.execPath, join(tools, "node"));
     symlinkSync(executable("npm"), join(tools, "npm"));
-    const invoke = () => spawnSync(process.execPath, [SCRIPT, "--root", root, "--secret-scan"], { encoding: "utf8", env: { ...process.env, PATH: tools } });
+    const invoke = () => spawnSync(process.execPath, [SCRIPT, "--root", root, "--secret-scan"], { encoding: "utf8", env: { ...process.env, PATH: tools, FLEET_PRIVATE_DENYLIST: join(root, "fixture-denylist.txt") } });
     const missing = invoke();
     assert.equal(missing.status, 2, missing.stdout + missing.stderr);
     assert.match(missing.stderr, /gitleaks is required/);

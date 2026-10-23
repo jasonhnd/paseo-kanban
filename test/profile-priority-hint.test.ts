@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it, mock } from "node:test";
 import { runKanban } from "../server/cli";
-import { loadConfig } from "../server/config";
+import { loadConfig, saveConfig } from "../server/config";
 import { configPath } from "../server/config-file";
 import { closeDb, getDb } from "../server/db";
 import { formatResult } from "../server/tools";
@@ -29,8 +29,8 @@ const PROFILES = [
   { id: "codex", name: "Executor · GPT", role: "executor", family: "openai", provider: "codex", model: "gpt-6-astra", pool: "codex-pro", thinkingOptionId: "medium" },
   { id: "sonnet", name: "Executor · SonnetSample textClaudeSample text", role: "candidate", candidateFor: "executor", family: "anthropic", provider: "claude", model: "claude-sonnet-5-5", pool: "claude-max", thinkingOptionId: "medium" },
   { id: "opus", name: complexDocsProfileName, role: "candidate", candidateFor: "executor", family: "anthropic", provider: "claude", model: "claude-opus-5-5", pool: "claude-max", thinkingOptionId: "high" },
-  { id: "grok", name: "Executor · Grok", role: "candidate", candidateFor: "executor", family: "xai", provider: "grok", model: "grok-4.7", pool: "supergrok", thinkingOptionId: "high" },
-  { id: "rev-x", name: "Reviewer · Grok", role: "reviewer", family: "xai", provider: "grok", model: "grok-4.7", pool: "supergrok", thinkingOptionId: "high" },
+  { id: "grok", name: "Executor · Grok", role: "candidate", candidateFor: "executor", family: "xai", provider: "grok", model: "grok-4.7", pool: "x-ultra", thinkingOptionId: "high" },
+  { id: "rev-x", name: "Reviewer · Grok", role: "reviewer", family: "xai", provider: "grok", model: "grok-4.7", pool: "x-ultra", thinkingOptionId: "high" },
   { id: "rev-a", name: "Reviewer · Sonnet", role: "candidate", candidateFor: "reviewer", family: "anthropic", provider: "claude", model: "claude-sonnet-5-5", pool: "claude-max", thinkingOptionId: "high" },
 ];
 
@@ -74,6 +74,8 @@ before(async () => {
   writeFileSync(paseoConfig, JSON.stringify({ daemon: { agentProfiles: PROFILES } }));
   writeFileSync(matrixFile, JSON.stringify(MATRIX));
   await runKanban(["project", "--project", "hint", "--code", "HNT"], {});
+  // This suite exercises the retained legacy priority hint ordering.
+  saveConfig({ ...loadConfig(), quotaRouting: { enabled: false } });
 });
 
 after(() => {
@@ -126,7 +128,7 @@ describe("profile priority hint at create", () => {
 
   it("hints when the pinned pool differs from the matrix's first dispatchable pick, and still creates the card", async () => {
     const created = await create((zhCNPart("compat.source.cwdOk", 0, 3) + "Grok"), ["--profile", "Executor · Grok", "--tier", "L2"]);
-    const expected = (zhCNPart("routing.priorityHint", 0, 7) + "Executor · Grok" + zhCNPart("missingCwd.none", 0, 1) + "supergrok" + zhCNPart("routing.priorityHint", 23, 33) + "Executor · SonnetSample textClaudeSample text" + zhCNPart("missingCwd.none", 0, 1) + "claude-max" + zhCNPart("routing.priorityHint", 60, 77));
+    const expected = (zhCNPart("routing.priorityHint", 0, 7) + "Executor · Grok" + zhCNPart("missingCwd.none", 0, 1) + "x-ultra" + zhCNPart("routing.priorityHint", 23, 33) + "Executor · SonnetSample textClaudeSample text" + zhCNPart("missingCwd.none", 0, 1) + "claude-max" + zhCNPart("routing.priorityHint", 60, 77));
     assert.equal(created.profileHint?.message, expected);
     assert.ok(created.warnings?.includes(expected));
     assert.match(formatResult(created), new RegExp(`${zhCNPart("boardView.default.note", 0, 3)}${expected.replace(new RegExp("[()" + localePattern(zhCNPart("missingCwd.none", 0, 1)) + localePattern(zhCNPart("missingCwd.none", 3, 4)) + "·]", "g"), ".")}`));
@@ -134,7 +136,7 @@ describe("profile priority hint at create", () => {
     assert.equal(row.status, "ready");
     assert.equal(row.profile_override, "Executor · Grok");
     assert.deepEqual(hintEvents(created.id), [
-      { profile: "Executor · Grok", pool: "supergrok", suggested: "Executor · SonnetSample textClaudeSample text", suggestedPool: "claude-max", role: "executor", tier: "L2", reason: expected },
+      { profile: "Executor · Grok", pool: "x-ultra", suggested: "Executor · SonnetSample textClaudeSample text", suggestedPool: "claude-max", role: "executor", tier: "L2", reason: expected },
     ]);
   });
 
@@ -153,13 +155,13 @@ describe("profile priority hint at create", () => {
 
   it("ranks the suggestion the same way routing does: matrix order while priority is in force, prefer first after it expires", async () => {
     const l3 = { ...MATRIX.roles.executor, L3: [item("Executor · Grok", "high"), item(complexDocsProfileName, "high")] };
-    const withPriority = (until: string) => ({ ...MATRIX, priority: { order: ["supergrok", "claude-max"], until }, roles: { ...MATRIX.roles, executor: l3 } });
-    writeFileSync(poolFile, JSON.stringify({ generatedAt: new Date().toISOString(), pools: { "claude-max": { prefer: true }, supergrok: {} } }));
+    const withPriority = (until: string) => ({ ...MATRIX, priority: { order: ["x-ultra", "claude-max"], until }, roles: { ...MATRIX.roles, executor: l3 } });
+    writeFileSync(poolFile, JSON.stringify({ generatedAt: new Date().toISOString(), pools: { "claude-max": { prefer: true }, "x-ultra": {} } }));
     try {
       writeFileSync(matrixFile, JSON.stringify(withPriority(new Date(Date.now() + 86_400_000).toISOString())));
       const active = await create(("priority " + zhCNPart("server.tierSet", 17, 19)), ["--profile", complexDocsProfileName, "--tier", "L3"]);
       assert.equal(active.profileHint?.suggested, "Executor · Grok");
-      assert.equal(active.profileHint?.suggestedPool, "supergrok");
+      assert.equal(active.profileHint?.suggestedPool, "x-ultra");
       assert.equal(hintEvents(active.id).length, 1);
 
       writeFileSync(matrixFile, JSON.stringify(withPriority(new Date(Date.now() - 86_400_000).toISOString())));

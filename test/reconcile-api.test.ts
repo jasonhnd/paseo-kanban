@@ -21,7 +21,7 @@ import { runTick } from "./helpers/compat-schedule";
 import { createTask, getTask } from "../server/store";
 
 const profiles: Profile[] = [
-  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", pool: "cursor", model: "grok-4.7" },
+  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", pool: "alternate", model: "grok-4.7" },
   { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", pool: "claude-max", model: "sonnet" },
 ];
 const start = new Date("2026-10-01T08:45:00.000Z");
@@ -36,7 +36,7 @@ beforeEach(() => {
   process.env.KANBAN_DISPATCH_MATRIX = join(dir, "missing-matrix.json");
   resetReconcileForTests();
   config = { autoStart: { live: false }, supervisors: {}, supervisorAgentId: null,
-    concurrency: { global: 50, pools: { cursor: 50, "claude-max": 50 }, roles: { executor: 50, reviewer: 50 } }, archiveTimeoutMs: 15 };
+    concurrency: { global: 50, pools: { alternate: 50, "claude-max": 50 }, roles: { executor: 50, reviewer: 50 } }, archiveTimeoutMs: 15 };
   saveConfig(config);
 });
 

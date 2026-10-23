@@ -67,7 +67,7 @@ function recordProtocolReceipt(request: CreateHookRequest): void {
 export function appendProtocol(request: CreateHookRequest): CreateHookRequest {
   const role = roleFromRequest(request);
   const language = isLanguage(request.env?.KANBAN_LANGUAGE) ? request.env.KANBAN_LANGUAGE : undefined;
-  const text = protocolFor(role, { worktree: role === "executor" && request.env?.KANBAN_WORKTREE === "1", language });
+  const text = protocolFor(role, { qa: request.env?.KANBAN_QA === "1", worktree: role === "executor" && request.env?.KANBAN_WORKTREE === "1", language });
   const prev = request.config.systemPrompt?.trim() ?? "";
   const body = prev ? `${prev}\n\n${text}` : text;
   const marked = request.env?.KANBAN_LEADER_START ? `${body}\n\nProtocol ${PROTOCOL_VERSION}` : body;

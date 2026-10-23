@@ -1,4 +1,8 @@
+import { canonicalPoolId, canonicalPoolRows } from "../shared/fleet/x-ultra";
 /// <reference types="node" />
+import type { RankingPool } from "../shared/fleet/pool-ranking";
+import { quotaUnknown, unknownQuotaPolicy, unknownQuotaReason, type QuotaState } from "../shared/fleet/unknown-quota";
+export { unknownQuotaBlock } from "../shared/fleet/unknown-quota";
 import { readPolicy } from "./application/policy-snapshot";
 import { classifyFreshness, envelopeAgeSeconds } from "./contract";
 import { t } from "../shared/i18n";
@@ -14,7 +18,14 @@ export const STALE_WAKE_MS = 6 * 60 * 60 * 1000;
 /** On a stale snapshot, a pool without its own stop line stops at this last reading (percent used). */
 export const STALE_DEFAULT_STOP_PCT = 97;
 
-export interface PoolEntry {
+export interface PoolEntry extends QuotaState {
+  projectedPct?: number | null;
+  runsOutAt?: string | null;
+  forecastConfidence?: "high" | "low" | "none";
+  adapter?: string;
+  providers?: string[];
+  parent?: string | null;
+  reservePct?: number;
   /**
    * pause: stale snapshots and expired protected readings stop this pool, even without usedPct.
    * none: stale snapshots stay open. Missing: retain the legacy stale stop lines.
@@ -137,7 +148,10 @@ function openSnapshot(message: string, failure: NonNullable<PoolSnapshot["failur
   };
 }
 
-type RawPool = {
+type RawPool = Partial<Pick<RankingPool, "projectedPct" | "runsOutAt" | "forecastConfidence" | "adapter" | "providers" | "parent" | "reservePct">> & {
+  state?: unknown;
+  unknownQuota?: unknown;
+  quotaStateExpiresAt?: unknown;
   quotaProtection?: unknown;
   readingExpiresAt?: unknown;
   dispatchable?: unknown;
@@ -172,9 +186,21 @@ export function parseOnlyRoles(value: unknown): string[] | null {
 function toEntry(raw: RawPool | undefined): PoolEntry {
   if (!raw || typeof raw !== "object") return openEntry();
   return {
+    ...(typeof raw.projectedPct === "number" && Number.isFinite(raw.projectedPct) && raw.projectedPct >= 0 ? { projectedPct: raw.projectedPct } : {}),
+    ...(typeof raw.runsOutAt === "string" ? { runsOutAt: raw.runsOutAt } : {}),
+    ...(["high", "low", "none"].includes(raw.forecastConfidence ?? "") ? { forecastConfidence: raw.forecastConfidence } : {}),
+    ...(typeof raw.adapter === "string" ? { adapter: raw.adapter } : {}),
+    ...(Array.isArray(raw.providers) ? { providers: raw.providers.filter(p => typeof p === "string") } : {}),
+    ...(typeof raw.parent === "string" || raw.parent === null ? { parent: raw.parent } : {}),
+    ...(typeof raw.reservePct === "number" && Number.isFinite(raw.reservePct) && raw.reservePct >= 0 && raw.reservePct <= 100 ? { reservePct: raw.reservePct } : {}),
     ...(raw.quotaProtection === "pause" || raw.quotaProtection === "none"
       ? { quotaProtection: raw.quotaProtection, readingExpiresAt: typeof raw.readingExpiresAt === "string" ? raw.readingExpiresAt : null }
       : {}),
+    ...(raw.state === "known" || raw.state === "unknown" ? {
+      state: raw.state,
+      ...(raw.quotaStateExpiresAt !== undefined ? { quotaStateExpiresAt: typeof raw.quotaStateExpiresAt === "string" ? raw.quotaStateExpiresAt : null } : {}),
+      unknownQuota: unknownQuotaPolicy(raw.unknownQuota && typeof raw.unknownQuota === "object" ? raw.unknownQuota : undefined),
+    } : {}),
     dispatchable: raw.dispatchable !== false,
     dispatchableExplicit: raw.dispatchable === true,
     deprioritize: raw.deprioritize === true,
@@ -290,20 +316,23 @@ interface SnapshotInput {
 
 function buildSnapshot(input: SnapshotInput): PoolSnapshot {
   const parsed: Record<string, PoolEntry> = {};
-  for (const [name, value] of Object.entries(input.pools)) {
+  for (const [name, value] of Object.entries(canonicalPoolRows(input.pools as Record<string, any>))) {
     const entry = toEntry(value);
     const expiry = entry.readingExpiresAt ? Date.parse(entry.readingExpiresAt) : Number.NaN;
     const protectedReadingExpired = entry.quotaProtection === "pause" && (!Number.isFinite(expiry) || input.now >= expiry);
     // Fresh snapshots follow dispatchable unless a protected reading has expired.
     const effective = input.stale ? staleEntry(name, entry, input.stops) : protectedReadingExpired ? expiredEntry(entry) : entry;
+    const unknown = protectedReadingExpired || quotaUnknown(entry, input.now);
+    const bounded = unknown ? { ...effective, dispatchable: entry.dispatchable && effective.dispatchable, state: "unknown" as const, usedPct: null, prefer: false, deprioritize: entry.deprioritize,
+      reason: effective.dispatchable ? unknownQuotaReason(unknownQuotaPolicy(entry.unknownQuota)) : effective.reason } : effective;
     parsed[name] = input.stale && input.preserveStops && !entry.dispatchable
-      ? { ...effective, dispatchable: false, reason: entry.reason ?? effective.reason }
-      : effective;
+      ? { ...bounded, dispatchable: false, reason: entry.reason ?? bounded.reason }
+      : bounded;
   }
   const known = new Set(Object.keys(parsed));
   const entryOf = (pool: string | null): PoolEntry => (
-    pool && parsed[pool]
-      ? parsed[pool]
+    pool && parsed[canonicalPoolId(pool)!]
+      ? parsed[canonicalPoolId(pool)!]
       : pool && input.quotaConfigured
         ? { ...openEntry(), dispatchable: false, reason: t("pools.notConfigured") }
         : openEntry()
@@ -318,7 +347,7 @@ function buildSnapshot(input: SnapshotInput): PoolSnapshot {
     // Pool-wide flag only. Callers that assign a role also check onlyRoles via onlyRolesBlock.
     dispatchable: (pool) => entryOf(pool).dispatchable,
     entry: entryOf,
-    hasPool: (pool) => Boolean(pool && known.has(pool)),
+    hasPool: (pool) => Boolean(pool && known.has(canonicalPoolId(pool)!)),
   };
 }
 
@@ -409,11 +438,12 @@ export function readCompatibilityPoolSnapshot(now = Date.now()): PoolSnapshot { 
 function readSnapshot(now: number, compatibility: boolean): PoolSnapshot {
   const config = loadConfig();
   const snapshot = readAfcPoolSnapshot(now, config.staleStopPct ?? DEFAULT_STALE_STOP_PCT, compatibility);
-  const disabled = new Set(config.disabledPools ?? []);
+  // The legacy Cursor stop controls transport, not the shared seat. Only Grok's old id aliases a quota stop.
+  const disabled = new Set((config.disabledPools ?? []).map(pool => pool === "cursor" ? pool : canonicalPoolId(pool)!));
   if (disabled.size === 0) return snapshot;
   const entry = (pool: string | null): PoolEntry => {
     const original = snapshot.entry(pool);
-    return pool && disabled.has(pool)
+    return pool && (disabled.has(pool) || disabled.has(canonicalPoolId(pool)!))
       ? { ...original, dispatchable: false, reason: t("pools.disabledByConfig", { pool }) }
       : original;
   };

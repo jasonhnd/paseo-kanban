@@ -4,6 +4,7 @@
 // Fleet owns only the fleet/ child of the canonical fresh-install Kanban root.
 // Retired storage variables are diagnosed; old directories are never probed or imported.
 // Install paths are resolved from the host package/config for public command wrappers.
+import { assertTestSafePath } from "../storage/test-safety";
 import { unifiedDataRoot, fleetDataRoot } from "../storage/root";
 import { paseoConfigPath as hostConfigPath } from "../paths";
 import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
@@ -60,7 +61,9 @@ export function dataDirChoice(env: Env = process.env, home: string = homedir()):
 
 /** The Fleet child of the canonical fresh-install root. */
 export function dataDir(env: Env = process.env, home: string = homedir()): string {
-  return dataDirChoice(env, home).dir;
+  const dir = dataDirChoice(env, home).dir;
+  assertTestSafePath(dir);
+  return dir;
 }
 
 /** One log line saying which directory is in use and why. */
@@ -215,7 +218,7 @@ const kanbanMemo = new Map<string, string>();
 export function kanbanDataDir(env: Env = process.env, home: string = homedir()): string {
   const key = [home, env.KANBAN_DATA_DIR ?? "", env.KANBAN_HOME ?? "", env.PASEO_HOME ?? ""].join("\0");
   const hit = kanbanMemo.get(key);
-  if (hit) return hit;
+  if (hit) { assertTestSafePath(hit); return hit; }
   const dir = chooseKanbanDataDir(env, home);
   kanbanMemo.set(key, dir);
   return dir;

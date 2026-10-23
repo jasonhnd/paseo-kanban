@@ -131,6 +131,7 @@ export function quotaLine(input: QuotaInput, now: number): QuotaLine | null {
   });
   const head = t("quota.line.head", { name, used: usedBit(input.monthly === true, input.usedPct) });
   const base = { name, usedPct: input.usedPct, pacePct: input.pacePct, stopPct, hitsStopAt };
+  if (input.paceState === "unknown") return { ...base, hitsStopAt: null, text: joined(head, t("quota.unknown.label")), tone: input.dispatchable ? "yellow" : "red" };
   if (!input.dispatchable) {
     const clock = pauseClock(input.reason);
     const tail = clock

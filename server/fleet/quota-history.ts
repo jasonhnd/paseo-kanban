@@ -1,3 +1,4 @@
+import { canonicalPoolId, canonicalPoolRows } from "../../shared/fleet/x-ultra";
 /// <reference types="node" />
 import { providerBanned } from "../../shared/fleet/provider-policy";
 import { readBannedProviders } from "./adapters/config";
@@ -73,7 +74,7 @@ export async function recordSample(pools: Record<string, PoolStatus>, now = Date
 export function samplesInPeriod(samples: HistorySample[], pool: string, resetsAt: string | null, startMs: number, endMs: number): Array<{ at: string; usedPct: number }> {
   const out: Array<{ at: string; usedPct: number }> = [];
   for (const sample of samples) {
-    const row = sample.pools?.[pool];
+    const row = canonicalPoolRows(sample.pools ?? {})[canonicalPoolId(pool)!];
     const at = row && "observedAt" in row ? row.observedAt : sample.at;
     if (!at) continue;
     const t = Date.parse(at);
@@ -92,7 +93,7 @@ export interface ProfilePool {
 
 /** Runs whose profile spends this pool, between the two readings (inclusive). */
 export function runsInSpan(runs: Array<{ profile: string; at: string }>, profiles: ProfilePool[], pool: string, fromMs: number, toMs: number): number {
-  const names = new Set(profiles.filter((p) => p.pool === pool).map((p) => p.name));
+  const names = new Set(profiles.filter((p) => canonicalPoolId(p.pool) === canonicalPoolId(pool)).map((p) => p.name));
   let n = 0;
   for (const run of runs) {
     if (!names.has(run.profile)) continue;

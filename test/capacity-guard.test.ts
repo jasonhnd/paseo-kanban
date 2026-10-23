@@ -45,7 +45,7 @@ mkdirSync(dataDir, { recursive: true });
 mkdirSync(workRoot, { recursive: true });
 
 const profiles: Profile[] = [
-  { id: "ex", name: "executor", role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" },
+  { id: "ex", name: "executor", role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" },
   { id: "rv", name: "reviewer", role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" },
 ];
 
@@ -54,7 +54,7 @@ const sent: Array<{ id: string; text: string }> = [];
 function writePools(): void {
   writeFileSync(process.env.KANBAN_POOL_STATUS!, JSON.stringify({
     generatedAt: "2026-10-01T00:00:00.000Z",
-    pools: { cursor: { dispatchable: true }, "claude-max": { dispatchable: true } },
+    pools: { alternate: { dispatchable: true }, "claude-max": { dispatchable: true } },
   }));
 }
 

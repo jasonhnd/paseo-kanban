@@ -50,9 +50,9 @@ function releaseIdleClaim(taskId: number): void {
 }
 
 export function trackCleanupWork(taskId: number, work: Promise<unknown>): void {
-  const jobs = physical.get(taskId) ?? new Set();
-  jobs.add(work); physical.set(taskId, jobs);
-  const clear = () => { jobs.delete(work); if (!jobs.size) physical.delete(taskId); releaseIdleClaim(taskId); };
+  const pendingWork = physical.get(taskId) ?? new Set();
+  pendingWork.add(work); physical.set(taskId, pendingWork);
+  const clear = () => { pendingWork.delete(work); if (!pendingWork.size) physical.delete(taskId); releaseIdleClaim(taskId); };
   void work.then(clear, clear);
 }
 

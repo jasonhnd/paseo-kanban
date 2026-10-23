@@ -28,15 +28,15 @@ const executor: Profile = {
   model: "grok-4.7",
   pool: "supergrok",
 };
-const cursor: Profile = {
+const alternate: Profile = {
   id: "cur",
-  name: "Executor · Cursor",
+  name: "Executor · Alternate",
   role: "candidate",
   candidateFor: "executor",
   family: "xai",
-  provider: "cursor",
+  provider: "alternate",
   model: "grok-4.7",
-  pool: "cursor",
+  pool: "alternate",
 };
 const opus: Profile = {
   id: "opus",
@@ -119,7 +119,7 @@ function snapshot(pools: Record<string, PoolRow>, state: PoolSnapshot["state"] =
 }
 
 const open = snapshot({
-  cursor: { dispatchable: true },
+  alternate: { dispatchable: true },
   supergrok: { dispatchable: true },
   "claude-max": { dispatchable: true },
   "codex-pro": { dispatchable: true },
@@ -221,7 +221,7 @@ describe("routeProfile", () => {
 
   it("will not start an executor when that would leave no reviewer from another family", () => {
     const pick = routeProfile({
-      profiles: [claudeExec, cursor, reviewer],
+      profiles: [claudeExec, alternate, reviewer],
       role: "executor",
       review: false,
       byPool: {},
@@ -230,7 +230,7 @@ describe("routeProfile", () => {
     });
     assert.equal(pick.ok, true);
     if (pick.ok) {
-      assert.equal(pick.profile.name, "Executor · Cursor");
+      assert.equal(pick.profile.name, "Executor · Alternate");
       assert.equal(pick.profile.family, "xai");
     }
   });
@@ -238,11 +238,11 @@ describe("routeProfile", () => {
   it("drops a pool that is not dispatchable and ranks a deprioritized pool later", () => {
     const closed = snapshot({
       supergrok: { dispatchable: false, reason: "Nearly exhausted" },
-      cursor: { dispatchable: true, deprioritize: true },
+      alternate: { dispatchable: true, deprioritize: true },
       "claude-max": { dispatchable: true },
     });
     const pick = routeProfile({
-      profiles: [executor, cursor, reviewer],
+      profiles: [executor, alternate, reviewer],
       role: "executor",
       review: false,
       byPool: {},
@@ -250,15 +250,15 @@ describe("routeProfile", () => {
       snapshot: closed,
     });
     assert.equal(pick.ok, true);
-    if (pick.ok) assert.equal(pick.profile.pool, "cursor");
+    if (pick.ok) assert.equal(pick.profile.pool, "alternate");
 
     const both = snapshot({
       supergrok: { dispatchable: true, deprioritize: true },
-      cursor: { dispatchable: true },
+      alternate: { dispatchable: true },
       "claude-max": { dispatchable: true },
     });
     const later = routeProfile({
-      profiles: [executor, cursor, reviewer],
+      profiles: [executor, alternate, reviewer],
       role: "executor",
       review: false,
       byPool: {},
@@ -266,7 +266,7 @@ describe("routeProfile", () => {
       snapshot: both,
     });
     assert.equal(later.ok, true);
-    if (later.ok) assert.equal(later.profile.pool, "cursor");
+    if (later.ok) assert.equal(later.profile.pool, "alternate");
   });
 
   it("reviews a Claude execution with the xai family", () => {
@@ -379,13 +379,13 @@ describe("routeProfile", () => {
 const grokExec: Profile = { id: "g", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "grok", model: "grok-4.7", pool: "supergrok" };
 const cursorLocal: Profile = {
   id: "cl",
-  name: "Executor · Cursor Local (candidate)",
+  name: "Executor · Alternate Local (candidate)",
   role: "candidate",
   candidateFor: "executor",
   family: "xai",
-  provider: "cursor",
+  provider: "alternate",
   model: "grok-4.7",
-  pool: "cursor",
+  pool: "alternate",
 };
 const claudeReview: Profile = { id: "r", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" };
 const fable: Profile = {
@@ -422,40 +422,40 @@ describe("routeProfile prefer", () => {
   const executors = [grokExec, cursorLocal, claudeReview];
 
   it("keeps the current order when no pool has a prefer field", () => {
-    assert.equal(picked(route({ profiles: executors, snapshot: snapshot({ supergrok: {}, cursor: {} }) })), zhCN("labels.role.executor"));
+    assert.equal(picked(route({ profiles: executors, snapshot: snapshot({ supergrok: {}, alternate: {} }) })), zhCN("labels.role.executor"));
   });
 
   it("puts a prefer pool first for the same role and says why", () => {
-    const decision = route({ profiles: executors, snapshot: snapshot({ supergrok: {}, cursor: { prefer: true } }) });
+    const decision = route({ profiles: executors, snapshot: snapshot({ supergrok: {}, alternate: { prefer: true } }) });
     assert.equal(picked(decision), cursorLocal.name);
-    if (decision.ok) assert.match(decision.reason, new RegExp(zhCN("routing.sum.preferPool", {"pool":"cursor"})));
+    if (decision.ok) assert.match(decision.reason, new RegExp(zhCN("routing.sum.preferPool", {"pool":"alternate"})));
   });
 
   it("uses the pool that resets first when both prefer", () => {
     const soonCursor = snapshot({
       supergrok: { prefer: true, resetsAt: "2026-10-03T00:00:00.000Z" },
-      cursor: { prefer: true, resetsAt: "2026-09-29T00:00:00.000Z" },
+      alternate: { prefer: true, resetsAt: "2026-09-29T00:00:00.000Z" },
     });
     assert.equal(picked(route({ profiles: executors, snapshot: soonCursor })), cursorLocal.name);
     const soonGrok = snapshot({
       supergrok: { prefer: true, resetsAt: "2026-09-28T00:00:00.000Z" },
-      cursor: { prefer: true, resetsAt: "2026-09-29T00:00:00.000Z" },
+      alternate: { prefer: true, resetsAt: "2026-09-29T00:00:00.000Z" },
     });
     assert.equal(picked(route({ profiles: executors, snapshot: soonGrok })), zhCN("labels.role.executor"));
   });
 
   it("lets deprioritize and dispatchable false win over prefer", () => {
-    const depri = snapshot({ supergrok: { prefer: true, deprioritize: true }, cursor: {} });
+    const depri = snapshot({ supergrok: { prefer: true, deprioritize: true }, alternate: {} });
     assert.equal(picked(route({ profiles: executors, snapshot: depri })), cursorLocal.name);
-    const closed = snapshot({ supergrok: { prefer: true, dispatchable: false }, cursor: {} });
+    const closed = snapshot({ supergrok: { prefer: true, dispatchable: false }, alternate: {} });
     assert.equal(picked(route({ profiles: executors, snapshot: closed })), cursorLocal.name);
-    const avoided = route({ profiles: executors, snapshot: snapshot({ supergrok: { prefer: true }, cursor: {} }), avoidPools: ["supergrok"] });
+    const avoided = route({ profiles: executors, snapshot: snapshot({ supergrok: { prefer: true }, alternate: {} }), avoidPools: ["supergrok"] });
     assert.equal(picked(avoided), cursorLocal.name);
   });
 });
 
 describe("routeProfile scope rules", () => {
-  const closedGrok = snapshot({ supergrok: { dispatchable: false }, cursor: { dispatchable: false } });
+  const closedGrok = snapshot({ supergrok: { dispatchable: false }, alternate: { dispatchable: false } });
 
   it("does not give an untagged executor card to Opus", () => {
     const decision = route({ profiles: [grokExec, opus, claudeReview, xaiReview], snapshot: closedGrok });
@@ -641,7 +641,7 @@ describe("routeProfile configured model", () => {
   });
 
   it("queues instead of dispatching when codex-pro is missing or the snapshot is stale", () => {
-    const missing = snapshot({ "claude-max": { dispatchable: true }, supergrok: { dispatchable: true }, cursor: { dispatchable: true } });
+    const missing = snapshot({ "claude-max": { dispatchable: true }, supergrok: { dispatchable: true }, alternate: { dispatchable: true } });
     const only = route({ profiles: [gptExec, ...withReviewer], snapshot: missing });
     assert.equal(only.ok, false);
     if (!only.ok) {
@@ -669,7 +669,7 @@ describe("routeProfile configured model", () => {
 
   it("queues an exhausted pool when the GPT pool is also unseen", () => {
     const missing = snapshot({
-      cursor: { dispatchable: false, reason: "Weekly quota exhausted" },
+      alternate: { dispatchable: false, reason: "Weekly quota exhausted" },
       "claude-max": { dispatchable: true },
     });
     const profiles = [gptExec, cursorLocal, claudeReview];
@@ -679,7 +679,7 @@ describe("routeProfile configured model", () => {
       assert.equal(decision.action, "hold");
       assert.equal(decision.kind, "quota");
       assert.equal(decision.quotaWait, true);
-      assert.ok(decision.reason.includes(zhCN("routing.poolClosedWhy", { pool: "cursor", reason: "Weekly quota exhausted" })));
+      assert.ok(decision.reason.includes(zhCN("routing.poolClosedWhy", { pool: "alternate", reason: "Weekly quota exhausted" })));
       assert.match(decision.reason, new RegExp(zhCN("routing.poolUnseenReason")));
     }
     const viaMatrix = route({
@@ -700,7 +700,7 @@ describe("routeProfile configured model", () => {
     if (!viaMatrix.ok) {
       assert.equal(viaMatrix.action, "hold");
       assert.equal(viaMatrix.quotaWait, true);
-      assert.ok(decision.reason.includes(zhCN("routing.poolClosedWhy", { pool: "cursor", reason: "Weekly quota exhausted" })));
+      assert.ok(decision.reason.includes(zhCN("routing.poolClosedWhy", { pool: "alternate", reason: "Weekly quota exhausted" })));
       assert.match(viaMatrix.reason, new RegExp(zhCN("routing.poolUnseenReason")));
     }
   });
@@ -761,7 +761,7 @@ describe("routeProfile Excluded model ban", () => {
     family: "example-banned-family",
     provider: "example-banned-provider",
     model: "flash",
-    pool: "cursor",
+    pool: "alternate",
   };
   const googlePoolReview: Profile = {
     id: "gp",
@@ -781,7 +781,7 @@ describe("routeProfile Excluded model ban", () => {
     family: "example-banned-family",
     provider: "example-banned-provider",
     model: "flash",
-    pool: "cursor",
+    pool: "alternate",
   };
 
   it("never selects an example-banned-provider or example-banned-pool profile", () => {
@@ -845,9 +845,9 @@ describe("routeProfile Excluded model ban", () => {
       role: "candidate",
       candidateFor: "reviewer",
       family: "xai",
-      provider: "cursor",
+      provider: "alternate",
       model: "example-banned-model-3.8-flash",
-      pool: "cursor",
+      pool: "alternate",
     };
     const excludedName: Profile = {
       id: "gn",
@@ -855,9 +855,9 @@ describe("routeProfile Excluded model ban", () => {
       role: "candidate",
       candidateFor: "reviewer",
       family: "xai",
-      provider: "cursor",
+      provider: "alternate",
       model: "grok-4.7",
-      pool: "cursor",
+      pool: "alternate",
     };
     for (const profile of [googleFamily, excludedModel, excludedName]) {
       const auto = route({
@@ -965,7 +965,7 @@ describe("routeProfile Cursor read-only roles", () => {
     if (!deciding.ok) assert.match(deciding.reason, new RegExp("Cursor " + localePattern(zhCNPart("routing.cursorReadonly", 7, 15))));
   });
 
-  it("refuses an explicit Cursor read-only profile and still starts Cursor executors in agent mode", () => {
+  it("refuses explicit Cursor read-only profiles and reserved Cursor executors", () => {
     const pinned = route({
       profiles: [cursorReview, claudeReview],
       role: "reviewer",
@@ -980,9 +980,13 @@ describe("routeProfile Cursor read-only roles", () => {
       assert.match(pinned.reason, new RegExp("Cursor " + localePattern(zhCNPart("routing.cursorReadonly", 7, 15))));
     }
 
-    const executing = route({ profiles: [{ ...cursorLocal, modeId: "agent" }, claudeReview] });
-    assert.equal(picked(executing), cursorLocal.name);
-    if (executing.ok) assert.equal(executing.profile.modeId, "agent");
+    const executing = route({ profiles: [{ ...cursorLocal, provider: "cursor", name: "Executor · Cursor", modeId: "agent" }, claudeReview] });
+    assert.equal(executing.ok, false);
+    if (!executing.ok) {
+      assert.equal(executing.action, "block");
+      assert.equal(executing.kind, "needs_human");
+      assert.ok(executing.reason.includes(zhCN("routing.cursorReserved")));
+    }
   });
 
   it("does not count a Cursor reviewer as someone who can review an executor", () => {
@@ -1027,12 +1031,12 @@ describe("routeProfile onlyRoles", () => {
   };
   const limited = snapshot({
     "claude-max": { dispatchable: true, onlyRoles: ["reviewer"] },
-    cursor: { dispatchable: true },
+    alternate: { dispatchable: true },
     supergrok: { dispatchable: true },
   });
   const openClaude = snapshot({
     "claude-max": { dispatchable: true },
-    cursor: { dispatchable: true },
+    alternate: { dispatchable: true },
     supergrok: { dispatchable: true },
   });
 
@@ -1093,7 +1097,7 @@ describe("routeProfile onlyRoles", () => {
       profiles: [cursorLocal, claudeReview],
       snapshot: snapshot({
         "claude-max": { dispatchable: true, onlyRoles: ["executor"] },
-        cursor: { dispatchable: true },
+        alternate: { dispatchable: true },
         supergrok: { dispatchable: true },
       }),
     });
@@ -1111,7 +1115,7 @@ describe("routeProfile onlyRoles", () => {
 
 describe("routeProfile stale snapshot", () => {
   it("routes on the last snapshot and says it is stale", () => {
-    const stale = snapshot({ supergrok: { dispatchable: false }, cursor: {} }, "stale", ((zhCN("doctor.quota.stale") + " ") + "40 " + zhCNPart("pools.staleMessage", 17, 27)));
+    const stale = snapshot({ supergrok: { dispatchable: false }, alternate: {} }, "stale", ((zhCN("doctor.quota.stale") + " ") + "40 " + zhCNPart("pools.staleMessage", 17, 27)));
     const decision = route({ profiles: [grokExec, cursorLocal, claudeReview], snapshot: stale });
     assert.equal(picked(decision), cursorLocal.name);
     if (decision.ok) assert.match(decision.reason, new RegExp((zhCN("doctor.quota.stale") + " ") + "40 " + localePattern(zhCNPart("ui.duration.underMinute", 5, 7))));

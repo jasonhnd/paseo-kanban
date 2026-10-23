@@ -151,3 +151,12 @@ test("dispatch overrides save atomically, conflict on stale revisions, and clear
   assert.equal(cleared.status, "saved");
   assert.deepEqual(cleared.snapshot.document.dispatchOverrides, {});
 }));
+
+test("routing reserves accept only finite percentages", () => {
+  for (const reservePct of [-1, 101, "20", null]) {
+    assert.equal(plansSchema.safeParse({ plans: [{ id: "demo", name: "Demo", reservePct }] }).success, false);
+  }
+  for (const reservePct of [0, 20, 100]) {
+    assert.equal(plansSchema.parse({ plans: [{ id: "demo", name: "Demo", reservePct }] }).plans[0].reservePct, reservePct);
+  }
+});

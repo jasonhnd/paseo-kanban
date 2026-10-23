@@ -32,7 +32,8 @@ const launcher: AgentLauncher = { async create() { return { id: `demo-agent-${++
 beforeEach(() => {
   setLanguage("en");
   getDb().prepare("UPDATE tasks SET status = 'archived' WHERE status != 'archived'").run();
-  saveConfig({ autoStart: {}, supervisorAgentId: null, supervisors: {},
+  // Keep anonymous lifecycle fixtures on the explicit legacy selection switch.
+  saveConfig({ quotaRouting: { enabled: false }, autoStart: {}, supervisorAgentId: null, supervisors: {},
     projects: { demo: { code: "DEMO", defaultWorkspace: "dir", alwaysTemp: false, baseBranch: "main", lanesEnabled: false, worktreeLanes: 1 } },
     concurrency: { global: 10, pools: { demo: 10 }, roles: { ...DEFAULT_CONCURRENCY.roles } } });
   writeFileSync(process.env.KANBAN_PASEO_CONFIG!, JSON.stringify({ daemon: { agentProfiles: profiles } }));

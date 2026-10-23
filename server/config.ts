@@ -1,3 +1,4 @@
+import { canonicalPoolCounts } from "../shared/fleet/x-ultra";
 /// <reference types="node" />
 import type { DatabaseSync } from "node:sqlite";
 import { mkdirSync, statSync } from "./perf-fs";
@@ -23,8 +24,10 @@ import { parseProfileRuleOverrides, type ProfileRule } from "./profile-rules";
 import { parseBanned, parseFamilies, type BannedProfiles, type FamilyRule } from "./fleet-rules";
 import { isLanguageSetting, t, type LanguageSetting } from "../shared/i18n";
 import { readExampleConfig } from "./config-example";
-import { parseCloudRunner, type CloudRunnerConfig } from "./cloud-config";
+import { cloudSettingsSchema, parseCloudRunner, type CloudRunnerConfig, type CloudSettings } from "./cloud-config";
 import { parseRunBudget, type RunBudgetLimits } from "./run-budget-config";
+import { parseQuotaRouting, type QuotaRoutingConfig } from "./quota-routing";
+import { parseQualification, type QualificationTable } from "../shared/fleet/executor-effort";
 
 export interface ConcurrencyLimits {
   global: number;
@@ -41,8 +44,12 @@ export function retiredDefaultWorktree(): string {
 
 /** How a project's cards work when the creator does not pin a lane. The effective mode is always dir. */
 export interface ProjectWorkspace {
+  /** Replaces individual role/tier quality cells over the global defaults. */
+  qualification?: QualificationTable;
   /** Per-project limits override the global run budget one key at a time. */
   runBudget?: Partial<RunBudgetLimits>;
+  /** Maximum wall-clock background wait; absent uses three hours (project overrides global). */
+  backgroundWaitMaxMs?: number;
   /** Opt-in disposable execution; other roles retain local placement. */
   cloudRunner?: CloudRunnerConfig;
   /** Project directory used for card scratch, independent of a card's temporary worktree. */
@@ -83,8 +90,20 @@ export function lanesDisabledMessage(): string {
 }
 
 export interface KanbanConfig {
+  /** Default on for new agents; false restores the previous matrix/roster routing. */
+  quotaRouting?: QuotaRoutingConfig;
+  /** Model/depth quality admission, independent of pool order and live profile names. */
+  qualification?: QualificationTable;
+  /** Consecutive unknown background process checks before waking; defaults to five. */
+  backgroundWaitUnknownLimit?: number;
+  /** Board-wide machine admission and deletion confirmation budgets. */
+  cloud?: CloudSettings;
+  /** Optional external JSON contacts file, read anew for each QA signoff notification. */
+  contactsFile?: string;
   /** Per-running-card resource brake; absent keys use conservative built-in limits. */
   runBudget?: Partial<RunBudgetLimits>;
+  /** Maximum wall-clock background wait; absent uses three hours (project overrides global). */
+  backgroundWaitMaxMs?: number;
   autoStart: Record<string, boolean>;
   /**
    * Interface and agent-text language: "en", "zh-CN" or "system" (the operating system's locale).
@@ -264,6 +283,13 @@ function stringMap(value: unknown): Record<string, string> {
   return next;
 }
 
+function backgroundWaitLimit(value: unknown, key: "background.error.timeout" | "background.error.unknownLimit" = "background.error.timeout"): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    throw new ConfigFileError(t(key));
+  }
+  return value;
+}
+
 function positiveNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
@@ -352,17 +378,21 @@ function projectMap(value: unknown): Record<string, ProjectWorkspace> {
       workspace?: unknown;
       cloudRunner?: unknown;
       runBudget?: unknown;
+      backgroundWaitMaxMs?: unknown;
+      qualification?: unknown;
     };
     const integrations = integrationBranches(row.integrationBranches, key);
     const mode = row.defaultWorkspace === "worktree" || row.defaultWorkspace === "dir" ? row.defaultWorkspace :
-      row.defaultWorkspace === undefined && integrations !== undefined ? "dir" : null;
+      row.defaultWorkspace === undefined && (integrations !== undefined || row.qualification !== undefined) ? "dir" : null;
     if (!mode) continue;
     const base = typeof row.baseBranch === "string" ? row.baseBranch.trim() : "";
     const code = typeof row.code === "string" ? row.code.trim().toUpperCase() : "";
     const workspace = row.workspacePath ?? row.workspace;
     next[key] = {
       defaultWorkspace: mode,
+      ...(row.backgroundWaitMaxMs !== undefined ? { backgroundWaitMaxMs: backgroundWaitLimit(row.backgroundWaitMaxMs) } : {}),
       ...(row.runBudget !== undefined ? { runBudget: parseRunBudget(row.runBudget) } : {}),
+      ...(row.qualification !== undefined ? { qualification: readQualification(row.qualification) } : {}),
       baseBranch: branchNameOk(base) ? base : "main",
       ...(integrations !== undefined ? { integrationBranches: integrations } : {}),
       worktreeLanes: laneCount(row.worktreeLanes),
@@ -382,6 +412,16 @@ function projectMap(value: unknown): Record<string, ProjectWorkspace> {
 function readCloudRunner(project: string, value: unknown): CloudRunnerConfig {
   try { return parseCloudRunner(project, value); }
   catch (error) { throw new ConfigFileError(`projects.${project}.cloudRunner: ${error instanceof Error ? error.message : String(error)}`); }
+}
+
+function readQualification(value: unknown): QualificationTable {
+  try { return parseQualification(value); }
+  catch (error) { throw new ConfigFileError(error instanceof Error ? error.message : String(error)); }
+}
+
+function readCloudSettings(value: unknown): CloudSettings {
+  try { return cloudSettingsSchema.parse(value === undefined ? {} : value); }
+  catch (error) { throw new ConfigFileError(`cloud: ${error instanceof Error ? error.message : String(error)}`); }
 }
 
 function readDoctor(value: unknown): DoctorSettings {
@@ -543,7 +583,13 @@ export function parseConfig(source: Record<string, unknown>): KanbanConfig {
   }
   return {
     autoStart,
+    ...(raw.backgroundWaitUnknownLimit !== undefined ? { backgroundWaitUnknownLimit: backgroundWaitLimit(raw.backgroundWaitUnknownLimit, "background.error.unknownLimit") } : {}),
+    cloud: readCloudSettings(raw.cloud),
+    ...(typeof raw.contactsFile === "string" && raw.contactsFile.trim() ? { contactsFile: raw.contactsFile.trim() } : {}),
+    ...(raw.backgroundWaitMaxMs !== undefined ? { backgroundWaitMaxMs: backgroundWaitLimit(raw.backgroundWaitMaxMs) } : {}),
     ...(raw.runBudget !== undefined ? { runBudget: parseRunBudget(raw.runBudget) } : {}),
+    ...(raw.quotaRouting !== undefined ? { quotaRouting: parseQuotaRouting(raw.quotaRouting) } : {}),
+    ...(raw.qualification !== undefined ? { qualification: readQualification(raw.qualification) } : {}),
     language: parseLanguageSetting(raw.language),
     ...(raw.setupPending === true ? { setupPending: true } : {}),
     disabledPools: poolNames(raw.disabledPools),
@@ -556,7 +602,7 @@ export function parseConfig(source: Record<string, unknown>): KanbanConfig {
     supervisors: stringMap(raw.supervisors),
     concurrency: {
       global: typeof raw.concurrency?.global === "number" ? raw.concurrency.global : DEFAULT_CONCURRENCY.global,
-      pools: numberMap(raw.concurrency?.pools, DEFAULT_CONCURRENCY.pools),
+      pools: canonicalPoolCounts(numberMap(raw.concurrency?.pools, DEFAULT_CONCURRENCY.pools), true),
       roles: numberMap(raw.concurrency?.roles, DEFAULT_CONCURRENCY.roles),
     },
     archiveTimeoutMs: positiveNumber(raw.archiveTimeoutMs, DEFAULT_ARCHIVE_TIMEOUT_MS),
@@ -587,6 +633,7 @@ export function parseConfig(source: Record<string, unknown>): KanbanConfig {
 function defaultConfig(): KanbanConfig {
   return {
     autoStart: {},
+    cloud: readCloudSettings(undefined),
     language: FRESH_LANGUAGE,
     disabledPools: [],
     staleStopPct: { ...DEFAULT_STALE_STOP_PCT },
@@ -774,6 +821,7 @@ const DIR_DEFAULT: ProjectWorkspace = {
 export function projectWorkspace(project: string, config = loadConfig()): ProjectWorkspace {
   const stored = config.projects?.[project] ?? DIR_DEFAULT;
   return {
+    ...(stored.backgroundWaitMaxMs !== undefined ? { backgroundWaitMaxMs: stored.backgroundWaitMaxMs } : {}),
     defaultWorkspace: stored.defaultWorkspace === "worktree" ? "dir" : stored.defaultWorkspace,
     baseBranch: stored.baseBranch,
     ...(stored.integrationBranches !== undefined ? { integrationBranches: [...stored.integrationBranches] } : {}),
@@ -781,6 +829,7 @@ export function projectWorkspace(project: string, config = loadConfig()): Projec
     lanesEnabled: stored.lanesEnabled === true,
     parallel: stored.parallel !== false,
     ...(stored.cloudRunner ? { cloudRunner: structuredClone(stored.cloudRunner) } : {}),
+    ...(stored.qualification ? { qualification: structuredClone(stored.qualification) } : {}),
     ...(stored.alwaysTemp === true ? { alwaysTemp: true } : {}),
     ...(stored.waitParentPr === false ? { waitParentPr: false } : {}),
     ...(stored.code ? { code: stored.code } : {}),
@@ -855,7 +904,9 @@ export function setProjectWorkspace(
     if (integrations !== undefined) next.integrationBranches = integrations;
     if (stored?.code) next.code = stored.code;
     if (stored?.workspacePath) next.workspacePath = stored.workspacePath;
+    if (stored?.backgroundWaitMaxMs !== undefined) next.backgroundWaitMaxMs = stored.backgroundWaitMaxMs;
     if (stored?.cloudRunner) next.cloudRunner = structuredClone(stored.cloudRunner);
+    if (stored?.qualification) next.qualification = structuredClone(stored.qualification);
     if (alwaysTemp) next.alwaysTemp = true;
     if ((patch.waitParentPr ?? current.waitParentPr) === false) next.waitParentPr = false;
     config.projects = {
@@ -884,6 +935,7 @@ export function setProjectCode(project: string, code: string): KanbanConfig {
       ...(config.projects ?? {}),
       [name]: {
         defaultWorkspace: stored?.defaultWorkspace ?? "dir",
+        ...(stored?.backgroundWaitMaxMs !== undefined ? { backgroundWaitMaxMs: stored.backgroundWaitMaxMs } : {}),
         ...(stored?.workspacePath ? { workspacePath: stored.workspacePath } : {}),
         ...(stored?.cloudRunner ? { cloudRunner: structuredClone(stored.cloudRunner) } : {}),
         baseBranch: current.baseBranch,

@@ -1,3 +1,4 @@
+import { qaSpecification } from "./qa-review";
 /// <reference types="node" />
 import { getDb } from "./db";
 import { assertReviewAvailable } from "./review-assignment";
@@ -12,6 +13,7 @@ import { lanesDisabledMessage, projectWorkspace } from "./config";
 import { KanbanError } from "./errors";
 import { type Status } from "../shared/labels";
 import { t } from "../shared/i18n";
+import { needsSplitHint } from "./create-split-hint";
 import { addEvent, now, taskById, type TaskRow } from "./task-record";
 
 export interface CreateInput {
@@ -40,6 +42,8 @@ export interface CreateInput {
   reviewOf?: number | null;
   /** Pending decision id this card cites. Recorded on the created event. */
   decision?: string | null;
+  /** Suppress only the advisory split warning for this create response. */
+  noSplitHint?: boolean;
 }
 
 function writeContractJson(input?: string): string {
@@ -209,6 +213,9 @@ function createTaskInTransaction(input: CreateInput): TaskRow & { warnings?: str
   const workspace = placedWorkspace(project, role, input.workspacePath, input.workspaceBase);
   const tier = parseTier(input.tier);
   const tags = withHighRisk(normalizeTags(input.tags), tier);
+  if (role === "reviewer" && tags.includes("qa") && !qaSpecification(input.brief ?? "")) {
+    throw new KanbanError("invalid", t("qa.missingSpecification"));
+  }
   const effort = parseEffort(input.effort);
   assertReviewTarget(input.reviewOf, role);
   const contractJson = writeContractJson(input.contract);
@@ -229,8 +236,10 @@ function createTaskInTransaction(input: CreateInput): TaskRow & { warnings?: str
     addEvent(id, "profile_priority_hint", null, null, actor, { ...data, reason: message });
   }
   const result = withMergeCardWarnings(task, parentRows);
-  if (!hint) return result;
-  return { ...result, profileHint: hint, warnings: [...(result.warnings ?? []), hint.message] };
+  const warnings = [...(result.warnings ?? [])];
+  if (hint) warnings.push(hint.message);
+  if (!input.noSplitHint && needsSplitHint(title, input.brief ?? "")) warnings.push(t("taskCreate.splitHint"));
+  return { ...result, ...(hint ? { profileHint: hint } : {}), ...(warnings.length ? { warnings } : {}) };
 }
 
 export interface ProfilePriorityHint {

@@ -36,18 +36,18 @@ const primary: Profile = {
   name: zhCN("labels.role.executor"),
   role: "executor",
   family: "xai",
-  provider: "cursor",
+  provider: "alternate",
   model: "grok-4.7",
-  pool: "cursor",
+  pool: "alternate",
 };
 const same: Profile = {
   id: "alt",
   name: "Executor·Sample text",
   role: "executor",
   family: "xai",
-  provider: "cursor",
+  provider: "alternate",
   model: "grok-4.7",
-  pool: "cursor",
+  pool: "alternate",
 };
 const profiles = [primary, same];
 
@@ -57,7 +57,7 @@ const archived: string[] = [];
 function limits(): KanbanConfig["concurrency"] {
   return {
     global: DEFAULT_CONCURRENCY.global,
-    pools: { ...DEFAULT_CONCURRENCY.pools, cursor: 5 },
+    pools: { ...DEFAULT_CONCURRENCY.pools, alternate: 5 },
     roles: { ...DEFAULT_CONCURRENCY.roles, executor: 5 },
   };
 }
@@ -124,7 +124,7 @@ beforeEach(() => {
     sent.push(text);
   });
   setAgentAliveCheck(() => true);
-  writeFileSync(poolFile, JSON.stringify({ generatedAt: new Date().toISOString(), pools: { cursor: { dispatchable: true } } }));
+  writeFileSync(poolFile, JSON.stringify({ generatedAt: new Date().toISOString(), pools: { alternate: { dispatchable: true } } }));
 });
 
 after(() => {

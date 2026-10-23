@@ -21,7 +21,7 @@ let dir: string;
 let agents: string;
 
 const profiles: Profile[] = [
-  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" },
+  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" },
   { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" },
 ];
 
@@ -156,21 +156,21 @@ describe("transient retry", { concurrency: 1 }, () => {
     assert.equal(getTask(id).status, "running");
 
     const delays = [20, 40, 80];
-    let cursor = new Date("2026-10-01T04:00:00.000Z");
+    let alternate = new Date("2026-10-01T04:00:00.000Z");
     for (const minutes of delays) {
       blockTask(id, "transient", zhCNPart("transientRetry.reviewPrompt", 52, 55), "executor");
-      stamp(id, cursor);
-      await tick(new Date(cursor.getTime() + minutes * MIN - 1));
+      stamp(id, alternate);
+      await tick(new Date(alternate.getTime() + minutes * MIN - 1));
       assert.equal(getTask(id).status, "blocked", `not yet due at ${minutes - 1} minutes`);
-      await tick(new Date(cursor.getTime() + Math.min(minutes, 120) * MIN));
+      await tick(new Date(alternate.getTime() + Math.min(minutes, 120) * MIN));
       assert.equal(getTask(id).status, "running", `due at ${Math.min(minutes, 120)} minutes`);
-      cursor = new Date(cursor.getTime() + 3 * 60 * MIN);
+      alternate = new Date(alternate.getTime() + 3 * 60 * MIN);
     }
     blockTask(id, "transient", (zhCNPart("wake.board.poolStale", 4, 6) + "Demo text"), "executor");
-    stamp(id, cursor);
-    await tick(new Date(cursor.getTime() + 120 * MIN - 1));
+    stamp(id, alternate);
+    await tick(new Date(alternate.getTime() + 120 * MIN - 1));
     assert.equal(getTask(id).status, "blocked");
-    await tick(new Date(cursor.getTime() + 120 * MIN));
+    await tick(new Date(alternate.getTime() + 120 * MIN));
     assert.equal(getTask(id).status, "running");
   });
 
@@ -331,7 +331,7 @@ describe("transient retry", { concurrency: 1 }, () => {
         transientRetryLimit: 2,
         autoStart: { replace: true },
         supervisors: { replace: "leader-agent" },
-        concurrency: { global: 100, pools: { cursor: 100 }, roles: { executor: 100 } },
+        concurrency: { global: 100, pools: { alternate: 100 }, roles: { executor: 100 } },
         projects: {
           replace: { defaultWorkspace: "dir", baseBranch: "main", worktreeLanes: 1, lanesEnabled: false, parallel: false },
         },

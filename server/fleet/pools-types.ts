@@ -6,7 +6,13 @@ import type { UsageWindow } from "../../shared/fleet/usage";
 import type { PaceState } from "./pools-pace";
 import type { ClaudeUsedReading } from "./pools-unread";
 
-export interface PoolStatus {
+import type { QuotaState, UnknownQuotaOptions } from "../../shared/fleet/unknown-quota";
+
+export interface PoolStatus extends QuotaState {
+  adapter?: string;
+  providers?: string[];
+  parent?: string | null;
+  reservePct?: number;
   /** Source/batch or AFC sample clock on private snapshots, independent of publication. */
   observedAt?: string | null;
   quotaProtection?: "pause" | "none";
@@ -17,6 +23,8 @@ export interface PoolStatus {
   resetsAt: string | null;
   projectedPct: number | null;
   runsOutAt: string | null;
+  burnRatePctPerHour?: number | null;
+  forecastConfidence?: "high" | "low" | "none";
   verdict: UsageWindow["verdict"];
   /** False: do not start new work on this pool. */
   dispatchable: boolean;
@@ -111,6 +119,7 @@ export interface SuperGrokReadMeta {
 }
 
 export interface PoolStatusOptions {
+  unknownQuota?: UnknownQuotaOptions;
   now?: number;
   /** Pools the plans define (shared/quota-adapters.ts). Omitted: built from the plans passed in. */
   catalog?: PoolEntry[];

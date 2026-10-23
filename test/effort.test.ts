@@ -36,10 +36,10 @@ const executor: Profile = {
   name: zhCN("labels.role.executor"),
   role: "executor",
   family: "xai",
-  provider: "cursor",
+  provider: "alternate",
   model: "grok-4.7",
   thinkingOptionId: "high",
-  pool: "cursor",
+  pool: "alternate",
 };
 const reviewer: Profile = {
   id: "rev",
@@ -73,7 +73,7 @@ function config(): KanbanConfig {
     supervisors: {},
     concurrency: {
       global: 50,
-      pools: { ...DEFAULT_CONCURRENCY.pools, cursor: 50, "claude-max": 50 },
+      pools: { ...DEFAULT_CONCURRENCY.pools, alternate: 50, "claude-max": 50 },
       roles: { executor: 50, reviewer: 50, reader: 50 },
     },
   };
@@ -92,7 +92,7 @@ const pools: PoolSnapshot = {
 };
 
 function catalog(provider: string): { models: Array<{ id: string; aliases?: string[]; thinkingOptions: Array<{ id: string }> }> } {
-  if (provider === "cursor") {
+  if (provider === "alternate") {
     return { models: [{ id: "grok-4.7", aliases: ["grok"], thinkingOptions: [{ id: "low" }, { id: "medium" }, { id: "high" }, { id: "xhigh" }] }] };
   }
   return {

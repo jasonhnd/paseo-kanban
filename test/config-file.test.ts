@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
 import { runKanban } from "../server/cli";
-import { ConfigFileError, DEFAULT_CONCURRENCY, loadConfig, saveConfig } from "../server/config";
+import { ConfigFileError, DEFAULT_CONCURRENCY, loadConfig, saveConfig, setProjectWorkspace } from "../server/config";
 import { cardMark, takeCodeSeq } from "../server/card-ref";
 import { closeDb, getDb } from "../server/db";
 import { ensureProjectCode, syncProjectCodes } from "../server/project-codes";
@@ -52,6 +52,29 @@ function captureError(run: () => void): string[] {
 }
 
 describe("config file writes", () => {
+  it("preserves cloud budgets, qualification and background limits through workspace edits", () => {
+    const dir = useDir();
+    const source = {
+      cloud: { allowedProjects: ["demo"], maxMachines: 2, deleteTimeoutSec: 120, deletePollIntervalSec: 2 },
+      qualification: { executor: { L4: [] } },
+      backgroundWaitUnknownLimit: 2,
+      projects: { demo: { qualification: { reviewer: { L3: [] } } } },
+    };
+    writeFileSync(configPath(dir), JSON.stringify(source));
+    const assertSettings = () => {
+      const config = loadConfig();
+      assert.deepEqual(config.cloud, source.cloud);
+      assert.deepEqual(config.qualification, source.qualification);
+      assert.equal(config.backgroundWaitUnknownLimit, source.backgroundWaitUnknownLimit);
+      assert.deepEqual(config.projects?.demo.qualification, source.projects.demo.qualification);
+      assert.equal(config.projects?.demo.defaultWorkspace, "dir");
+    };
+    assertSettings();
+    setProjectWorkspace("demo", { baseBranch: "develop" });
+    assertSettings();
+    assert.equal(loadConfig().projects?.demo.baseBranch, "develop");
+  });
+
   it("does not change a config file that cannot be read or parsed", () => {
     const bodies = [
       '{"supervisors":{"xyz_tasks":"agent-1"},"concurrency":{"global":4}',

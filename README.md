@@ -154,11 +154,27 @@ Git preparation runs `server/prepare.mjs` through the manifest's `build`. Local 
 
 The optional [Codex shell wrapper](docs/CODEX-WRAPPER.md) needs separate configuration/platform checks. [Write provenance](docs/WRITE-PROVENANCE.md) audits authenticated identity, not provider turn provenance. [Toolchain validation](docs/TOOLCHAIN-VALIDATION.md) records local evidence, separate from real app/provider acceptance. [Antigravity authorization](docs/ANTIGRAVITY-AUTHORIZATION.md) documents that adapter's dispatch boundary.
 
+## Specification based QA
+
+Create an independent acceptance card with `create --role reviewer --reviews DEMO_0001 --tag qa --brief "Specification: docs/demo-spec.md#login"` (or MCP `kanban_create` with `role: "reviewer"`, `reviews`, `tags: ["qa"]` and `brief`). Replace the demo reference with the delivered card. QA cards are rejected unless the brief has a nonempty `Specification: <file/link/item>` line; `Spec source:` and the Chinese equivalent are also supported. The reviewer must verify that the source exists and contains the requirements. Ordinary reviews keep their code review rules and actual-model isolation still applies to QA.
+
+QA checks each specification item read-only, using Google Chrome if a browser is needed. It records `Item | Verdict (Pass / Fail / Unable to verify) | Evidence | Notes`, quotes the original items, and puts the table in `kanban_approve.summary` (stored as the QA handoff) only if every item passes. Failures go to `kanban_request_changes` with the original failed items and evidence in `findings`; the executor receives them in card comments. Unable to verify does not pass. Evidence stays in handoffs/comments; screenshots must be deleted after use.
+
+After a valid linked QA approval advances the reviewed card, the board asks its project's second-brain leader to obtain Product signoff. Optionally set the global `contactsFile` config key to an operator-owned JSON file outside the repository:
+
+```json
+{"projects":{"demo":{"sb_leader":{"paseoAgentId":"demo-second-brain-agent"}}}}
+```
+
+`contactsFile` is unset by default. The board reads its contents anew immediately before each notification, using the reviewed card's project. A missing/unreadable file, missing project or empty id falls back to that project's registered Paseo leader (`supervisors`), and a fallback note is written to both cards. No private path or session id is shipped. Configure the actual path locally during a normal authorized update; do not commit the file or its real values.
+
+The notification contains project, reviewed card, QA card, specification source, verdict table summary and the Product signoff request. A durable claim prevents duplicate sends for an approval. Transport failures or a missing project leader are recorded on the QA card and require the leader to arrange signoff manually; uncertain sends are not automatically retried. Product signoff remains a separate human workflow; QA approval does not perform final lead acceptance.
+
 ## Privacy gates
 
 Keep personal state out of this repository and distribution artifacts. These contributor checks apply to the Git source and locally packed artifacts; npm is not a release channel for this batch. Three gates enforce it from the first commit:
 
-1. **pre-commit** (`.githooks/pre-commit`): `scripts/check-private.mjs` scans the staged files against the generic rules in `scripts/private-scan.rules.json` (home paths, e-mail addresses, ids, board card numbers, keys and tokens, CJK text outside the zh-CN files (`locales/zh-CN.json` or `locales/zh-CN/`, optionally under `shared/`; `server/protocol/zh-CN/`; `docs/zh-CN/`), real data files) **and** your private denylist; `scripts/check-identity.mjs` refuses any author or committer that is not the placeholder or a GitHub noreply address; `gitleaks` runs when installed.
+1. **pre-commit** (`.githooks/pre-commit`): `scripts/check-private.mjs` scans the staged files against the generic rules in `shared/privacy-rules.mjs` (home paths, e-mail addresses, ids, board card numbers, keys and tokens, CJK text outside the zh-CN files (`locales/zh-CN.json` or `locales/zh-CN/`, optionally under `shared/`; `server/protocol/zh-CN/`; `docs/zh-CN/`), real data files) **and** your private denylist; `scripts/check-identity.mjs` refuses any author or committer that is not the placeholder or a GitHub noreply address; `gitleaks` runs when installed.
 2. **`npm run verify`**, run by **pre-push** (`.githooks/pre-push`): fourteen local gates covering types, script/plugin tests, CLI and actual Paseo compilation, source/history privacy, identities, secrets, single-source contract/gate invariants and actual package bytes. Pre-push scans each outgoing ref's complete reachable history and annotated tags, then exports and verifies its exact commit with locked dependencies. It refuses publication when any check fails. Hosted CI is not required or enabled by this integration.
 3. **npm `files` whitelist** in `package.json`, checked by `scripts/check-package-files.mjs` against the extracted bytes from a real `npm pack` artifact.
 
@@ -177,6 +193,8 @@ brew install gitleaks                        # or any other install; npm run ver
 The private denylist lists everything that identifies you (login name, real name, project and folder names). It stays outside every repository; a local commit is refused while it is missing. Use `FLEET_PRIVATE_DENYLIST=<path>` to keep it elsewhere.
 
 ### Checks
+
+The plugin regression runner defaults to four concurrent test files so real Git and filesystem fixtures do not compete with every other worker for their operation budgets. `KANBAN_TEST_CONCURRENCY` accepts an integer from 1 to 64 to override file concurrency. Every selected test, assertion and timeout remains enabled; coverage keeps its separate explicit concurrency setting.
 
 ```sh
 npm run verify        # required local gates including builds, plugin tests and gitleaks
@@ -203,3 +221,15 @@ When the private denylist flags a word that is not personal in context (a short 
 ## License
 
 [MIT](LICENSE)
+
+## Development features restored from public rc.21
+
+Disposable cloud execution defaults off: Codex/Grok executor cards can use draft PRs for projects in `cloud.allowedProjects` whose GitHub repositories are anonymously readable, or explicitly allowlisted `paseo-kanban` local mirror delivery; see [dual-mode configuration, privacy boundaries and trial prerequisites](docs/CLOUD-RUNNER.md).
+
+Card scratch defaults to the project's `.kanban-work/<card code>/`, with a per-project plugin-data fallback and an explicit `KANBAN_TMP_ROOT` override. Preparation fails closed. Finished card directories become eligible for cleanup on the next scheduler round, with ownership, Git, generation and active-process guards. Preserve durable evidence before finishing. See [card work directories](docs/CARD-WORK-DIRECTORIES.md).
+
+A new card's first start pauses above 10 GiB of card-work usage or below 50 GiB of free disk space; review, rework and resume can continue. Configure `capacity.maxWorkGiB` and `capacity.minFreeGiB` to change those thresholds. Timed waits use `scheduled` plus a future offset-bearing `until` within seven days; see [workflow](docs/WORKFLOW.md). Paseo's project list controls active projects; two empty observations at least one minute apart confirm an empty list.
+
+During reloads, audited reads retain the last data and retry transient unavailability for a bounded window. Saves and actions remain single-attempt. Cross-panel decision updates and recent-decision reminders share consistent state. Cursor monitoring is separate from dispatch eligibility, and dispatch statistics preserve unknown or incomplete provider usage.
+
+Leader handover supports persistent sessions and complete visible protocol delivery. The optional [curated-memory integration](integrations/) is profile-wide; isolate profiles when project memory must stay separate. Server-side agent opening returns a compatibility response; the client navigates on its connected host. These source changes do not publish a release or certify a production installation.

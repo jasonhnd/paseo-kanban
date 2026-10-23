@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { t } from "../shared/i18n";
 import { getDb } from "./db";
+import { carryRunBudget } from "./run-cost";
 import { addComment, appendEvent, blockTask, getTask, type TaskRow } from "./store";
 import { effectiveRunBudget, type RunBudgetLimits } from "./run-budget-config";
 import type { KanbanConfig } from "./config";
@@ -27,6 +28,7 @@ export interface RunBudgetState {
   agentId: string;
   startedAt: string;
   durationMs: number;
+  observedAt?: string;
   turns: number;
   tokens: number;
   inputTokens: number;
@@ -173,6 +175,7 @@ async function check(id: number, input: RunBudgetScan): Promise<void> {
   }
   if (task.status !== "running" && task.status !== "reviewing") return;
   if (!state || state.generation !== current.generation) {
+    if (state) carryRunBudget(getDb(), id, input.now);
     state = { generation: current.generation, agentId: task.agent_id, startedAt: current.startedAt,
       durationMs: 0, turns: 0, tokens: 0, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0,
       tokenStatus: "unavailable", source: "unavailable", notes: [], consecutiveWaits: 0,
@@ -186,6 +189,7 @@ async function check(id: number, input: RunBudgetScan): Promise<void> {
   try { sample = await withTimeout(() => input.read!(task.agent_id!), "run budget observation"); }
   catch { sample = { source: state.source, turns: [], complete: false, notes: ["Activity unavailable; enforcing wall clock and previously observed usage"] }; }
   if (!stillCurrent(task, state.generation)) return;
+  state.observedAt = input.now.toISOString();
   state.durationMs = Math.max(0, input.now.getTime() - Date.parse(state.startedAt));
   const intervals = backgroundIntervals(task, state.startedAt);
   const background = input.backgroundWaiting?.(task) === true;
@@ -238,6 +242,8 @@ async function check(id: number, input: RunBudgetScan): Promise<void> {
       if (!stillCurrent(task, state.generation)) { db.exec("ROLLBACK"); return; }
       state.phase = "braking"; save(id, state);
       blocked = blockTask(id, "needs_human", summary(state, exceeded), "run-budget", { generation: state.generation });
+      db.prepare("UPDATE runs SET ended_at = ?, end_kind = 'run_budget' WHERE task_id = ? AND agent_id = ? AND ended_at IS NULL")
+        .run(input.now.toISOString(), id, task.agent_id);
       appendEvent(id, "run_budget_braked", null, "blocked", "run-budget", { generation: state.generation, exceeded, snapshot: state });
       db.exec("COMMIT");
     } catch (error) { db.exec("ROLLBACK"); throw error; }

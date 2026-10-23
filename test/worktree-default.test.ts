@@ -199,9 +199,9 @@ const executor: Profile = {
   name: zhCN("labels.role.executor"),
   role: "executor",
   family: "xai",
-  provider: "cursor",
+  provider: "alternate",
   model: "grok-4.7",
-  pool: "cursor",
+  pool: "alternate",
 };
 const reviewer: Profile = {
   id: "rv",
@@ -280,7 +280,7 @@ describe("fetch the base before a worktree", () => {
       autoStart: { fetch: true },
       supervisorAgentId: "boss",
       supervisors: {},
-      concurrency: { global: 5, pools: { ...DEFAULT_CONCURRENCY.pools, cursor: 5 }, roles: { ...DEFAULT_CONCURRENCY.roles, executor: 5 } },
+      concurrency: { global: 5, pools: { ...DEFAULT_CONCURRENCY.pools, alternate: 5 }, roles: { ...DEFAULT_CONCURRENCY.roles, executor: 5 } },
     };
     const result = await runTick({
       profiles: [executor, reviewer],

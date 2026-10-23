@@ -189,6 +189,8 @@ export function installCleanup(next: CleanupOps | null, options?: CleanupLimits)
   // when the state is reset below. Clearing the guard here let the next tick start a second pass.
   if (!options?.keepSweepClock || !next) {
     generation += 1;
+    // The first scheduler tick after startup rebuilds reconciliation from persisted
+    // failures, independently of cleanup's pending-land, stopped and retryAt gates.
     lastSweep = 0;
     sweepCursor = null;
     attentionCursor = 0;
@@ -729,17 +731,24 @@ function wakeArchive(taskId: number, agentId: string, detail: string): void {
 }
 
 /** null is gone (no file and no Paseo record). A throw is unknown and is retried. */
-async function readActivity(chosen: CleanupOps, agentId: string): Promise<"busy" | "idle" | "gone" | "unknown"> {
+async function readActivity(chosen: CleanupOps, agentId: string, includeArchived = false): Promise<"busy" | "idle" | "archived" | "gone" | "unknown"> {
   if (!chosen.inspectAgent) return "idle";
   try {
-    const snap = await chosen.inspectAgent(agentId);
+    const snap = await boundedRead(() => chosen.inspectAgent!(agentId), timeoutMs());
     if (!snap) return "gone";
+    if (includeArchived && snap.archived) return "archived";
     return snap.busy ? "busy" : "idle";
   } catch (err) {
     if (err instanceof CleanupDetached) throw err;
     console.error("[paseo-kanban] cleanup", err instanceof Error ? err.message : err);
     return "unknown";
   }
+}
+
+/** Purge and workspace guards need turn activity; an archived record is still present. */
+async function readTurnActivity(chosen: CleanupOps, agentId: string): Promise<"busy" | "idle" | "gone" | "unknown"> {
+  const activity = await readActivity(chosen, agentId);
+  return activity === "archived" ? "idle" : activity;
 }
 
 function noteLateSuccess(taskId: number, kind: "agent" | "workspace", id: string, boundary: number): void {
@@ -886,25 +895,17 @@ async function archiveAgents(id: number, agents: string[], events: CleanupRecord
       agentsOk = false;
       continue;
     }
-    if (archiveInFlight("agent", agentId)) {
-      if (!ready) {
-        agentsOk = false;
-        continue;
-      }
-      recordFailure(id, events, { action: "archive_agent", agentId, ok: false, outcome: "timeout", error: t("cleanup.error.timeout") }, now);
-      if (agentStuck(events, agentId)) wakeArchive(id, agentId, stuckLabel(agentId));
-      agentsOk = false;
-      continue;
-    }
-    const activity = await readActivity(chosen, agentId);
+    const activity = await readActivity(chosen, agentId, true);
     // A leader may resume this executor while inspectAgent is awaiting Paseo.
     const current = getTask(id);
     if (current.status !== "done" && current.status !== "archived" && !agentsMarkedForRelease(id).includes(agentId)) continue;
     // null from inspect is "gone": daemonAgentMissing ("Agent not found") and no record file.
     // A thrown inspect is "unknown" (timeout, connection) and still backs off.
-    if (activity === "gone") {
+    if (activity === "gone" || activity === "archived") {
       await prepareNativeSession(id, agentId);
-      record(id, { action: "archive_agent", agentId, ok: true, verifyAt: verifyAtFrom(now), reason: t("cleanup.reason.gone") }, events);
+      if (!stillFinished(id) && !agentsMarkedForRelease(id).includes(agentId)) continue;
+      record(id, { action: "archive_agent", agentId, ok: true, verifyAt: verifyAtFrom(now),
+        ...(activity === "archived" ? { via: "reconciled" as const } : { reason: t("cleanup.reason.gone") }) }, events);
       nativeSessionAfterArchive(id, agentId);
       continue;
     }
@@ -919,6 +920,14 @@ async function archiveAgents(id: number, agents: string[], events: CleanupRecord
     }
     if (activity === "busy") {
       recordBusyWait(id, agentId, events, now);
+      agentsOk = false;
+      continue;
+    }
+    if (archiveInFlight("agent", agentId)) {
+      if (ready) {
+        recordFailure(id, events, { action: "archive_agent", agentId, ok: false, outcome: "timeout", error: t("cleanup.error.timeout") }, now);
+        if (agentStuck(events, agentId)) wakeArchive(id, agentId, stuckLabel(agentId));
+      }
       agentsOk = false;
       continue;
     }
@@ -989,7 +998,7 @@ async function cleanupInner(id: number, chosen: CleanupOps, now: Date): Promise<
         throw new Error(result.error);
       },
       decideWorkspace: () => workspaceDecision(task, agentsOpenedBy(task), chosen),
-      agentActivity: (agentId) => readActivity(chosen, agentId),
+      agentActivity: (agentId) => readTurnActivity(chosen, agentId),
     });
     if (outcome === "pending") return;
     finish();
@@ -1070,7 +1079,7 @@ async function cleanupInner(id: number, chosen: CleanupOps, now: Date): Promise<
           now,
           timeoutMs: timeoutMs(),
           record: (data) => record(id, data, events),
-          agentActivity: (agentId) => readActivity(chosen, agentId),
+          agentActivity: (agentId) => readTurnActivity(chosen, agentId),
         });
   if (git === "pending") return;
   if (!(await releaseBorrowedClaim(id, now))) return;
@@ -1352,6 +1361,11 @@ async function reconcileLocked(id: number, chosen: CleanupOps, now: Date, sweep:
     }
     goneAgents.delete(agentId);
     if (snap.archived) {
+      // Verification alone does not settle a failed archive row for doctor or retries.
+      if (!archiveSucceeded(events, "archive_agent", agentId) && events.some(event =>
+        event.action === "archive_agent" && event.agentId === agentId && event.ok === false)) {
+        record(id, { action: "archive_agent", agentId, ok: true, via: "reconciled" }, events);
+      }
       // One confirmation, including when this database never recorded archive_agent ok.
       // A later archive, wait, or restore clears that confirm so the next look can write again.
       if (!verifyRecorded(events, agentId)) record(id, { action: "verify_agent", agentId, ok: true }, events);

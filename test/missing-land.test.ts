@@ -6,9 +6,10 @@ import { join } from "node:path";
 import { after, beforeEach, it } from "node:test";
 import { setWakeSender } from "../server/bus";
 import { runKanban } from "../server/cli";
-import { loadConfig, saveConfig } from "../server/config";
+import { loadConfig, projectWorkspace, saveConfig } from "../server/config";
 import { closeDb, getDb } from "../server/db";
 import { runDoctor } from "../server/doctor";
+import { collectLiveSources } from "../server/doctor-live";
 import { inspectMissingLand, recordMissingLandSettlement } from "../server/missing-land";
 import { runGit } from "../server/git";
 import { pendingLand, recordLandPending, workspaceHeldForLand } from "../server/land-pending";
@@ -81,6 +82,79 @@ async function finding(f: Fixture, branches: () => Promise<string[]> = async () 
   return report.findings.find(row => row.id === `card:land:${f.id}`);
 }
 const settle = (f: Fixture, who = "project-leader", reason = "Installation-only card; release content was checked separately.") => runKanban(["resume-cleanup", String(f.id), "--settle-missing-land", "--reason", reason], { PASEO_AGENT_ID: who });
+
+async function liveGit() {
+  const sources = await collectLiveSources(null, Date.now(), Date.now() + 20_000);
+  assert.ok(sources.git, "the live collector must supply Git reads");
+  return sources.git;
+}
+
+it("live doctor lists checked-out and idle branches despite display settings and same-named tags", async () => {
+  const f = await fixture();
+  const idle = "kanban/demo-idle";
+  const current = "kanban/demo-current";
+  git(f.root, "branch", idle);
+  git(f.root, "checkout", "-qb", current);
+  git(f.root, "tag", f.branch);
+  assert.match(git(f.root, "-c", "color.ui=false", "-c", "column.branch=never", "branch", "--list", f.branch), /^\+ /);
+  git(f.root, "config", "color.ui", "always");
+  git(f.root, "config", "column.branch", "always");
+  const inventory = await liveGit();
+  assert.deepEqual((await inventory.branches(f.root)).sort(), [f.branch, idle, current].sort());
+  assert.equal(git(f.directory, "symbolic-ref", "HEAD"), `refs/heads/${f.branch}`);
+});
+
+it("live doctor uses the recorded project repo and queued work lands after its main directory is cleaned", async () => {
+  const f = await fixture();
+  const board = join(dir, `board-${serial}`);
+  mkdirSync(board);
+  git(board, "init", "-q", "-b", "main");
+  // Configuration and process cwd point elsewhere; the worktree event owns the landing repo.
+  const config = loadConfig();
+  saveConfig({ ...config, projects: { demo: { ...projectWorkspace("demo", config), workspacePath: board } } });
+  const cwd = process.cwd();
+  process.chdir(board);
+  try {
+    const inventory = await liveGit();
+    assert.ok(inventory.repos.includes(board));
+    assert.ok(inventory.repos.includes(f.root));
+    assert.deepEqual(await inventory.branches(board), []);
+    await resumePendingLands();
+    assert.equal(pendingLand(f.id)?.mainDirty, true);
+    assert.equal(pendingLand(f.id)?.missingBranch, undefined);
+    assert.equal((await inspectMissingLand(f, pendingLand(f.id)!)).kind, "present");
+    await assert.rejects(settle(f), { code: "invalid" });
+    const hit = await finding(f, () => inventory.branches(f.root));
+    assert.equal(hit?.severity, "yellow");
+    assert.match(hit?.suggestion ?? "", /once the main directory is clean/);
+    assert.doesNotMatch(`${hit?.symptom} ${hit?.evidence} ${hit?.suggestion}`, /stopped|branch is missing|settle-missing-land/i);
+    assert.equal(rows(f.id, "land_settled").length, 0);
+    assert.equal(sent.length, 0);
+    rmSync(join(f.root, "scratch.txt"));
+    await resumePendingLands();
+    assert.equal(pendingLand(f.id), null);
+    assert.equal(git(f.root, "rev-parse", "main"), f.head);
+    assert.equal(git(f.directory, "symbolic-ref", "HEAD"), `refs/heads/${f.branch}`);
+    assert.equal(rows(f.id, "landed").length, 1);
+    assert.equal(rows(f.id, "land_settled").length, 0);
+    assert.equal(await finding(f, () => inventory.branches(f.root)), undefined);
+  } finally {
+    process.chdir(cwd);
+    saveConfig(config);
+  }
+});
+
+it("live doctor still reports a truly missing branch while the pending queue is read-only", async () => {
+  const f = await fixture();
+  disappear(f);
+  const inventory = await liveGit();
+  const before = rows(f.id, "land_pending");
+  const hit = await finding(f, () => inventory.branches(f.root));
+  assert.equal(hit?.severity, "red");
+  assert.match(hit?.suggestion ?? "", /settle-missing-land/);
+  assert.deepEqual(rows(f.id, "land_pending"), before);
+  assert.equal(rows(f.id, "land_settled").length, 0);
+});
 
 it("captures the queued branch tip even while the main directory is dirty", async () => {
   const f = await fixture();

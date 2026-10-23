@@ -17,7 +17,7 @@ import { runTick } from "./helpers/compat-schedule";
 import { addComment, appendEvent, createTask, getTask } from "../server/store";
 import { resetAgentAliveCheck, setAgentAliveCheck } from "../server/alive";
 
-const original: Profile = { id: "old", name: zhCN("labels.identity.executor"), role: "executor", family: "xai", provider: "cursor", pool: "cursor", model: "grok-4.7" };
+const original: Profile = { id: "old", name: zhCN("labels.identity.executor"), role: "executor", family: "xai", provider: "alternate", pool: "alternate", model: "grok-4.7" };
 const replacement: Profile = { id: "new", name: "Candidate executor", role: "candidate", candidateFor: "executor", family: "anthropic", provider: "claude", pool: "claude-max", model: "sonnet" };
 const reviewer: Profile = { id: "review", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", pool: "claude-max", model: "sonnet" };
 const crossReviewer: Profile = { id: "cross", name: "Cross-family review", role: "candidate", candidateFor: "reviewer", family: "xai", provider: "grok", pool: "supergrok", model: "grok-4.7" };
@@ -39,11 +39,11 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-function pools(cursor: Partial<ReturnType<typeof openEntry>> = { dispatchable: false }): PoolSnapshot {
+function pools(alternate: Partial<ReturnType<typeof openEntry>> = { dispatchable: false }): PoolSnapshot {
   return {
     state: "fresh", message: "", generatedAt: start.toISOString(),
-    dispatchable: (pool) => pool !== "cursor" || cursor.dispatchable !== false,
-    entry: (pool) => ({ ...openEntry(), ...(pool === "cursor" ? cursor : {}) }),
+    dispatchable: (pool) => pool !== "alternate" || alternate.dispatchable !== false,
+    entry: (pool) => ({ ...openEntry(), ...(pool === "alternate" ? alternate : {}) }),
     hasPool: () => true,
   };
 }
@@ -62,7 +62,7 @@ function fixture(hours?: number) {
   addComment(task.id, "executor", (zhCNPart("loginBlip.reopenLater", 6, 8) + zhCNPart("transientRetry.reviewPrompt", 24, 27) + zhCNPart("settings.thresholds.progressGraceMs", 0, 2) + zhCNPart("tools.emptyComment", 0, 4) + "Demo text"));
   const config: KanbanConfig = {
     autoStart: {}, supervisorAgentId: null, supervisors: {},
-    concurrency: { global: 50, roles: { executor: 50, reviewer: 50 }, pools: { cursor: 50, "claude-max": 50, supergrok: 50 } },
+    concurrency: { global: 50, roles: { executor: 50, reviewer: 50 }, pools: { alternate: 50, "claude-max": 50, supergrok: 50 } },
     ...(hours !== undefined ? { reworkReassignHours: hours } : {}),
     archiveTimeoutMs: 10,
   };
@@ -117,7 +117,7 @@ describe("rework reassignment", () => {
     assert.equal(reassigned[0]?.oldAgentId, "old-agent");
     assert.equal(reassigned[0]?.oldProfile, original.name);
     assert.equal(reassigned[0]?.newProfile, replacement.name);
-    assert.match(String(reassigned[0]?.reason), new RegExp("cursor.*" + localePattern(zhCNPart("routing.poolClosed", 7, 10))));
+    assert.match(String(reassigned[0]?.reason), new RegExp("alternate.*" + localePattern(zhCNPart("routing.poolClosed", 7, 10))));
     assert.equal(getTask(f.task.id).executor_family, replacement.family);
   });
 
@@ -214,7 +214,7 @@ describe("rework reassignment", () => {
 
   it("inherits an existing quota hold without waiting another two hours", async () => {
     const f = fixture();
-    const reason = zhCN("reworkReassign.poolClosed", {"pool":(zhCN("blocked.prefix.quota") + "cursor" + zhCNPart("boardView.blocked.dependency", 39, 41) + zhCNPart("reworkReassign.waitingAutoStart", 1, 7) + "cursor")});
+    const reason = zhCN("reworkReassign.poolClosed", {"pool":(zhCN("blocked.prefix.quota") + "alternate" + zhCNPart("boardView.blocked.dependency", 39, 41) + zhCNPart("reworkReassign.waitingAutoStart", 1, 7) + "alternate")});
     getDb().prepare("UPDATE tasks SET hold_reason = ? WHERE id = ?").run(reason, f.task.id);
     appendEvent(f.task.id, "held", "rework", "rework", "scheduler", { kind: "quota", reason }, start.toISOString());
     await f.tick(3 * HOUR);
@@ -232,13 +232,13 @@ describe("rework reassignment", () => {
 
   it("recovers the old pool from dispatch history when the original profile was removed", async () => {
     const f = fixture();
-    appendEvent(f.task.id, "started", "ready", "running", "test", { agentId: "old-agent", quota: { pool: "cursor" } }, start.toISOString());
+    appendEvent(f.task.id, "started", "ready", "running", "test", { agentId: "old-agent", quota: { pool: "alternate" } }, start.toISOString());
     const samePool = { ...original, id: "same", name: "Candidate in same pool", role: "candidate", candidateFor: "executor" };
     const profiles = [samePool, ...roster.slice(1)];
     await f.tick(0, pools({ dispatchable: true }), profiles);
     await f.tick(3 * HOUR, pools({ dispatchable: true }), profiles);
     assert.equal(getTask(f.task.id).executor_profile, replacement.name);
-    assert.equal(events(f.task.id, "rework_reassigned")[0]?.oldPool, "cursor");
+    assert.equal(events(f.task.id, "rework_reassigned")[0]?.oldPool, "alternate");
   });
 
   it("uses normal matrix routing and the replacement's depth", async () => {

@@ -26,7 +26,7 @@ const dir = mkdtempSync(join(tmp, "deadline-"));
 process.env.KANBAN_DATA_DIR = dir;
 mkdirSync(dir, { recursive: true });
 
-const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" };
+const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" };
 
 function mainWorkspace(id: string): ListedWorkspace {
   return {
@@ -171,7 +171,7 @@ describe("archive deadline", () => {
       );
     getDb()
       .prepare(
-        ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, auto_accept, started_at)\n         VALUES (?, 'lane-agent-1', 'executor', '" + zhCN("labels.role.executor") + "', 'cursor', 'grok-4.7', 'xai', 0, ?)"),
+        ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, auto_accept, started_at)\n         VALUES (?, 'lane-agent-1', 'executor', '" + zhCN("labels.role.executor") + "', 'alternate', 'grok-4.7', 'xai', 0, ?)"),
       )
       .run(byEvent.id, new Date().toISOString());
     getDb()
@@ -286,7 +286,7 @@ describe("archive deadline", () => {
       getDb().prepare("UPDATE tasks SET status = 'done', agent_id = ?, executor_agent_id = ? WHERE id = ?").run(agentId, agentId, task.id);
       getDb()
         .prepare(
-          ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, auto_accept, started_at)\n           VALUES (?, ?, 'executor', '" + zhCN("labels.role.executor") + "', 'cursor', 'grok-4.7', 'xai', 0, ?)"),
+          ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, auto_accept, started_at)\n           VALUES (?, ?, 'executor', '" + zhCN("labels.role.executor") + "', 'alternate', 'grok-4.7', 'xai', 0, ?)"),
         )
         .run(task.id, agentId, ago);
       appendEvent(task.id, "accept", "acceptance", "done", "test", {}, ago);

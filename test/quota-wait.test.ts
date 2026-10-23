@@ -13,9 +13,9 @@ const executor: Profile = {
   name: zhCN("labels.role.executor"),
   role: "executor",
   family: "xai",
-  provider: "cursor",
+  provider: "alternate",
   model: "grok-4.7",
-  pool: "cursor",
+  pool: "alternate",
 };
 const other: Profile = {
   id: "sg",
@@ -74,17 +74,17 @@ function route(profiles: Profile[], pools: PoolSnapshot, patch: { role?: string;
 
 describe("quota wait label", () => {
   it("formats headline and does not nest the prefix", () => {
-    assert.equal(quotaWaitLabel("cursor", "Ahead of budget"), (zhCN("blocked.prefix.quota") + "cursor" + zhCN("nativeSessions.sweep.reasonSep") + "Ahead of budget"));
-    assert.equal(quotaWaitLabel("cursor、supergrok", zhCN("routing.noProfile")), (zhCN("blocked.prefix.quota") + "cursor、supergrok" + zhCN("nativeSessions.sweep.reasonSep") + zhCN("routing.noProfile")));
+    assert.equal(quotaWaitLabel("alternate", "Ahead of budget"), (zhCN("blocked.prefix.quota") + "alternate" + zhCN("nativeSessions.sweep.reasonSep") + "Ahead of budget"));
+    assert.equal(quotaWaitLabel("alternate、supergrok", zhCN("routing.noProfile")), (zhCN("blocked.prefix.quota") + "alternate、supergrok" + zhCN("nativeSessions.sweep.reasonSep") + zhCN("routing.noProfile")));
     assert.equal(quotaWaitLabel(null, ("5 " + zhCNPart("doctor.hours", 8, 10) + zhCNPart("waitingMetrics.badWindow", 2, 4))), (zhCN("blocked.prefix.quota") + zhCN("blocked.quota.noPool") + zhCN("nativeSessions.sweep.reasonSep") + "5 " + zhCNPart("doctor.hours", 8, 10) + zhCNPart("waitingMetrics.badWindow", 2, 4)));
-    assert.equal(quotaWaitLabel("cursor", (zhCN("blocked.prefix.quota") + "cursor" + zhCN("nativeSessions.sweep.reasonSep") + "Ahead of budget")), (zhCN("blocked.prefix.quota") + "cursor" + zhCN("nativeSessions.sweep.reasonSep") + "Ahead of budget"));
+    assert.equal(quotaWaitLabel("alternate", (zhCN("blocked.prefix.quota") + "alternate" + zhCN("nativeSessions.sweep.reasonSep") + "Ahead of budget")), (zhCN("blocked.prefix.quota") + "alternate" + zhCN("nativeSessions.sweep.reasonSep") + "Ahead of budget"));
   });
 
   it("shows the quota reason on a queued card and keeps other holds as a next step", () => {
-    assert.equal(cardQueueAlert("ready", (zhCN("blocked.prefix.quota") + "cursor" + zhCN("nativeSessions.sweep.reasonSep") + "Pool paused")), (zhCN("blocked.prefix.quota") + "cursor" + zhCN("nativeSessions.sweep.reasonSep") + "Pool paused"));
+    assert.equal(cardQueueAlert("ready", (zhCN("blocked.prefix.quota") + "alternate" + zhCN("nativeSessions.sweep.reasonSep") + "Pool paused")), (zhCN("blocked.prefix.quota") + "alternate" + zhCN("nativeSessions.sweep.reasonSep") + "Pool paused"));
     assert.equal(cardQueueAlert("rework", (zhCN("blocked.prefix.quota") + "claude-max" + zhCN("nativeSessions.sweep.reasonSep") + "5 " + zhCNPart("doctor.hours", 8, 10) + zhCNPart("waitingMetrics.badWindow", 2, 4) + zhCNPart("pools.staleStopped", 20, 22) + " 70%")), (zhCN("blocked.prefix.quota") + "claude-max" + zhCN("nativeSessions.sweep.reasonSep") + "5 " + zhCNPart("doctor.hours", 8, 10) + zhCNPart("waitingMetrics.badWindow", 2, 4) + zhCNPart("pools.staleStopped", 20, 22) + " 70%"));
     assert.equal(cardQueueAlert("ready", zhCN("reworkReassign.waitingAutoStart", {"reason":"Executor concurrency full"})), zhCN("blocked.nextStep", {"step":zhCN("reworkReassign.waitingAutoStart", {reason:"Executor concurrency full"})}));
-    assert.equal(cardQueueAlert("blocked", (zhCN("blocked.prefix.quota") + "cursor" + zhCN("nativeSessions.sweep.reasonSep") + "Pool paused")), null);
+    assert.equal(cardQueueAlert("blocked", (zhCN("blocked.prefix.quota") + "alternate" + zhCN("nativeSessions.sweep.reasonSep") + "Pool paused")), null);
     assert.equal(cardQueueAlert("in_review", (zhCN("blocked.prefix.external") + "CI")), (zhCN("blocked.prefix.external") + "CI"));
     assert.equal(cardQueueAlert("acceptance", (zhCN("blocked.prefix.external") + "CI\n" + zhCNPart("nativeSessions.kept.leader", 9, 11) + zhCNPart("transientRetry.timeout.send", 4, 6))), (zhCN("blocked.prefix.external") + "CI\n" + zhCNPart("nativeSessions.kept.leader", 9, 11) + zhCNPart("transientRetry.timeout.send", 4, 6)));
     assert.equal(cardQueueAlert("reviewing", (zhCNPart("identityLines.openExecutor", 2, 5) + zhCNPart("transientRetry.timeout.send", 4, 6))), zhCN("blocked.nextStep", {"step":(zhCNPart("identityLines.openExecutor", 2, 5) + zhCNPart("transientRetry.timeout.send", 4, 6))}));
@@ -92,10 +92,10 @@ describe("quota wait label", () => {
 });
 
 describe("routeProfile quota versus permanent", () => {
-  const openReview = snapshot({ cursor: { dispatchable: true }, supergrok: { dispatchable: true }, "claude-max": { dispatchable: true } });
+  const openReview = snapshot({ alternate: { dispatchable: true }, supergrok: { dispatchable: true }, "claude-max": { dispatchable: true } });
 
   it("holds for a paused pool, over pace, the 5-hour window, and no dispatchable profile", () => {
-    const paused = route([executor, reviewer], snapshot({ cursor: { dispatchable: false, reason: "Pool paused" }, "claude-max": { dispatchable: true } }));
+    const paused = route([executor, reviewer], snapshot({ alternate: { dispatchable: false, reason: "Pool paused" }, "claude-max": { dispatchable: true } }));
     assert.equal(paused.ok, false);
     if (!paused.ok) {
       assert.equal(paused.action, "hold");
@@ -103,7 +103,7 @@ describe("routeProfile quota versus permanent", () => {
       assert.match(paused.reason, new RegExp("Pool paused"));
     }
     const pace = route([executor, other, reviewer], snapshot({
-      cursor: { dispatchable: false, reason: "Ahead of budget" },
+      alternate: { dispatchable: false, reason: "Ahead of budget" },
       supergrok: { dispatchable: false, reason: "Usage ahead of budget" },
       "claude-max": { dispatchable: true },
     }));
@@ -111,10 +111,10 @@ describe("routeProfile quota versus permanent", () => {
     if (!pace.ok) {
       assert.equal(pace.action, "hold");
       assert.equal(pace.quotaWait, true);
-      assert.equal(pace.pool, "cursor、supergrok");
+      assert.equal(pace.pool, "alternate、supergrok");
     }
     const window = route([executor, reviewer], snapshot({
-      cursor: { dispatchable: true, onlyRoles: ["reviewer"], reason: "5 hour window reached 70%" },
+      alternate: { dispatchable: true, onlyRoles: ["reviewer"], reason: "5 hour window reached 70%" },
       "claude-max": { dispatchable: true },
     }));
     assert.equal(window.ok, false);
@@ -159,7 +159,7 @@ describe("routeProfile quota versus permanent", () => {
 
   it("blocks needs_human only when every candidate is permanently unavailable", () => {
     const loggedOut = route([executor, reviewer], snapshot({
-      cursor: { dispatchable: false, reason: "Not logged in" },
+      alternate: { dispatchable: false, reason: "Not logged in" },
       "claude-max": { dispatchable: true },
     }));
     assert.equal(loggedOut.ok, false);
@@ -169,7 +169,7 @@ describe("routeProfile quota versus permanent", () => {
       assert.equal(loggedOut.quotaWait, undefined);
     }
     const mixed = route([executor, other, reviewer], snapshot({
-      cursor: { dispatchable: false, reason: "Not logged in" },
+      alternate: { dispatchable: false, reason: "Not logged in" },
       supergrok: { dispatchable: false, reason: "Ahead of budget" },
       "claude-max": { dispatchable: true },
     }));
@@ -205,7 +205,7 @@ describe("routeProfile quota versus permanent", () => {
       },
     };
     const recoverable = route([executor, reviewer], snapshot({
-      cursor: { dispatchable: false, reason: "Pool paused" },
+      alternate: { dispatchable: false, reason: "Pool paused" },
       "claude-max": { dispatchable: true },
     }), { matrix: missingAndPaused });
     assert.equal(recoverable.ok, false);

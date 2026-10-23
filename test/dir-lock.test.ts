@@ -19,9 +19,9 @@ const dir = mkdtempSync(join(tmp, "dir-lock-"));
 process.env.KANBAN_DATA_DIR = dir;
 mkdirSync(dir, { recursive: true });
 
-const executor: Profile = { id: "ex", name: "dir-lock-exec", role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" };
-const reader: Profile = { id: "rd", name: "dir-lock-reader", role: "reader", provider: "cursor", model: "grok-4.7" };
-const reviewer: Profile = { id: "rv", name: "dir-lock-review", role: "reviewer", family: "anthropic", provider: "cursor", model: "grok-4.7" };
+const executor: Profile = { id: "ex", name: "dir-lock-exec", role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" };
+const reader: Profile = { id: "rd", name: "dir-lock-reader", role: "reader", provider: "alternate", model: "grok-4.7" };
+const reviewer: Profile = { id: "rv", name: "dir-lock-review", role: "reviewer", family: "anthropic", provider: "alternate", model: "grok-4.7" };
 
 function room(name: string): string {
   const path = join(dir, name);

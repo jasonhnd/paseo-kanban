@@ -106,7 +106,7 @@ describe("role checks", () => {
     claimStatus(task.id, "in_review", "reviewing", "test");
     const executor = issueToken("executor", task.id, "agent-1");
     await assert.rejects(() => handleTool("kanban_approve", { id: task.id, summary: "sample" }, executor), new RegExp(localePattern(zhCNPart("flow.error.cannotComplete", 7, 11))));
-    await assert.rejects(() => handleTool("kanban_register", { project: "p", title: "t", role: "executor", profile: "p", provider: "cursor", model: "m", agent: "a" }, executor), new RegExp(localePattern(zhCNPart("flow.error.cannotComplete", 7, 11))));
+    await assert.rejects(() => handleTool("kanban_register", { project: "p", title: "t", role: "executor", profile: "p", provider: "alternate", model: "m", agent: "a" }, executor), new RegExp(localePattern(zhCNPart("flow.error.cannotComplete", 7, 11))));
     const reviewer = issueToken("reviewer", task.id, "agent-2");
     getDb().prepare("UPDATE tasks SET agent_id = ? WHERE id = ?").run("agent-2", task.id);
     const approved = (await handleTool("kanban_approve", { id: task.id, summary: "sample" }, reviewer)) as { status: string };
@@ -124,8 +124,8 @@ describe("role checks", () => {
         project: "demo_board",
         title: "Registered",
         role: "executor",
-        profile: ((zhCN("labels.role.executor") + " ") + "· Cursor " + zhCNPart("worktreeGc.branch.localGone", 0, 2)),
-        provider: "cursor",
+        profile: ((zhCN("labels.role.executor") + " ") + "· Alternate " + zhCNPart("worktreeGc.branch.localGone", 0, 2)),
+        provider: "alternate",
         model: "grok-4.7",
         thinking: "high",
         agent: "agent-backfill",
@@ -145,8 +145,8 @@ describe("role checks", () => {
       title: "Registered",
       brief: "",
       role: "executor",
-      profileName: ((zhCN("labels.role.executor") + " ") + "· Cursor " + zhCNPart("worktreeGc.branch.localGone", 0, 2)),
-      provider: "cursor",
+      profileName: ((zhCN("labels.role.executor") + " ") + "· Alternate " + zhCNPart("worktreeGc.branch.localGone", 0, 2)),
+      provider: "alternate",
       model: "grok-4.7",
       agentId: "agent-backfill",
       idempotencyKey: "same",
@@ -157,8 +157,8 @@ describe("role checks", () => {
       title: "Registered",
       brief: "",
       role: "executor",
-      profileName: ((zhCN("labels.role.executor") + " ") + "· Cursor " + zhCNPart("worktreeGc.branch.localGone", 0, 2)),
-      provider: "cursor",
+      profileName: ((zhCN("labels.role.executor") + " ") + "· Alternate " + zhCNPart("worktreeGc.branch.localGone", 0, 2)),
+      provider: "alternate",
       model: "grok-4.7",
       agentId: "agent-backfill",
       idempotencyKey: "same",
@@ -171,7 +171,7 @@ describe("role checks", () => {
       brief: "",
       role: "executor",
       profileName: zhCN("labels.role.executor"),
-      provider: "cursor",
+      provider: "alternate",
       model: "grok-4.7",
       agentId: "missing-agent",
     }));
@@ -182,9 +182,9 @@ describe("role checks", () => {
     const db = getDb();
     db.prepare(
       "UPDATE tasks SET status = 'reviewing', agent_id = ?, executor_agent_id = ?, executor_profile = ? WHERE id = ?",
-    ).run("00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002", ((zhCN("labels.role.executor") + " ") + "· Cursor " + zhCNPart("worktreeGc.branch.localGone", 0, 2) + zhCNPart("missingCwd.none", 0, 1) + zhCNPart("nativeSessions.sweep.progressChecked", 23, 25) + zhCNPart("missingCwd.none", 3, 4)), task.id);
+    ).run("00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002", ((zhCN("labels.role.executor") + " ") + "· Alternate " + zhCNPart("worktreeGc.branch.localGone", 0, 2) + zhCNPart("missingCwd.none", 0, 1) + zhCNPart("nativeSessions.sweep.progressChecked", 23, 25) + zhCNPart("missingCwd.none", 3, 4)), task.id);
     db.prepare(
-      ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, auto_accept, thinking_option_id, started_at)\n       VALUES (?, ?, 'executor', '" + (zhCN("labels.role.executor") + " ") + "· Cursor " + zhCNPart("worktreeGc.branch.localGone", 0, 2) + zhCNPart("missingCwd.none", 0, 1) + zhCNPart("nativeSessions.sweep.progressChecked", 23, 25) + zhCNPart("missingCwd.none", 3, 4) + "', 'cursor', 'grok-4.7', 'xai', 1, 'high', '2026-09-26T09:13:24.899Z')"),
+      ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, auto_accept, thinking_option_id, started_at)\n       VALUES (?, ?, 'executor', '" + (zhCN("labels.role.executor") + " ") + "· Alternate " + zhCNPart("worktreeGc.branch.localGone", 0, 2) + zhCNPart("missingCwd.none", 0, 1) + zhCNPart("nativeSessions.sweep.progressChecked", 23, 25) + zhCNPart("missingCwd.none", 3, 4) + "', 'alternate', 'grok-4.7', 'xai', 1, 'high', '2026-09-26T09:13:24.899Z')"),
     ).run(task.id, "00000000-0000-4000-8000-000000000002");
     db.prepare(
       ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, auto_accept, started_at)\n       VALUES (?, ?, 'reviewer', '" + zhCN("labels.role.reviewer") + "', 'claude', 'claude-sonnet-5', 'anthropic', 0, '2026-09-26T11:33:00.000Z')"),
@@ -193,7 +193,7 @@ describe("role checks", () => {
     assert.ok(card);
     assert.equal(card.roleLabel, zhCN("labels.role.executor"));
     assert.equal(card.currentText, ((zhCN("labels.role.reviewer") + " ") + "· claude-sonnet-5 · agent 00000000"));
-    assert.equal(card.executorText, ((zhCN("labels.role.executor") + " ") + "· Cursor " + zhCNPart("worktreeGc.branch.localGone", 0, 2) + zhCNPart("missingCwd.none", 0, 1) + zhCNPart("nativeSessions.sweep.progressChecked", 23, 25) + zhCNPart("missingCwd.none", 3, 4) + " · grok-4.7 · high · agent 00000000"));
+    assert.equal(card.executorText, ((zhCN("labels.role.executor") + " ") + "· Alternate " + zhCNPart("worktreeGc.branch.localGone", 0, 2) + zhCNPart("missingCwd.none", 0, 1) + zhCNPart("nativeSessions.sweep.progressChecked", 23, 25) + zhCNPart("missingCwd.none", 3, 4) + " · grok-4.7 · high · agent 00000000"));
     assert.equal(card.startedAt, "2026-09-26T09:13:24.899Z");
   });
 
@@ -205,18 +205,18 @@ describe("role checks", () => {
       title: "Rework display",
       role: "executor",
       workspacePath: dir,
-      profileOverride: ((zhCN("labels.role.executor") + " ") + "· Cursor " + zhCNPart("worktreeGc.branch.localGone", 0, 2)),
+      profileOverride: ((zhCN("labels.role.executor") + " ") + "· Alternate " + zhCNPart("worktreeGc.branch.localGone", 0, 2)),
     });
     const db = getDb();
     db.prepare("UPDATE tasks SET agent_id = ?, executor_agent_id = ?, executor_profile = ?, executor_family = ? WHERE id = ?").run(
       agent,
       agent,
-      ((zhCN("labels.role.executor") + " ") + "· Cursor " + zhCNPart("worktreeGc.branch.localGone", 0, 2)),
+      ((zhCN("labels.role.executor") + " ") + "· Alternate " + zhCNPart("worktreeGc.branch.localGone", 0, 2)),
       "xai",
       task.id,
     );
     db.prepare(
-      ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, auto_accept, thinking_option_id, started_at)\n       VALUES (?, ?, 'executor', '" + (zhCN("labels.role.executor") + " ") + "· Cursor " + zhCNPart("worktreeGc.branch.localGone", 0, 2) + "', 'cursor', 'grok-4.7', 'xai', 1, 'high', '2026-09-26T09:13:24.899Z')"),
+      ("INSERT INTO runs (task_id, agent_id, role, profile_name, provider, model, family, auto_accept, thinking_option_id, started_at)\n       VALUES (?, ?, 'executor', '" + (zhCN("labels.role.executor") + " ") + "· Alternate " + zhCNPart("worktreeGc.branch.localGone", 0, 2) + "', 'alternate', 'grok-4.7', 'xai', 1, 'high', '2026-09-26T09:13:24.899Z')"),
     ).run(task.id, agent);
     claimStatus(task.id, "ready", "running", "test");
     completeTask(task.id, "executor", "Handoff", null);
@@ -239,14 +239,14 @@ describe("role checks", () => {
     );
     const card = listBoard().tasks.find((item) => item.id === task.id);
     assert.ok(card);
-    assert.equal(card.currentText, ((zhCN("labels.role.executor") + " ") + "· Cursor " + zhCNPart("doctor.branch.kept", 6, 9) + "· grok-4.7 · high · agent 87b7f37a"));
-    assert.equal(card.profile, ((zhCN("labels.role.executor") + " ") + "· Cursor " + zhCNPart("worktreeGc.branch.localGone", 0, 2)));
+    assert.equal(card.currentText, ((zhCN("labels.role.executor") + " ") + "· Alternate " + zhCNPart("doctor.branch.kept", 6, 9) + "· grok-4.7 · high · agent 87b7f37a"));
+    assert.equal(card.profile, ((zhCN("labels.role.executor") + " ") + "· Alternate " + zhCNPart("worktreeGc.branch.localGone", 0, 2)));
     assert.equal(card.model, "grok-4.7 · high");
     const latest = db.prepare(
       "SELECT role, profile_name, model, thinking_option_id, agent_id, ended_at FROM runs WHERE task_id = ? ORDER BY id DESC LIMIT 1",
     ).get(task.id) as { role: string; profile_name: string; model: string; thinking_option_id: string; agent_id: string; ended_at: string | null };
     assert.equal(latest.role, "executor");
-    assert.equal(latest.profile_name, ((zhCN("labels.role.executor") + " ") + "· Cursor " + zhCNPart("worktreeGc.branch.localGone", 0, 2)));
+    assert.equal(latest.profile_name, ((zhCN("labels.role.executor") + " ") + "· Alternate " + zhCNPart("worktreeGc.branch.localGone", 0, 2)));
     assert.equal(latest.model, "grok-4.7");
     assert.equal(latest.thinking_option_id, "high");
     assert.equal(latest.agent_id, agent);
@@ -293,9 +293,9 @@ describe("nudge fuse", () => {
     name: zhCN("labels.role.executor"),
     role: "executor",
     family: "xai",
-    provider: "cursor",
+    provider: "alternate",
     model: "grok-4.7",
-    pool: "cursor",
+    pool: "alternate",
   };
   const reviewer: Profile = {
     id: "rv",
@@ -328,7 +328,7 @@ describe("nudge fuse", () => {
     const task = createTask({ project: "sandbox", title: "demo fixture", role: "executor" });
     claimStatus(task.id, "ready", "running", "test");
     getDb().prepare("UPDATE tasks SET agent_id = ? WHERE id = ?").run("agent-fuse", task.id);
-    getDb().prepare("INSERT INTO runs (task_id, agent_id, role, provider, model, family, started_at) VALUES (?, 'agent-fuse', 'executor', 'cursor', 'grok-4.7', 'xai', ?)").run(task.id, '2026-09-29T23:00:00.000Z');
+    getDb().prepare("INSERT INTO runs (task_id, agent_id, role, provider, model, family, started_at) VALUES (?, 'agent-fuse', 'executor', 'alternate', 'grok-4.7', 'xai', ?)").run(task.id, '2026-09-29T23:00:00.000Z');
     const start = Date.parse("2026-09-30T00:00:00.000Z");
     const gap = 10 * 60_000;
     const timeline = [

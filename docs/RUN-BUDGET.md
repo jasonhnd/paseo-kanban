@@ -62,6 +62,7 @@ observation; subsequent observed rounds are persisted across scheduler reloads.
 
 The board's marker-file wait uses `blocked_kind=background`, `background_wait`
 and `background_resumed` events, and `unblocked` with `via=background_wait`.
+Completion, process-death and timeout wakes all use that same automatic resume path.
 These automatic resumes keep the original generation and counters. The monitor
 excludes observations inside the wait interval, including late timeline pages.
 Wall clock continues and is enforced when the card runs again. Other board-owned

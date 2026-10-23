@@ -1,4 +1,5 @@
 {
+  "kanban_create.param.noSplitHint": "Suppress the advisory split hint for this create response (default false).",
   "param.cardRef": "Card number: a display code such as ABC_0031 (case-insensitive; leading zeros may be dropped, e.g. ABC_31), or an old global number such as 114 or #114.",
   "kanban_ping.description": "Connectivity check. Returns the fixed string kanban-pong.",
   "kanban_show.description": "Show one card with its handoff, comments and status.",

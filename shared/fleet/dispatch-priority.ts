@@ -1,3 +1,4 @@
+import { canonicalPoolId } from "./x-ultra";
 // Dispatch pool order (DEMO_0124). Pure functions.
 // By default the order comes from the quota: dispatchable pools sorted by needPerDay (points per day still to use
 // before reset), biggest first. plans.json top-level `dispatchPriority` (DEMO_0123) is now an optional override the
@@ -56,7 +57,7 @@ export function parseDispatchPriority(raw: unknown): DispatchPriority | null {
   if (order.length !== row.order.length || new Set(order).size !== order.length) return null;
   if (typeof row.until !== "string" || Number.isNaN(Date.parse(row.until))) return null;
   const note = typeof row.note === "string" && row.note ? row.note : undefined;
-  return { order, until: row.until, ...(note ? { note } : {}) };
+  return { order: [...new Set(order.map(id => canonicalPoolId(id)!))], until: row.until, ...(note ? { note } : {}) };
 }
 
 /** Active only while `now` is strictly before `until`. */

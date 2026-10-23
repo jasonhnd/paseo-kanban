@@ -138,7 +138,7 @@ test("configured Grok weekly Session readings retain their provider pace hold", 
   const quotaCycle = { kind: "week" as const, timeZone: "UTC", weekday: 1, hour: 0, minute: 0 };
   const cfg = { ...base, adapter: "grok-cli", usageProvider: "demo-grok", quotaCycle };
   const resetsAt = new Date(now + 6 * 86400000).toISOString();
-  const windows = windowsFor(cfg, "grok-cli", { ...context, windowsBy: new Map([[cfg.usageProvider, [{ label: "Session", usedPct: 40, resetsAt }]]]) });
+  const windows = windowsFor(cfg, "grok-cli", { ...context, providerCollectedAt: new Date(now).toISOString(), windowsBy: new Map([[cfg.usageProvider, [{ label: "Session", usedPct: 40, resetsAt }]]]) });
   assert.equal(windows[0].cycleKind, "week");
   assert.equal(windows[0].startsAt, new Date(now - 86400000).toISOString());
   assert.equal(windows[0].label, tIn(language(), "quota.setup.weekWindow"));
@@ -150,7 +150,7 @@ test("configured Grok weekly Session readings retain their provider pace hold", 
 test("a high weekly Codex Session cannot be hidden by the first short Session", () => {
   const quotaCycle = { kind: "week" as const, timeZone: "UTC", weekday: 1, hour: 0, minute: 0 };
   const cfg = { ...base, adapter: "codex-cli", usageProvider: "demo-codex", quotaCycle };
-  const windows = windowsFor(cfg, "codex-cli", { ...context, windowsBy: new Map([[cfg.usageProvider, [
+  const windows = windowsFor(cfg, "codex-cli", { ...context, providerCollectedAt: new Date(now).toISOString(), windowsBy: new Map([[cfg.usageProvider, [
     { label: "Session", usedPct: 10, resetsAt: new Date(now + 2 * 3600000).toISOString() },
     { label: "Session", usedPct: 90, resetsAt: new Date(now + 6 * 86400000).toISOString() },
   ]]]) });
@@ -174,7 +174,7 @@ test("daily and monthly cycles paired with normalized weekly Sessions stay witho
     { kind: "month" as const, timeZone: "UTC", day: 1, hour: 0, minute: 0 },
   ]) {
     const cfg = { ...base, adapter: "grok-cli", usageProvider: "demo-grok", quotaCycle };
-    const windows = windowsFor(cfg, "grok-cli", { ...context, windowsBy: new Map([[cfg.usageProvider, [{ label: "Session", usedPct: 40, resetsAt: new Date(now + 6 * 86400000).toISOString() }]]]) });
+    const windows = windowsFor(cfg, "grok-cli", { ...context, providerCollectedAt: new Date(now).toISOString(), windowsBy: new Map([[cfg.usageProvider, [{ label: "Session", usedPct: 40, resetsAt: new Date(now + 6 * 86400000).toISOString() }]]]) });
     assert.equal(windows[0].cycleKind, "week"); assert.equal(windows[0].elapsedPct, null);
     const status = poolStatus([usagePlan(windows, cfg)], { now })[base.id];
     assert.equal(status.pacePct, null); assert.equal(status.dispatchable, true);

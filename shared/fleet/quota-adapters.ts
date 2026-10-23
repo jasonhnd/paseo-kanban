@@ -1,3 +1,4 @@
+import { X_ULTRA } from "./x-ultra";
 // Quota source adapters: where a plan's percentages come from, and the pool rules that follow from it.
 //
 // Every plan in plans.json is one quota pool. Its `adapter` field says how its numbers are read:
@@ -413,7 +414,7 @@ function entriesOf(plan: PlanSource, adapter: AdapterId): PoolEntry[] {
   const spec = specs()[adapter];
   const neverPrefer = typeof plan.neverPrefer === "boolean" ? plan.neverPrefer : spec.neverPrefer;
   const period = periodOf(adapter, plan);
-  const main: PoolEntry = { id: plan.id, planId: plan.id, adapter, sub: null, parent: null, period, neverPrefer, names: spec.names };
+  const main: PoolEntry = { id: plan.id, planId: plan.id, adapter, sub: null, parent: null, period, neverPrefer, names: plan.id === X_ULTRA ? { line: "X Ultra", label: "X Ultra", short: "X Ultra", via: t("quota.adapters.via", { name: "X Ultra" }) } : spec.names };
   const subs = spec.subWindows.map((sub): PoolEntry => ({
     id: subPoolId(plan, adapter, sub.key),
     planId: plan.id,
@@ -593,7 +594,7 @@ export function companyCatalog(plans: readonly PlanSource[], switches?: Partial<
     const providers = providersOf(plan);
     const subPools = Object.fromEntries(spec.subWindows.map((sub) => [sub.key, subPoolId(plan, adapter, sub.key)]));
     const cursorMonitoring = plan.cursorMonitoring ?? (baseAdapterOf(plan) === CURSOR_API ? adapter === CURSOR_API : undefined);
-    return { ...(cursorMonitoring !== undefined ? { cursorMonitoring } : {}), key: companyKeyOf(plan), planId: plan.id, adapter, cardName: spec.cardName ?? name, couponName: spec.couponName ?? name, providers: [...new Set(providers)], subPools };
+    return { ...(cursorMonitoring !== undefined ? { cursorMonitoring } : {}), key: companyKeyOf(plan), planId: plan.id, adapter, cardName: plan.id === X_ULTRA ? "X Ultra" : spec.cardName ?? name, couponName: plan.id === X_ULTRA ? "X Ultra" : spec.couponName ?? name, providers: [...new Set(providers)], subPools };
   });
 }
 

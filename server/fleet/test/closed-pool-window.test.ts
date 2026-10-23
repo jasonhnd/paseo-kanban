@@ -93,7 +93,7 @@ test("real publication does not rewrite old history or fabricate resets when a p
   await writePoolStatus([plan([session, weekly, fable])], null, now + 86400000);
   const appended = JSON.parse(await readFile(QUOTA_HISTORY_FILE, "utf8"));
   assert.deepEqual(appended.samples[0], old.samples[0]);
-  assert.equal(appended.samples[1].pools["demo-pool"].usedPct, 53);
+  assert.equal(appended.samples[1].pools["demo-pool"].usedPct, null);
   assert.equal(appended.samples[1].pools["demo-pool"].resetsAt, weekly.resetsAt);
   ctx.mock.timers.reset();
 });

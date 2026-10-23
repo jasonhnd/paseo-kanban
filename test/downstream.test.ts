@@ -17,7 +17,7 @@ const dir = mkdtempSync(join(tmpdir(), "kanban-downstream-"));
 process.env.KANBAN_DATA_DIR = dir;
 process.env.KANBAN_AGENTS_DIR = join(dir, "agents");
 const profiles: Profile[] = [
-  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" },
+  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" },
   { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" },
 ];
 beforeEach(() => {
@@ -46,8 +46,8 @@ function config(patch: Partial<KanbanConfig> = {}): KanbanConfig {
 async function tick(cfg = config(), poolOpen = true) {
   return runTick({ profiles, config: cfg, matrix: { state: "missing" },
     pools: { state: "fresh", generatedAt: new Date().toISOString(), updatedAt: null, ageMs: 0, message: zhCNPart("compat.name.offlineTest", 2, 4),
-      dispatchable: (pool) => pool !== "cursor" || poolOpen,
-      entry: (pool) => ({ ...openEntry(), dispatchable: pool !== "cursor" || poolOpen }) },
+      dispatchable: (pool) => pool !== "alternate" || poolOpen,
+      entry: (pool) => ({ ...openEntry(), dispatchable: pool !== "alternate" || poolOpen }) },
     launcher: { async create() { return { id: "test-agent" }; }, async send() {} },
     agentState: () => "alive",
   });
@@ -130,7 +130,7 @@ it("does not bypass role or pool concurrency limits even with a large chain", as
   const roleCap = config({ concurrency: { ...DEFAULT_CONCURRENCY, global: 10, roles: { ...DEFAULT_CONCURRENCY.roles, executor: 0 } } });
   assert.deepEqual((await tick(roleCap)).started, []);
   assert.match(getTask(root.id).hold_reason ?? "", new RegExp(zhCN("schedule.roleFull", {"role":zhCN("labels.role.executor")})));
-  const poolCap = config({ concurrency: { ...DEFAULT_CONCURRENCY, global: 10, pools: { ...DEFAULT_CONCURRENCY.pools, cursor: 0 } } });
+  const poolCap = config({ concurrency: { ...DEFAULT_CONCURRENCY, global: 10, pools: { ...DEFAULT_CONCURRENCY.pools, alternate: 0 } } });
   assert.deepEqual((await tick(poolCap)).started, []);
   assert.match(getTask(root.id).hold_reason ?? "", new RegExp(localePattern(zhCNPart("schedule.globalFull", 2, 6))));
 });

@@ -25,16 +25,16 @@ mkdirSync(tmp, { recursive: true });
 const dir = mkdtempSync(join(tmp, "lanes-off-"));
 process.env.KANBAN_DATA_DIR = dir;
 process.env.KANBAN_POOL_STATUS = join(dir, "pool-status.json");
-writeFileSync(process.env.KANBAN_POOL_STATUS, JSON.stringify({ generatedAt: new Date().toISOString(), pools: { cursor: { dispatchable: true } } }));
+writeFileSync(process.env.KANBAN_POOL_STATUS, JSON.stringify({ generatedAt: new Date().toISOString(), pools: { alternate: { dispatchable: true } } }));
 
 const executor: Profile = {
   id: "ex",
   name: zhCN("labels.role.executor"),
   role: "executor",
   family: "xai",
-  provider: "cursor",
+  provider: "alternate",
   model: "grok-4.7",
-  pool: "cursor",
+  pool: "alternate",
 };
 const reviewer: Profile = {
   id: "rv",

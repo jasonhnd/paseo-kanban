@@ -30,9 +30,9 @@ const executor: Profile = {
   name: zhCN("labels.role.executor"),
   role: "executor",
   family: "xai",
-  provider: "cursor",
+  provider: "alternate",
   model: "grok-4.7",
-  pool: "cursor",
+  pool: "alternate",
 };
 const reviewer: Profile = {
   id: "rv",
@@ -56,7 +56,7 @@ const config: KanbanConfig = {
   supervisors: {},
   concurrency: {
     global: 5,
-    pools: { ...DEFAULT_CONCURRENCY.pools, cursor: 5, "claude-max": 5 },
+    pools: { ...DEFAULT_CONCURRENCY.pools, alternate: 5, "claude-max": 5 },
     roles: { ...DEFAULT_CONCURRENCY.roles, executor: 5 },
   },
 };

@@ -20,7 +20,7 @@ const scriptTests = () => readdirSync(join(ROOT, "scripts")).filter((name) => na
 export function steps() {
   return [
     { name: "typecheck", command: node("scripts/typecheck.mjs") },
-    { name: "test (scripts)", command: node("--test", ...scriptTests()) },
+    { name: "test (scripts)", command: node("scripts/test-scripts.mjs", ...scriptTests()) },
     { name: "build (CLI)", command: node("scripts/build-cli.mjs") },
     { name: "build (Paseo)", command: node("scripts/paseo-build-check.mjs", "--strict") },
     { name: "test (plugin)", command: node("scripts/test-plugin.mjs") },
@@ -48,8 +48,24 @@ export function runSteps(list, cwd = ROOT, log = console.log) {
   return results;
 }
 
-function main() {
-  const results = runSteps(steps());
+async function main() {
+  const { createTestTmp, removeTestTmp } = await import("../test/helpers/test-tmp.mjs");
+  const { privateTestEnvironment } = await import("../test/helpers/test-environment.mjs");
+  const { assertTestEnvironment } = await import("../server/storage/test-safety.ts");
+  assertTestEnvironment(process.env);
+  const root = createTestTmp();
+  const previous = { ...process.env };
+  let results;
+  try {
+    const env = privateTestEnvironment(root);
+    for (const key of Object.keys(process.env)) if (!(key in env)) delete process.env[key];
+    Object.assign(process.env, env);
+    results = runSteps(steps());
+  } finally {
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
+    Object.assign(process.env, previous);
+    removeTestTmp(root);
+  }
   console.log("\n=== verify: summary");
   for (const result of results) console.log(`${result.ok ? "ok    " : "FAILED"} ${result.name}${result.why ? ` (${result.why})` : ""}`);
   const failed = results.filter((result) => !result.ok).length;
@@ -57,4 +73,4 @@ function main() {
   return failed === 0 ? 0 : 1;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = await main();

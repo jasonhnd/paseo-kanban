@@ -108,3 +108,13 @@ Cursor 额度卡会明确显示「Cursor 自动监控已关闭」。可点击卡
 派活资格；可以保持原有派活设置并单独开启监控。凭证始终不导入，
 不要通过复制 Cursor token 文件来恢复连接。完整文件边界参见
 [手动迁移](../MANUAL-MIGRATION.md)。
+
+## 每次运行的花费记录
+
+`kanban.db` 的 `run_cost_snapshots` 按 run 保存开始与结束快照，与运行状态同事务提交或回滚。交活、失败、回收、归档取消和额度刹车都经过同一入口；刹车后复用 agent 会新开 run。仅因替换提示而取消的宿主回合继续使用原 run 和刹车代次。
+
+`fleet/run-costs.json` 是版本 1 的导出，`records` 保存运行身份、模型、深度、卡类型、token、额度百分比、耗时、回合数、来源和结束时间；`averages` 按模型、深度、卡类型汇总。提交后导出，失败由调度轮次重试，数据库保留原始记录。旧 run 仍可使用 transcript 统计；新花费行缺少有效 token 时，也保留 transcript 的 token 与价格。有效花费 token 会覆盖计数，并按实际模型及缓存输入重新估算美元值；查不到价格则为 null。金额是基础目录价估算，不含逐次调用的长上下文阶梯。不会给已被清理的历史运行编造测量值。
+
+token 和回合数复用 run-budget 的代次快照，不再采集一套，也不使用含义不明的 `lastUsage`。输入 token 已包含缓存输入，缺失值用 null。`quotaObservedBefore`、`quotaObservedAfter` 和 `notes` 保留读数时间及原因。完整 token 快照在结束前两分钟内采集，且开始与结束有不同的额度读数、分别不超过三十分钟时为 `measured`；读数缺失或过期、token 不完整、跨额度重置时，有部分证据就标 `partial`，全无证据为 `unknown`。普通结束允许调度采样间隔；token 快照超过两分钟、时间缺失或不完整时按下界记录；起止复用同一读数时 delta 为 null，不冒充零花费。跨重置不计算负花费。额度变化属于整口池，可能包含并发运行或用户本人用量。
+
+G2 可从 `server/run-cost.ts` 导入 `costEstimate({model, effort, cardType, role?, tier?})`，也可用 `shared/fleet/run-cost.ts` 的纯函数 `estimateRunCost(records, query)`。返回 `avgQuotaPct`、`avgTokens`、`samples`、`quotaSamples`、`tokenSamples`；各指标使用自己的有效样本数，未知数据不按零稀释均值。旧格式或缺失文件返回 null 均值和零样本。部分测量仍可能是下界，路由应同时考虑证据质量和样本数。

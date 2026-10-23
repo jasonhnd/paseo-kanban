@@ -1027,9 +1027,9 @@ describe("doctor", () => {
   it("checks a configured project repo that no card has used, and reports a missing one", async () => {
     const root = join(dir, "configured-repo");
     mkdirSync(root);
-    const prevRoot = process.env.KANBAN_AGENTIC_ROOT;
+    const prevRoot = process.env.KANBAN_PROJECTS_ROOT;
     const prevConfig = loadConfig();
-    process.env.KANBAN_AGENTIC_ROOT = dir;
+    process.env.KANBAN_PROJECTS_ROOT = dir;
     saveConfig({
       ...prevConfig,
       projects: {
@@ -1053,18 +1053,18 @@ describe("doctor", () => {
       assert.match(has(report, "check:worktree:missing-repo")?.evidence ?? "", new RegExp(localePattern(zhCNPart("doctor.repo.missing", 3, 10))));
     } finally {
       saveConfig(prevConfig);
-      if (prevRoot == null) delete process.env.KANBAN_AGENTIC_ROOT;
-      else process.env.KANBAN_AGENTIC_ROOT = prevRoot;
+      if (prevRoot == null) delete process.env.KANBAN_PROJECTS_ROOT;
+      else process.env.KANBAN_PROJECTS_ROOT = prevRoot;
     }
   });
 
   it("treats a configured project with no known directory as unknown, never under the plugin install directory (issue #9)", () => {
-    const prevRoot = process.env.KANBAN_AGENTIC_ROOT;
+    const prevRoot = process.env.KANBAN_PROJECTS_ROOT;
     const prevConfig = loadConfig();
     const parent = join(dir, "issue9-parent");
     const known = join(parent, "no-directory-project");
     mkdirSync(known, { recursive: true });
-    process.env.KANBAN_AGENTIC_ROOT = parent;
+    process.env.KANBAN_PROJECTS_ROOT = parent;
     const row = { defaultWorkspace: "dir", baseBranch: "main", worktreeLanes: 1, lanesEnabled: false } as const;
     saveConfig({
       ...prevConfig,
@@ -1110,14 +1110,14 @@ describe("doctor", () => {
     } finally {
       console.error = original;
       saveConfig(prevConfig);
-      if (prevRoot == null) delete process.env.KANBAN_AGENTIC_ROOT;
-      else process.env.KANBAN_AGENTIC_ROOT = prevRoot;
+      if (prevRoot == null) delete process.env.KANBAN_PROJECTS_ROOT;
+      else process.env.KANBAN_PROJECTS_ROOT = prevRoot;
     }
   });
 
   it("scans directories past absent empty projects, but fails closed for open cards and EACCES", async () => {
     const prevConfig = loadConfig();
-    const envKeys = ["KANBAN_AGENTIC_ROOT", "KANBAN_AGENTS_DIR", "KANBAN_WORKTREES_ROOT"] as const;
+    const envKeys = ["KANBAN_PROJECTS_ROOT", "KANBAN_AGENTS_DIR", "KANBAN_WORKTREES_ROOT"] as const;
     const previous = envKeys.map((key) => process.env[key]);
     const agentic = join(dir, "empty-project-roots");
     const repo = join(agentic, "normal");
@@ -1133,7 +1133,7 @@ describe("doctor", () => {
     git(["-c", "user.name=doctor", "-c", "user.email=doctor@example.com", "commit", "--allow-empty", "-m", "init"]);
     const project = { defaultWorkspace: "dir", baseBranch: "main", worktreeLanes: 1, lanesEnabled: false } as const;
     saveConfig({ ...prevConfig, projects: { normal: { ...project, workspacePath: repo }, "demo_quota": project, demo_sandbox: project } });
-    process.env.KANBAN_AGENTIC_ROOT = agentic;
+    process.env.KANBAN_PROJECTS_ROOT = agentic;
     process.env.KANBAN_AGENTS_DIR = join(dir, "agents-empty-projects");
     process.env.KANBAN_WORKTREES_ROOT = wt;
     mkdirSync(process.env.KANBAN_AGENTS_DIR);
@@ -1578,7 +1578,7 @@ describe("doctor", () => {
 
   it("keeps a worktree alert when a configured repo cannot be opened, and does not call it a stray", async () => {
     const prevConfig = loadConfig();
-    const prevRoot = process.env.KANBAN_AGENTIC_ROOT;
+    const prevRoot = process.env.KANBAN_PROJECTS_ROOT;
     const prevAgents = process.env.KANBAN_AGENTS_DIR;
     const prevWt = process.env.KANBAN_WORKTREES_ROOT;
     const agentic = join(dir, "agentic-roots");
@@ -1608,7 +1608,7 @@ describe("doctor", () => {
     setWakeSender(() => {
       wakes += 1;
     });
-    process.env.KANBAN_AGENTIC_ROOT = agentic;
+    process.env.KANBAN_PROJECTS_ROOT = agentic;
     process.env.KANBAN_AGENTS_DIR = join(dir, "agents-configured");
     process.env.KANBAN_WORKTREES_ROOT = wt;
     mkdirSync(process.env.KANBAN_AGENTS_DIR);
@@ -1660,8 +1660,8 @@ describe("doctor", () => {
         // already restored
       }
       saveConfig(prevConfig);
-      if (prevRoot == null) delete process.env.KANBAN_AGENTIC_ROOT;
-      else process.env.KANBAN_AGENTIC_ROOT = prevRoot;
+      if (prevRoot == null) delete process.env.KANBAN_PROJECTS_ROOT;
+      else process.env.KANBAN_PROJECTS_ROOT = prevRoot;
       if (prevAgents == null) delete process.env.KANBAN_AGENTS_DIR;
       else process.env.KANBAN_AGENTS_DIR = prevAgents;
       if (prevWt == null) delete process.env.KANBAN_WORKTREES_ROOT;

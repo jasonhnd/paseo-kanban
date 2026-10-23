@@ -32,7 +32,9 @@ const NOW = Date.now();
 const STALE = 46 * 60_000;
 const TTL = envelopeFor("poolStatus", "0").ttlSeconds * 1000;
 const profile: Profile = { id: "demo", name: "Demo", role: "reader", provider: "demo", family: "demo", model: "demo-a", pool: "demo" };
+// Anonymous policy fixtures retain legacy selection; quota-routing tests cover the default-on router.
 const config: KanbanConfig = {
+  quotaRouting: { enabled: false },
   autoStart: { demo: true }, supervisorAgentId: null, supervisors: {},
   projects: { demo: { code: "DEMO", defaultWorkspace: "dir", baseBranch: "main", alwaysTemp: false, lanesEnabled: false, worktreeLanes: 1 } },
   concurrency: { global: 10, roles: { ...DEFAULT_CONCURRENCY.roles }, pools: { demo: 10 } },

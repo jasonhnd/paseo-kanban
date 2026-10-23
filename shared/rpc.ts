@@ -23,6 +23,7 @@ export const cardSchema = z.object({
   blockedReason: z.string().nullable(),
   startedAt: z.string().nullable(),
   currentText: z.string().nullable(),
+  dispatchReason: z.string().nullable().optional(),
   executorText: z.string().nullable(),
   executorAgentId: z.string().nullable(),
   nextStep: z.string().nullable(),

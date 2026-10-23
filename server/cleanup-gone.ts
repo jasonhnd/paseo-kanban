@@ -12,7 +12,7 @@ import { createdWorktree, ownedWorktree } from "./worktree-gc";
 import { branchOwnedByCard } from "./workspace";
 import type { AgentSnapshot } from "./cleanup";
 
-/** Absence is a read result, never a request to delete, resume, or finish the whole card. */
+/** Absence or confirmed archive is a read result, never a request to delete or resume the card. */
 export interface GoneReader {
   workspaceIds(): Promise<ReadonlySet<string>>;
   agent(id: string): Promise<AgentSnapshot | null>;
@@ -109,9 +109,15 @@ export async function reconcileGone(task: TaskRow, events: CleanupRecord[], read
     // An earlier target in this batch may have covered the same agent's wait/restore failure.
     if (!pendingTargets(events).includes(failed)) continue;
     let gone = false;
+    let archived = false;
     try {
       if (failed.agentId && ["archive_agent", "wait_turn", "restore_stuck", "purge_agents"].includes(failed.action!)) {
         gone = await agentGone(failed.agentId);
+        // An archive can finish after its RPC times out (including across a plugin restart).
+        // Reuse the validated, ownership-checked read above. Archived is not proof of purge.
+        if (!gone && failed.action === "archive_agent") {
+          archived = (await agentReads.get(failed.agentId))?.archived === true;
+        }
       } else if (failed.action === "archive_workspace" && failed.workspaceId) {
         if (task.workspace_kind !== "worktree" || failed.workspaceId !== task.paseo_workspace_id || activeSharer(task, "paseo_workspace_id", failed.workspaceId)) continue;
         gone = !(await read.workspaceIds()).has(failed.workspaceId);
@@ -143,12 +149,12 @@ export async function reconcileGone(task: TaskRow, events: CleanupRecord[], read
       // A timeout, disconnected client, permission error or incomplete inventory is unknown.
       continue;
     }
-    if (!gone || !read.current()) continue;
+    if ((!gone && !archived) || !read.current()) continue;
     const latest = getTask(task.id);
     if (latest.status !== "done" && latest.status !== "archived") return;
     if (latest.paseo_workspace_id !== task.paseo_workspace_id || latest.workspace_path !== task.workspace_path) return;
     const action = failed.action === "wait_turn" || failed.action === "restore_stuck" ? "archive_agent" : failed.action;
     record({ action, agentId: failed.agentId, workspaceId: failed.workspaceId, directory: failed.directory, branch: failed.branch,
-      ok: true, reason: "gone", reconciled: true, failureRowId: failed.rowId });
+      ok: true, ...(archived ? { via: "reconciled" as const } : { reason: "gone" }), reconciled: true, failureRowId: failed.rowId });
   }
 }

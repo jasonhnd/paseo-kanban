@@ -129,7 +129,7 @@ it("abnormal simulated production config never changes isolated config", () => {
   assert.equal(JSON.parse(changed.stdout).compatibilityClaude, true);
 });
 it("normal production processes keep their existing path behavior", () => {
-  const env = { NODE_TEST_CONTEXT: undefined, KANBAN_TEST_TMP: undefined,
+  const env = { KANBAN_TEST_RUN: undefined, NODE_TEST_CONTEXT: undefined, KANBAN_TEST_TMP: undefined,
     TMPDIR: root.replace(/[/\\]kanban-test-\d+-.*$/, ""), KANBAN_DATA_DIR: liveProduction };
   const explicit = probe(env);
   assert.equal(explicit.status, 0, explicit.stderr);

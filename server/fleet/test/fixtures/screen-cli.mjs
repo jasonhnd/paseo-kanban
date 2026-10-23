@@ -34,6 +34,8 @@ if (root) {
     if (count < depth + 1) return;
     clearInterval(ready);
     if (process.env.DEMO_MODE === "login") console.log("Sign in");
+    else if (process.env.DEMO_MODE === "trust") console.log("Do you trust the contents of this directory?\nYes, proceed y\nNo, quit n\nGrok Build 1.0.67");
+    else if (process.env.DEMO_MODE === "modern") console.log("Awaiting input\nGrok Build 1.0.67");
     else if (process.env.DEMO_MODE !== "timeout") console.log("Awaiting your input\nPlan, search, build anything");
   }, 20);
   if (process.stdin.isTTY) process.stdin.setRawMode(true);
@@ -41,7 +43,7 @@ if (root) {
   let input = "";
   process.stdin.on("data", (chunk) => {
     input += String(chunk);
-    if (/\r|\n/.test(input) && process.env.DEMO_MODE === "success") {
+    if (/\r|\n/.test(input) && ["success", "modern"].includes(process.env.DEMO_MODE)) {
       console.log("\x1b[2J\x1b[HWeekly limit\n42% used\nAuto 42% used");
       input = "";
     }

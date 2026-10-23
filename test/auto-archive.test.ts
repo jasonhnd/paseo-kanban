@@ -399,7 +399,7 @@ describe("board and history", () => {
 });
 
 describe("merge checks never hold up the scheduler", () => {
-  const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" };
+  const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" };
   const reviewer: Profile = { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" };
   const pools: PoolSnapshot = {
     state: "fresh",
@@ -435,7 +435,7 @@ describe("merge checks never hold up the scheduler", () => {
     const first = createTask({ project: "aa-go", title: "Start normally 1", role: "executor", workspacePath: join(dir, "go-1") });
     mkdirSync(join(dir, "go-1"), { recursive: true });
     const tickConfig = config({ autoStart: { "aa-go": true, "aa-hang": false } });
-    tickConfig.concurrency = { ...tickConfig.concurrency, pools: { ...tickConfig.concurrency.pools, cursor: 5 } };
+    tickConfig.concurrency = { ...tickConfig.concurrency, pools: { ...tickConfig.concurrency.pools, alternate: 5 } };
     saveConfig(tickConfig);
 
     const tick1 = await within(runTick({ profiles: [executor, reviewer], launcher, pools, agentState: () => "alive", now: at(48 * HOUR), config: tickConfig }), HANG_GUARD_MS);

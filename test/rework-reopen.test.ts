@@ -17,7 +17,7 @@ import { runTick } from "./helpers/compat-schedule";
 import { addComment, appendEvent, createTask, getTask, requestAgentReleases } from '../server/store';
 import { issueToken, identityFromToken } from '../server/tokens';
 
-const original: Profile = { id: 'old', name: zhCN("labels.identity.executor"), role: 'executor', family: 'xai', provider: 'cursor', model: 'grok-4.7', pool: 'cursor' };
+const original: Profile = { id: 'old', name: zhCN("labels.identity.executor"), role: 'executor', family: 'xai', provider: 'alternate', model: 'grok-4.7', pool: 'alternate' };
 const candidate: Profile = { id: 'candidate', name: "Candidate executor", role: 'candidate', candidateFor: 'executor', family: 'anthropic', provider: 'claude', model: 'sonnet', pool: 'claude-max' };
 const reviewer: Profile = { id: 'reviewer', name: zhCN("labels.role.reviewer"), role: 'reviewer', family: 'anthropic', provider: 'claude', model: 'sonnet', pool: 'claude-max' };
 const crossReviewer: Profile = { id: 'cross', name: "Cross-family review", role: 'candidate', candidateFor: 'reviewer', family: 'xai', provider: 'grok', model: 'grok-4.7', pool: 'supergrok' };
@@ -233,7 +233,7 @@ describe('automatic reopening of departed executors', () => {
   it('uses an available same-role candidate and reserves a reviewer from a different family', async () => {
     const f = fixture();
     requestChanges(f.task.id, "Current fix", "Add tests");
-    await f.tick({ pools: pools(['cursor']) });
+    await f.tick({ pools: pools(['alternate']) });
     assert.equal(getTask(f.task.id).executor_profile, candidate.name);
     assert.equal(getTask(f.task.id).executor_family, candidate.family);
     completeTask(f.task.id, 'executor', "Fixed", null);
@@ -244,7 +244,7 @@ describe('automatic reopening of departed executors', () => {
   it('retries quota holds and failed creates without duplicating the brief or counting unsuccessful reopens', async () => {
     const f = fixture();
     requestChanges(f.task.id, "Current fix", "Add tests");
-    await f.tick({ pools: pools(['cursor', 'claude-max', 'supergrok']) });
+    await f.tick({ pools: pools(['alternate', 'claude-max', 'supergrok']) });
     assert.equal(getTask(f.task.id).status, 'ready');
     assert.equal(getTask(f.task.id).executor_agent_id, null);
     assert.equal(f.opened.length, 0);

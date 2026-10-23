@@ -1,15 +1,21 @@
 /// <reference types="node" />
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import childProcess, { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import { once } from "node:events";
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, it } from "node:test";
 import { runKanban } from "../server/cli";
 import { cardMarkOf } from "../server/card-ref";
+import { backgroundProcesses } from "../server/background-process";
 import { resumeBackgroundWaits } from "../server/background-wait";
+import { configPath } from "../server/config-file";
 import { closeDb, getDb } from "../server/db";
 import { protocolFor } from "../server/protocol";
-import { loadConfig } from "../server/config";
+import { loadConfig, parseConfig, setProjectCode, setProjectWorkspace } from "../server/config";
 import { appendEvent, claimStatus, createTask, getDetail, getTask, unblockTask } from "../server/store";
 import { runTick, resetReconcileForTests } from "../server/schedule";
 import { setLanguage } from "../shared/i18n";
@@ -18,20 +24,30 @@ import { runDoctor } from "../server/doctor";
 import { currentOccupancy } from "../server/routing";
 import { runBudgetSnapshot, type BudgetObservation } from "../server/run-budget";
 
+let worker: ChildProcess;
 let dir: string;
 let cardTmp: string;
 let id: number;
 let marker: string;
 let log: string;
 const env = { PASEO_AGENT_ID: "background-agent" };
+const invokingEnv = { ...process.env };
 
-beforeEach(() => {
+beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "background-wait-"));
-  process.env.KANBAN_DATA_DIR = dir;
+  Object.assign(process.env, {
+    KANBAN_DATA_DIR: dir, HOME: join(dir, "home"), PASEO_HOME: join(dir, "paseo"),
+    KANBAN_PASEO_CONFIG: join(dir, "paseo/config.json"),
+    XDG_CONFIG_HOME: join(dir, "home/config"), XDG_CACHE_HOME: join(dir, "cache"),
+  });
+  for (const path of ["home/config", "paseo", "cache"]) mkdirSync(join(dir, path), { recursive: true });
   process.env.KANBAN_AGENTS_DIR = join(dir, "agents");
   mkdirSync(join(dir, "agents", "bucket"), { recursive: true });
   writeFileSync(join(dir, "agents", "bucket", "background-agent.json"), JSON.stringify({ id: env.PASEO_AGENT_ID, cwd: dir, lastStatus: "idle" }));
   writeFileSync(join(dir, "kanban.config.json"), JSON.stringify({ autoStart: { demo: false } }));
+  worker = spawn(process.execPath, ["-e", "process.send({ HOME: process.env.HOME, PASEO_HOME: process.env.PASEO_HOME, KANBAN_DATA_DIR: process.env.KANBAN_DATA_DIR }); setInterval(() => {}, 1000)"], { stdio: ["ignore", "ignore", "ignore", "ipc"] });
+  const inherited = once(worker, "message");
+  await once(worker, "spawn");
   const task = createTask({ project: "demo", title: "Long build", role: "executor", workspacePath: dir });
   id = task.id;
   claimStatus(id, "ready", "running", "test");
@@ -43,15 +59,26 @@ beforeEach(() => {
   log = join(cardTmp, "build.log");
   setLanguage("en");
   resetReconcileForTests();
+  const [snapshot] = await inherited;
+  assert.equal(snapshot.KANBAN_DATA_DIR, dir, "writer must inherit this case's data override");
+  assert.equal(snapshot.HOME, join(dir, "home"));
+  assert.equal(snapshot.PASEO_HOME, join(dir, "paseo"));
 });
 
-afterEach(() => {
+afterEach(async () => {
+  if (worker.exitCode === null && worker.signalCode === null) {
+    const exited = once(worker, "exit");
+    worker.kill("SIGKILL");
+    await exited;
+  }
   closeDb();
   rmSync(dir, { recursive: true, force: true });
   setLanguage("zh-CN");
+  for (const key of Object.keys(process.env)) if (!(key in invokingEnv)) delete process.env[key];
+  Object.assign(process.env, invokingEnv);
 });
 
-const register = () => runKanban(["wait-bg", marker, "--card", String(id), "--log", log], env);
+const register = (extra: string[] = []) => runKanban(["wait-bg", marker, "--card", String(id), "--log", log, "--pid", String(worker.pid), ...extra], env);
 
 it("releases model capacity while retaining the directory used by the background writer", async () => {
   await register();
@@ -218,11 +245,11 @@ it("keeps a manual replacement wait intact and never wakes a cancelled or reassi
 });
 
 it("authorizes only the assigned worker and confines marker and log reads to its prepared temporary directory", async () => {
-  await assert.rejects(() => runKanban(["wait-bg", marker, "--card", String(id)], { PASEO_AGENT_ID: "stranger" }));
-  await assert.rejects(() => runKanban(["wait-bg", join(dir, "outside.exit"), "--card", String(id)], env));
-  await assert.rejects(() => runKanban(["wait-bg", marker, "--card", String(id), "--log", join(dir, "outside.log")], env));
+  await assert.rejects(() => runKanban(["wait-bg", marker, "--card", String(id), "--pid", String(worker.pid)], { PASEO_AGENT_ID: "stranger" }));
+  await assert.rejects(() => runKanban(["wait-bg", join(dir, "outside.exit"), "--card", String(id), "--pid", String(worker.pid)], env));
+  await assert.rejects(() => runKanban(["wait-bg", marker, "--card", String(id), "--pid", String(worker.pid), "--log", join(dir, "outside.log")], env));
   symlinkSync(dir, join(cardTmp, "escape"));
-  await assert.rejects(() => runKanban(["wait-bg", join(cardTmp, "escape", "outside.exit"), "--card", String(id)], env));
+  await assert.rejects(() => runKanban(["wait-bg", join(cardTmp, "escape", "outside.exit"), "--card", String(id), "--pid", String(worker.pid)], env));
   assert.equal(getTask(id).status, "running");
 });
 
@@ -242,8 +269,347 @@ it("injects the no-polling rule and wait-bg usage for every role in both languag
     for (const role of ["executor", "reviewer", "reader", "decision", "batch", "supervisor"]) {
       const text = protocolFor(role, { language });
       assert.match(text, /wait-bg/);
+      assert.match(text, /--pid/);
+      assert.match(text, /--timeout-ms/);
+      assert.match(text, /yield_time_ms\s*(?:>=|\u2265)\s*300000/);
       assert.match(text, language === "en" ? /Do not repeatedly (?:call )?wait\/sleep/ : /\u7981\u6b62\u53cd\u590d.*wait\/sleep/);
       assert.doesNotMatch(text, /sleep 60 loop|sleep 60 \u5faa\u73af/);
     }
+    const workflow = readFileSync(new URL(`../docs/${language === "en" ? "" : "zh-CN/"}WORKFLOW.md`, import.meta.url), "utf8");
+    assert.match(workflow, /yield_time_ms\s*(?:>=|\u2265)\s*300000/);
+  }
+});
+
+
+it("requires a live owned process and rejects absent, malformed and unrelated pids", async () => {
+  for (const args of [[], ["--pid", "0"], ["--pid", "1"], ["--pid", "99999999"], ["--pid", "1junk"]]) {
+    await assert.rejects(() => runKanban(["wait-bg", marker, "--card", String(id), ...args], env));
+  }
+  const exited = once(worker, "exit");
+  worker.kill("SIGKILL");
+  await exited;
+  await assert.rejects(register);
+  assert.equal(getTask(id).status, "running");
+});
+
+it("persists process identity and wakes once with a bounded tail when the process dies without a marker", async () => {
+  await register();
+  const wait = JSON.parse(getTask(id).background_wait_json!);
+  assert.equal(wait.process.pid, worker.pid);
+  assert.ok(wait.process.pgid > 0);
+  assert.ok(wait.process.started);
+  assert.equal(wait.maxWaitMs, 3 * 60 * 60 * 1000);
+  writeFileSync(log, "x".repeat(20_000) + "\nKilled build\n");
+  const exited = once(worker, "exit");
+  worker.kill("SIGKILL");
+  await exited;
+  closeDb(); // a service restart must not lose process identity
+  const messages: string[] = [];
+  const send = async (_agent: string, text: string) => { messages.push(text); };
+  await Promise.all([resumeBackgroundWaits(new Date(), send), resumeBackgroundWaits(new Date(), send)]);
+  await resumeBackgroundWaits(new Date(), send);
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /process exited without writing an exit code/i);
+  assert.match(messages[0], /Killed build/);
+  assert.ok(Buffer.byteLength(messages[0]) < 9000);
+  assert.equal(getTask(id).status, "running");
+});
+
+it("uses a durable wall-clock deadline after sleep and restart, without killing a live process", async () => {
+  await register(["--timeout-ms", "1000"]);
+  const start = Date.parse(getTask(id).blocked_at!);
+  closeDb();
+  const messages: string[] = [];
+  const send = async (_agent: string, text: string) => { messages.push(text); };
+  await resumeBackgroundWaits(new Date(start + 999), send);
+  assert.equal(messages.length, 0);
+  await resumeBackgroundWaits(new Date(start + 6 * 60 * 60 * 1000), send);
+  await resumeBackgroundWaits(new Date(start + 7 * 60 * 60 * 1000), send);
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /timed out/i);
+  assert.doesNotThrow(() => process.kill(worker.pid!, 0));
+});
+
+it("does not mistake a reused pid or an unrelated live process group for the original process", async () => {
+  await register();
+  const wait = JSON.parse(getTask(id).background_wait_json!);
+  wait.process.started = "different process start";
+  getDb().prepare("UPDATE tasks SET background_wait_json = ? WHERE id = ?").run(JSON.stringify(wait), id);
+  const messages: string[] = [];
+  await resumeBackgroundWaits(new Date(), async (_agent, text) => { messages.push(text); });
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /process exited without writing an exit code/i);
+});
+
+it("prioritizes an existing completion marker over death or timeout", async () => {
+  await register(["--timeout-ms", "1"]);
+  const exited = once(worker, "exit");
+  worker.kill("SIGKILL");
+  await exited;
+  writeFileSync(marker, "9\n");
+  const messages: string[] = [];
+  await resumeBackgroundWaits(new Date(Date.now() + 10000), async (_agent, text) => { messages.push(text); });
+  assert.match(messages[0], /exit code: 9/);
+});
+
+it("applies global, project and single-wait timeout overrides and rejects invalid durations", async () => {
+  for (const value of ["0", "-1", "NaN", "1.5", "9007199254740992"]) {
+    await assert.rejects(() => register(["--timeout-ms", value]));
+  }
+  for (const [config, expected, extra] of [
+    [{ backgroundWaitMaxMs: 2000 }, 2000, []],
+    [{ backgroundWaitMaxMs: 2000, projects: { demo: { defaultWorkspace: "dir", backgroundWaitMaxMs: 3000 } } }, 3000, []],
+    [{ backgroundWaitMaxMs: 2000, projects: { demo: { defaultWorkspace: "dir", backgroundWaitMaxMs: 3000 } } }, 4000, ["--timeout-ms", "4000"]],
+  ] as const) {
+    writeFileSync(join(dir, "kanban.config.json"), JSON.stringify({ autoStart: { demo: false }, ...config }));
+    await register([...extra]);
+    assert.equal(JSON.parse(getTask(id).background_wait_json!).maxWaitMs, expected);
+    unblockTask(id, "supervisor");
+  }
+});
+
+
+for (const failure of ["death", "timeout"] as const) it(`retries a ${failure} wake after restart with the same receipt and frozen log`, async () => {
+  await register(failure === "timeout" ? ["--timeout-ms", "1"] : []);
+  if (failure === "death") {
+    const exited = once(worker, "exit");
+    worker.kill("SIGKILL");
+    await exited;
+  }
+  writeFileSync(log, "original failure tail");
+  const attempts: Array<{ id: string; text: string }> = [];
+  const send: Parameters<typeof resumeBackgroundWaits>[1] = async (_agent, text, options) => {
+    attempts.push({ id: options!.messageId!, text });
+    if (attempts.length === 1) throw new Error("lost acknowledgement");
+  };
+  await resumeBackgroundWaits(new Date(Date.now() + 1000), send);
+  closeDb();
+  writeFileSync(log, "replacement tail");
+  await Promise.all([resumeBackgroundWaits(new Date(Date.now() + 2000), send), resumeBackgroundWaits(new Date(Date.now() + 2000), send)]);
+  assert.equal(attempts.length, 2);
+  assert.deepEqual(attempts[0], attempts[1]);
+  assert.match(attempts[0].text, /original failure tail/);
+  assert.equal(getTask(id).status, "running");
+});
+
+it("wakes old marker-only waits after upgrade and reports process death in Chinese", async () => {
+  await register();
+  const wait = JSON.parse(getTask(id).background_wait_json!);
+  delete wait.process;
+  getDb().prepare("UPDATE tasks SET background_wait_json = ? WHERE id = ?").run(JSON.stringify(wait), id);
+  const messages: string[] = [];
+  const send = async (_agent: string, text: string) => { messages.push(text); };
+  await resumeBackgroundWaits(new Date(), send);
+  assert.match(messages[0], /register again with --pid/);
+  await register();
+  const exited = once(worker, "exit");
+  worker.kill("SIGKILL");
+  await exited;
+  setLanguage("zh-CN");
+  await resumeBackgroundWaits(new Date(), send);
+  assert.match(messages[1], /\u540e\u53f0\u8fdb\u7a0b\u5df2\u9000\u51fa\u4f46\u672a\u5199\u9000\u51fa\u7801/);
+});
+
+
+it("bounds delivered log bytes even for invalid UTF-8", async () => {
+  await register(["--timeout-ms", "1"]);
+  writeFileSync(log, Buffer.alloc(20000, 0xff));
+  let message = "";
+  await resumeBackgroundWaits(new Date(Date.now() + 1000), async (_agent, text) => { message = text; });
+  const tail = message.split("untrusted command output):\n")[1];
+  assert.ok(tail.length > 0);
+  assert.ok(Buffer.byteLength(tail) <= 8192);
+});
+
+
+it("registers a detached writer through the installed CLI launcher in its invoking shell", () => {
+  const cli = fileURLToPath(new URL("../bin/paseo-kanban.mjs", import.meta.url));
+  const result = spawnSync("/bin/sh", ["-c", `
+    "$1" -e 'setInterval(() => {}, 1000)' > /dev/null 2>&1 &
+    job_pid=$!
+    "$1" "$2" --json wait-bg "$3" --card "$4" --pid "$job_pid" --log "$5"
+    rc=$?
+    kill "$job_pid"
+    wait "$job_pid" 2>/dev/null
+    exit "$rc"
+  `, "background-fixture", process.execPath, cli, marker, String(id), log], {
+    encoding: "utf8", timeout: 10000, env: { ...process.env, ...env },
+  });
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.equal(getTask(id).blocked_kind, "background");
+  assert.ok(JSON.parse(getTask(id).background_wait_json!).process.pid > 1);
+});
+
+
+it("uses the current wall clock if sleep occurs after a scheduler tick started", async context => {
+  const start = Date.now();
+  context.mock.timers.enable({ apis: ["Date"], now: start });
+  await register(["--timeout-ms", "1000"]);
+  context.mock.timers.setTime(start + 10000);
+  const messages: string[] = [];
+  await resumeBackgroundWaits(new Date(start), async (_agent, text) => { messages.push(text); });
+  assert.match(messages[0], /timed out/i);
+});
+
+it("validates configured limits and preserves project limits when editing other project settings", () => {
+  for (const value of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "1000"]) {
+    assert.throws(() => parseConfig({ backgroundWaitMaxMs: value }));
+    assert.throws(() => parseConfig({ projects: { demo: { defaultWorkspace: "dir", backgroundWaitMaxMs: value } } }));
+  }
+  writeFileSync(join(dir, "kanban.config.json"), JSON.stringify({
+    autoStart: { demo: false }, backgroundWaitMaxMs: 2000,
+    projects: { demo: { defaultWorkspace: "dir", backgroundWaitMaxMs: 3000 } },
+  }));
+  assert.equal(configPath(), join(dir, "kanban.config.json"), "settings writes must use this case's data override");
+  setProjectWorkspace("demo", { baseBranch: "trunk" });
+  assert.equal(configPath(), join(dir, "kanban.config.json"));
+  setProjectCode("demo", "DEMO");
+  assert.equal(loadConfig().projects!.demo.backgroundWaitMaxMs, 3000);
+  assert.equal(loadConfig().backgroundWaitMaxMs, 2000);
+});
+
+
+it("rechecks the marker when the writer finishes during process inspection", async () => {
+  await register();
+  const messages: string[] = [];
+  await resumeBackgroundWaits(new Date(), async (_agent, text) => { messages.push(text); }, () => {
+    writeFileSync(marker, "0\n");
+    return [];
+  });
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /exit code: 0/);
+});
+
+for (const failure of ["timeout", "exit", "malformed", "empty"] as const) it(`retains a wait when ps returns ${failure}`, async () => {
+  await register();
+  const messages: string[] = [];
+  await resumeBackgroundWaits(new Date(), async (_agent, text) => { messages.push(text); }, () => backgroundProcesses(() => {
+    if (failure === "timeout") throw Object.assign(new Error("ps timeout"), { code: "ETIMEDOUT" });
+    if (failure === "exit") throw Object.assign(new Error("ps failed"), { status: 1 });
+    return failure === "empty" ? "" : "unparseable process row";
+  }));
+  assert.deepEqual(messages, []);
+  assert.equal(getTask(id).blocked_kind, "background");
+});
+
+it("wakes once with a distinct message after five unknown checks across a restart", async () => {
+  await register();
+  const messages: string[] = [];
+  const tick = () => resumeBackgroundWaits(new Date(), async (_agent, text) => { messages.push(text); }, () => { throw new Error("ps timeout"); });
+  for (let n = 0; n < 4; n++) await tick();
+  assert.deepEqual(messages, []);
+  closeDb();
+  setLanguage("zh-CN");
+  await tick();
+  await tick();
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /\u65e0\u6cd5\u786e\u8ba4\u540e\u53f0\u8fdb\u7a0b\u72b6\u6001/);
+  assert.doesNotMatch(messages[0], /\u540e\u53f0\u8fdb\u7a0b\u5df2\u9000\u51fa/);
+});
+
+it("resets consecutive unknown checks when the process is alive", async () => {
+  await register();
+  const messages: string[] = [];
+  const send = async (_agent: string, text: string) => { messages.push(text); };
+  const unknown = () => { throw new Error("ps failed"); };
+  for (let n = 0; n < 4; n++) await resumeBackgroundWaits(new Date(), send, unknown);
+  await resumeBackgroundWaits(new Date(), send);
+  for (let n = 0; n < 4; n++) await resumeBackgroundWaits(new Date(), send, unknown);
+  assert.deepEqual(messages, []);
+  await resumeBackgroundWaits(new Date(), send, () => []);
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /process exited without writing an exit code/i);
+});
+
+it("supports a configured unknown check limit and validates it", async () => {
+  for (const value of [0, -1, 1.5, "2", Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => parseConfig({ backgroundWaitUnknownLimit: value }));
+  }
+  writeFileSync(join(dir, "kanban.config.json"), JSON.stringify({ autoStart: { demo: false }, backgroundWaitUnknownLimit: 2 }));
+  assert.equal(loadConfig().backgroundWaitUnknownLimit, 2);
+  await register();
+  const messages: string[] = [];
+  const tick = () => resumeBackgroundWaits(new Date(), async (_agent, text) => { messages.push(text); }, () => { throw new Error("ps failed"); });
+  await tick();
+  assert.deepEqual(messages, []);
+  await tick();
+  await tick();
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /could not confirm the background process status/i);
+  assert.doesNotMatch(messages[0], /process exited/i);
+});
+
+it("still honors the wall-clock deadline when process inspection is unavailable", async () => {
+  await register(["--timeout-ms", "1"]);
+  const wait = JSON.parse(getTask(id).background_wait_json!);
+  const messages: string[] = [];
+  await resumeBackgroundWaits(new Date(wait.startedAt + 1000), async (_agent, text) => { messages.push(text); }, () => { throw new Error("ps timeout"); });
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /timed out/i);
+});
+
+it("shares a failed snapshot across all waits in a tick", async () => {
+  await register();
+  const first = getTask(id);
+  const second = createTask({ project: "demo", title: "Another build", role: "executor", workspacePath: dir });
+  getDb().prepare(`UPDATE tasks SET status = 'blocked', blocked_kind = 'background', agent_id = ?,
+    background_wait_json = ?, scheduled_wake_id = 'second-wake' WHERE id = ?`)
+    .run(first.agent_id, first.background_wait_json, second.id);
+  let reads = 0;
+  let wakes = 0;
+  await resumeBackgroundWaits(new Date(), async () => { wakes++; }, () => { reads++; throw new Error("ps failed"); });
+  assert.equal(reads, 1);
+  assert.equal(wakes, 0);
+  for (const taskId of [id, second.id]) {
+    assert.equal(JSON.parse(getTask(taskId).background_wait_json!).unknownChecks, 1);
+  }
+});
+
+it("freezes the unknown-state wake receipt and text for delivery retry", async () => {
+  writeFileSync(join(dir, "kanban.config.json"), JSON.stringify({ autoStart: { demo: false }, backgroundWaitUnknownLimit: 1 }));
+  await register();
+  const receipt = getTask(id).scheduled_wake_id;
+  let frozen = "";
+  await resumeBackgroundWaits(new Date(), async (_agent, text, options) => {
+    frozen = text;
+    assert.equal(options?.messageId, receipt);
+    throw new Error("delivery unavailable");
+  }, () => { throw new Error("ps failed"); });
+  closeDb();
+  let wakes = 0;
+  await resumeBackgroundWaits(new Date(), async (_agent, text, options) => {
+    wakes++;
+    assert.equal(options?.messageId, receipt);
+    assert.equal(text, frozen);
+  }, () => { throw new Error("must use the frozen wake"); });
+  await resumeBackgroundWaits(new Date(), async () => { wakes++; });
+  assert.equal(wakes, 1);
+});
+
+it("registers and keeps a live wait when an unrelated process has STAT S>", async context => {
+  const original = childProcess.execFileSync;
+  let snapshots = 0;
+  const trap = context.mock.method(childProcess, "execFileSync", (...args: Parameters<typeof childProcess.execFileSync>) => {
+    const output = Reflect.apply(original, childProcess, args);
+    if (args[0] !== "/bin/ps") return output;
+    snapshots++;
+    assert.ok(typeof output === "string");
+    return `${output.trimEnd()}\n999999999 1 999999999 0 501 Thu Oct 22 00:00:00 2026 S>\n`;
+  });
+  syncBuiltinESMExports();
+  try {
+    await register();
+    assert.equal(getTask(id).blocked_kind, "background");
+    const messages: string[] = [];
+    for (let n = 0; n < 6; n++) {
+      await resumeBackgroundWaits(new Date(), async (_agent, text) => { messages.push(text); });
+      assert.equal(JSON.parse(getTask(id).background_wait_json!).unknownChecks ?? 0, 0);
+    }
+    assert.equal(snapshots, 7);
+    assert.deepEqual(messages, []);
+    assert.equal(getTask(id).blocked_kind, "background");
+  } finally {
+    trap.mock.restore();
+    syncBuiltinESMExports();
   }
 });

@@ -30,7 +30,9 @@ for (const name of ["host", "data/fleet", "work"]) mkdirSync(join(root, name), {
 const executor: Profile = { id: "demo-executor", name: "Demo Executor", role: "executor", provider: "demo", family: "shared", model: "Demo-A", pool: "demo" };
 const reviewer: Profile = { id: "demo-reviewer", name: "Demo Reviewer", role: "reviewer", provider: "demo", family: "shared", model: " demo-b ", pool: "demo", notes: "High-risk" };
 const profiles = [executor, reviewer];
+// Anonymous policy fixtures retain legacy selection; quota-routing tests cover the default-on router.
 const config: KanbanConfig = {
+  quotaRouting: { enabled: false },
   autoStart: { demo: true }, supervisorAgentId: null, supervisors: {},
   projects: { demo: { code: "DEMO", defaultWorkspace: "dir", baseBranch: "main", alwaysTemp: false, worktreeLanes: 1, lanesEnabled: false } },
   concurrency: { global: 10, roles: { ...DEFAULT_CONCURRENCY.roles }, pools: { demo: 10 } },

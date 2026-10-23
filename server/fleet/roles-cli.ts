@@ -1,5 +1,6 @@
 /// <reference types="node" />
 // The standalone roles command uses the same catalogs, dispatch order and policy as the plugin.
+import { assertTestSafePath } from "../storage/test-safety";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
@@ -30,10 +31,12 @@ const allText = (key: string) => [tIn("en", key as MessageKey), tIn("zh-CN", key
 const localized = (key: string, values: Record<string, string | number> = {}) => t(key as MessageKey, values);
 const fail = (key: string, values: Record<string, string | number> = {}): never => { throw new Error(t(key as MessageKey, values)); };
 function read(path: string, fallback?: any): any {
+  assertTestSafePath(path);
   try { return JSON.parse(readFileSync(path, "utf8")); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT" && fallback !== undefined) return fallback; throw error; }
 }
 function atomic(path: string, value: unknown) {
+  assertTestSafePath(path);
   mkdirSync(dirname(path), { recursive: true });
   const temp = `${path}.${process.pid}.${randomUUID()}.tmp`;
   try { writeFileSync(temp, JSON.stringify(value, null, 2)); renameSync(temp, path); }
@@ -46,6 +49,8 @@ function list(): Row[] {
   return rows as Row[];
 }
 async function mutate<T>(work: (rows: Row[]) => T): Promise<T> {
+  assertTestSafePath(STATE);
+  assertTestSafePath(DECISIONS);
   mkdirSync(STATE, { recursive: true });
   const lock = `${DECISIONS}.lock`;
   const deadline = Date.now() + 10_000;
@@ -84,7 +89,9 @@ function newId(rows: Row[]) {
   return `${base}-${n}`;
 }
 function leaders(): Row {
-  try { return read(process.env.ROLES_KANBAN_CONFIG || kanbanConfigPath()).supervisors || {}; } catch { return {}; }
+  const path = process.env.ROLES_KANBAN_CONFIG || kanbanConfigPath();
+  assertTestSafePath(path);
+  try { return read(path).supervisors || {}; } catch { return {}; }
 }
 function leader(project: string): string | null {
   const table = leaders();
@@ -155,6 +162,7 @@ async function decide(action: string, id: string | undefined, v: Row) {
   if (action === "migrate") {
     await mutate(rows => {
       if (!existsSync(DECISIONS)) fail("cli.roles.migrateNone");
+      assertTestSafePath(BACKUPS);
       mkdirSync(BACKUPS, { recursive: true });
       const backup = join(BACKUPS, `decisions-${Date.now()}-${randomUUID()}.json`);
       copyFileSync(DECISIONS, backup);
@@ -284,6 +292,9 @@ async function run(argv: string[]) {
   const after = label(p!); console.log(`${p!.name} (${p!.role}): ${before}\n  -> ${after}  family=${p!.family}`);
   if (check(cfg, p!, false)) { if (!v.force) fail("cli.roles.set.validationFailed"); console.log(t("cli.roles.set.validationForced")); }
   if (v["dry-run"]) { console.log(t("cli.roles.set.dryRun")); return; }
+  assertTestSafePath(BACKUPS);
+  assertTestSafePath(CONFIG);
+  assertTestSafePath(join(STATE, "changes.log"));
   mkdirSync(BACKUPS, { recursive: true }); copyFileSync(CONFIG, join(BACKUPS, `config-${Date.now()}-${randomUUID()}.json`));
   atomic(CONFIG, cfg);
   spawnSync("paseo", ["reload"], { encoding: "utf8", env: { ...process.env, PATH: commandPath() }, timeout: 30_000 });

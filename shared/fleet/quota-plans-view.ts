@@ -240,3 +240,10 @@ export function manualContext(plan: Pick<UsagePlan, "adapter" | "cursorRead">, w
 export function priceDraft(price: number | null): string {
   return price !== null ? String(price) : "";
 }
+
+/** Snapshot forecast shared by the quota summary and plan detail. */
+export function poolForecastText(pool: Pick<PoolView, "forecastConfidence" | "runsOutAt" | "projectedPct">): string {
+  if (!pool.forecastConfidence || pool.forecastConfidence === "none") return t("quota.forecast.insufficient");
+  if (pool.runsOutAt) return t("quota.forecast.runsOut", { when: fmtWhen(pool.runsOutAt) });
+  return pool.projectedPct == null ? t("quota.forecast.insufficient") : t("quota.forecast.atReset", { pct: Math.round(pool.projectedPct) });
+}

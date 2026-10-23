@@ -29,7 +29,7 @@ process.env.KANBAN_WORKTREES_ROOT = trees;
 mkdirSync(agents, { recursive: true });
 mkdirSync(trees, { recursive: true });
 
-const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" };
+const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" };
 const reviewer: Profile = { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" };
 
 after(() => {
@@ -76,7 +76,7 @@ function writeAgent(id: string, cwd: string, archived = false): void {
       id,
       cwd,
       title: id,
-      provider: "cursor",
+      provider: "alternate",
       labels: { kanban: "1" },
       lastActivityAt: "2026-10-01T00:00:00.000Z",
       ...(archived ? { archivedAt: "2026-10-01T00:00:00.000Z" } : {}),
@@ -93,7 +93,7 @@ function rememberTemp(id: number, root: string, branch: string, directory: strin
     .run(directory, `ws-${id}`, code, `agent-${id}`, `agent-${id}`, id);
   appendEvent(id, "temp_workspace", null, null, "test", { name: code, root, base: "main" });
   appendEvent(id, "worktree_created", null, null, "test", { directory, branch, base: "main", root, temp: true });
-  getDb().prepare("INSERT INTO runs (task_id, agent_id, role, provider, model, family, started_at) VALUES (?, ?, 'executor', 'cursor', 'grok-4.7', 'xai', ?)").run(id, `agent-${id}`, new Date().toISOString());
+  getDb().prepare("INSERT INTO runs (task_id, agent_id, role, provider, model, family, started_at) VALUES (?, ?, 'executor', 'alternate', 'grok-4.7', 'xai', ?)").run(id, `agent-${id}`, new Date().toISOString());
   writeAgent(`agent-${id}`, directory, archived);
 }
 

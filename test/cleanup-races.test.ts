@@ -3,6 +3,7 @@ import { zhCN } from "./helpers/locale";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { after, beforeEach, describe, it } from "node:test";
 import { agentIndexInvalidations, resetAgentIndexForTests } from "../server/agent-index";
 import { enqueueCleanups, flushCleanups, installCleanup, type CleanupOps } from "../server/cleanup";
@@ -11,7 +12,7 @@ import { round } from "../server/perf";
 import { snapshotFromRecord } from "../server/paseo";
 import { createTask } from "../server/store";
 
-const dir = mkdtempSync(join("/tmp", "cleanup-races-"));
+const dir = mkdtempSync(join(tmpdir(), "cleanup-races-"));
 const agents = join(dir, "agents");
 mkdirSync(agents, { recursive: true });
 const previous = { data: process.env.KANBAN_DATA_DIR, agents: process.env.KANBAN_AGENTS_DIR, ttl: process.env.KANBAN_AGENT_INDEX_TTL_MS };

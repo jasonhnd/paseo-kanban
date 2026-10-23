@@ -8,7 +8,8 @@ import { after, describe, it } from "node:test";
 import { DEFAULT_CONCURRENCY, type KanbanConfig } from "../server/config";
 import { closeDb } from "../server/db";
 import { EARLY_BIND_DELAYS_MS, EARLY_BIND_STEADY_MS, startEarlyBind } from "../server/early-bind";
-import { bindScheduler, resetSchedulerForTests } from "../server/loop";
+import { resetSchedulerForTests } from "../server/loop";
+import { bindScheduler } from "./helpers/compat-loop";
 import type { PoolSnapshot } from "../server/pools";
 import type { Profile } from "../server/profiles";
 import { createTask, getTask } from "../server/store";
@@ -64,7 +65,7 @@ describe("early bind retry", () => {
     mkdirSync(root, { recursive: true });
     const task = createTask({ project: "early", title: "Wait for binding", role: "executor", workspacePath: root });
     const profiles: Profile[] = [
-      { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" },
+      { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "grok", model: "grok-4.7", pool: "x-ultra" },
       { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" },
     ];
     const pools: PoolSnapshot = {
@@ -80,7 +81,7 @@ describe("early bind retry", () => {
       supervisors: {},
       concurrency: {
         global: DEFAULT_CONCURRENCY.global,
-        pools: { ...DEFAULT_CONCURRENCY.pools, cursor: 5, "claude-max": 5 },
+        pools: { ...DEFAULT_CONCURRENCY.pools, "x-ultra": 5, "claude-max": 5 },
         roles: { ...DEFAULT_CONCURRENCY.roles },
       },
     };

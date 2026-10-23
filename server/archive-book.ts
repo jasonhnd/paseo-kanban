@@ -75,6 +75,8 @@ export interface CleanupRecord {
   resolved?: boolean;
   /** Read-only periodic absence confirmation, linked to the original failure without rewriting it. */
   reconciled?: boolean;
+  /** The archive request failed, but a later status read confirmed it completed. */
+  via?: "reconciled";
   failureRowId?: number;
 }
 

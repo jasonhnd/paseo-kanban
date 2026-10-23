@@ -185,6 +185,7 @@ const listUsageFixture = JSON.parse(`{
 }`) as { providers: { providerId: string; windows: ProviderUsageWindow[] }[] };
 const fixtureContext: WindowContext = {
   now: Date.parse("2026-04-08T11:30:00.000Z"),
+  providerCollectedAt: "2026-04-08T11:30:00.000Z",
   windowsBy: new Map(listUsageFixture.providers.map((p) => [p.providerId, p.windows])),
   balances: new Map(), cursorReading: null, sumUsd: () => 0,
 };

@@ -1,3 +1,4 @@
+import { privateTestEnvironment } from "../test/helpers/test-environment.mjs";
 import { accessSync, constants, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { sharedNpmCache } from "./shared-runtime.mjs";
@@ -49,7 +50,9 @@ export function isolatedEnvironment(directory, { release = false, voice = false,
     if (sourceEnv[key]?.trim()) env[key] = sourceEnv[key];
   }
   if (release && sourceEnv.FLEET_PRIVATE_DENYLIST?.trim()) env.FLEET_PRIVATE_DENYLIST = sourceEnv.FLEET_PRIVATE_DENYLIST;
-  return env;
+  const runtime = { ...privateTestEnvironment(directory, { ...env, HOME: undefined, KANBAN_TEST_PROTECTED_HOMES: sourceEnv.KANBAN_TEST_PROTECTED_HOMES }), ...env };
+  for (const key of ["ROLES_STATE_DIR", "AFC_DATA_DIR", "AFC_LEGACY_DATA_DIR"]) delete runtime[key];
+  return runtime;
 }
 
 const PROVIDERS = ["claude", "codex", "copilot", "opencode", "pi", "omp"];

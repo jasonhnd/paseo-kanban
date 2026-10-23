@@ -231,6 +231,7 @@ it("cached getDb performs no realpath I/O; closeDb and installation changes inva
   // Exercise the production hot path against this temporary simulated installation.
   // The test-only isolation guard intentionally resolves paths on every test access.
   delete process.env.NODE_TEST_CONTEXT;
+  delete process.env.KANBAN_TEST_RUN;
   delete process.env.KANBAN_TEST_TMP;
   process.env.TMPDIR = root.replace(/[/\\]kanban-test-\d+-.*$/, "");
   const db = getDb();

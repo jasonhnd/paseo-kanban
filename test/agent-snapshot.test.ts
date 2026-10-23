@@ -17,7 +17,7 @@ const agentic = join(dir, "agentic-root");
 const AGENT_COUNT = 120;
 process.env.KANBAN_DATA_DIR = join(dir, "data");
 process.env.KANBAN_AGENTS_DIR = agents;
-process.env.KANBAN_AGENTIC_ROOT = agentic;
+process.env.KANBAN_PROJECTS_ROOT = agentic;
 process.env.KANBAN_WORKTREES_ROOT = join(dir, "trees");
 process.env.KANBAN_AGENT_INDEX_TTL_MS = "60000";
 

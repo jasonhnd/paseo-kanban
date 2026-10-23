@@ -47,7 +47,7 @@ export function checkFiles(files, manifest, compiled = loadRules(), requiredComm
     if (!ALLOWED.test(file) || file.split("/").some(part => ["..", ".", ""].includes(part))) problems.push(`${file}: not in the whitelist`);
     else if (BLOCKED.test(file)) problems.push(`${file}: tests, fixtures and source maps are never published`);
     else if (file.endsWith(".json") && !JSON_ALLOWED.test(file)) problems.push(`${file}: JSON data files are never published (only *.example.json and locales/)`);
-    if (isForbiddenPath(file, compiled)) problems.push(`${file}: forbidden by scripts/private-scan.rules.json`);
+    if (isForbiddenPath(file, compiled)) problems.push(`${file}: forbidden by shared/privacy-rules.mjs`);
   }
   for (const file of [...REQUIRED, ...requiredCommands]) if (!present.has(file)) problems.push(`${file}: missing from the package`);
   const referenced = [manifest?.icon, ...(Array.isArray(manifest?.media) ? manifest.media : [])].filter((value) => typeof value === "string");

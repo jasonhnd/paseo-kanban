@@ -7,7 +7,8 @@ import { join } from "node:path";
 import { after, beforeEach, describe, it } from "node:test";
 import { DEFAULT_CONCURRENCY, type KanbanConfig } from "../server/config";
 import { closeDb } from "../server/db";
-import { bindScheduler, resetSchedulerForTests } from "../server/loop";
+import { resetSchedulerForTests } from "../server/loop";
+import { bindScheduler } from "./helpers/compat-loop";
 import type { PoolSnapshot } from "../server/pools";
 import type { Profile } from "../server/profiles";
 import { runTick } from "./helpers/compat-schedule";
@@ -19,7 +20,7 @@ const dir = mkdtempSync(join(tmp, "loop-"));
 process.env.KANBAN_DATA_DIR = dir;
 
 const profiles: Profile[] = [
-  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" },
+  { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "grok", model: "grok-4.7", pool: "x-ultra" },
   { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" },
 ];
 const pools: PoolSnapshot = {

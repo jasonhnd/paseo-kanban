@@ -68,7 +68,7 @@ it("recognizes the real dispatcher run and launch event without an added client 
   process.env.KANBAN_POOL_STATUS = join(dir, "absent-pools.json");
   let token = "";
   await startTask(own.id, { create: async input => { token = input.env?.KANBAN_TOKEN ?? ""; return { id: "dispatched-worker" }; }, send: async () => {} }, "scheduler", {
-    profiles: [{ id: "batch-fixture", name: "Batch fixture", role: "batch", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" }],
+    profiles: [{ id: "batch-fixture", name: "Batch fixture", role: "batch", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" }],
     snapshot: { state: "fresh", generatedAt: new Date().toISOString(), message: "Fixture", dispatchable: () => true,
       entry: () => ({ dispatchable: true, deprioritize: false, prefer: false, resetsAt: null, reason: null, onlyRoles: null }) },
   });
@@ -141,7 +141,7 @@ for (const status of ["done", "archived"]) {
     const agentId = `retired-${target.id}`;
     appendEvent(target.id, "agent_opened", null, null, "scheduler", { agentId });
     const path = join(dir, "agents", "bucket", `${agentId}.json`);
-    writeFileSync(path, JSON.stringify({ id: agentId, provider: "cursor", cwd: join(dir, "missing"), title: "Retired fixture", archivedAt: "2026-09-01T00:00:00Z", lastStatus: "closed", labels: { kanban: "1", kanban_task: String(target.id) } }));
+    writeFileSync(path, JSON.stringify({ id: agentId, provider: "alternate", cwd: join(dir, "missing"), title: "Retired fixture", archivedAt: "2026-09-01T00:00:00Z", lastStatus: "closed", labels: { kanban: "1", kanban_task: String(target.id) } }));
     const deleted: string[] = [];
     setMissingCwdHooks({ deleteAgent: async id => { deleted.push(id); rmSync(path); } });
     const before = getTask(target.id);
@@ -159,7 +159,7 @@ for (const change of ["source-completed", "source-archived", "target-reopened", 
     const agentId = `retired-${target.id}`;
     const path = join(dir, "agents", "bucket", `${agentId}.json`);
     appendEvent(target.id, "agent_opened", null, null, "scheduler", { agentId });
-    writeFileSync(path, JSON.stringify({ id: agentId, provider: "cursor", cwd: join(dir, "gone"), title: "Retired fixture", archivedAt: "2026-09-01T00:00:00Z", labels: { kanban: "1", kanban_task: String(target.id) } }));
+    writeFileSync(path, JSON.stringify({ id: agentId, provider: "alternate", cwd: join(dir, "gone"), title: "Retired fixture", archivedAt: "2026-09-01T00:00:00Z", labels: { kanban: "1", kanban_task: String(target.id) } }));
     const deleted: string[] = [];
     setMissingCwdHooks({ deleteAgent: async id => { deleted.push(id); } });
     const readFile = fs.promises.readFile;
@@ -188,7 +188,7 @@ it("keeps an agent also referenced by an unfinished card under the existing purg
   const agentId = "shared-retired-agent";
   appendEvent(target.id, "agent_opened", null, null, "scheduler", { agentId });
   getDb().prepare("UPDATE tasks SET agent_id = ? WHERE id = ?").run(agentId, active.id);
-  writeFileSync(join(dir, "agents", "bucket", `${agentId}.json`), JSON.stringify({ id: agentId, provider: "cursor", cwd: join(dir, "gone"), title: "Shared fixture", archivedAt: "2026-09-01T00:00:00Z", labels: { kanban: "1", kanban_task: String(target.id) } }));
+  writeFileSync(join(dir, "agents", "bucket", `${agentId}.json`), JSON.stringify({ id: agentId, provider: "alternate", cwd: join(dir, "gone"), title: "Shared fixture", archivedAt: "2026-09-01T00:00:00Z", labels: { kanban: "1", kanban_task: String(target.id) } }));
   const deleted: string[] = []; setMissingCwdHooks({ deleteAgent: async id => { deleted.push(id); } });
   const result = await runKanban(["purge-agents", String(target.id)], own.env) as { deleted: string[] };
   assert.deepEqual(result.deleted, []); assert.deepEqual(deleted, []);
@@ -201,7 +201,7 @@ it("does not bypass unfinished references when an earlier purge already wrote it
   appendEvent(target.id, "agent_opened", null, null, "scheduler", { agentId });
   appendEvent(target.id, "agent_purged", null, null, "kanban", { agentId });
   getDb().prepare("UPDATE tasks SET agent_id = ? WHERE id = ?").run(agentId, active.id);
-  writeFileSync(join(dir, "agents", "bucket", `${agentId}.json`), JSON.stringify({ id: agentId, provider: "cursor", cwd: join(dir, "gone"), title: "Partial fixture", archivedAt: "2026-09-01T00:00:00Z", labels: { kanban: "1", kanban_task: String(target.id) } }));
+  writeFileSync(join(dir, "agents", "bucket", `${agentId}.json`), JSON.stringify({ id: agentId, provider: "alternate", cwd: join(dir, "gone"), title: "Partial fixture", archivedAt: "2026-09-01T00:00:00Z", labels: { kanban: "1", kanban_task: String(target.id) } }));
   const deleted: string[] = []; setMissingCwdHooks({ deleteAgent: async id => { deleted.push(id); } });
   await forbidden(runKanban(["purge-agents", String(target.id)], own.env));
   assert.deepEqual(deleted, []); assert.equal(getTask(active.id).status, "running");

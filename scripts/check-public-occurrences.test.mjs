@@ -14,14 +14,16 @@ function fixture(action) {
       cpSync(new URL(name, import.meta.url), join(root, "scripts", name));
     }
     mkdirSync(join(root, "shared"));
-    cpSync(new URL("../shared/privacy-denylist.mjs", import.meta.url), join(root, "shared/privacy-denylist.mjs"));
+    for (const name of ["privacy-denylist.mjs"]) cpSync(new URL(`../shared/${name}`, import.meta.url), join(root, "shared", name));
     const line = 'export const provider = "PublicVendor";';
     const match = [...line.matchAll(/PublicVendor/g)][0];
     writeFileSync(join(root, "public.ts"), line + "\n");
-    writeFileSync(join(root, "scripts/private-scan.rules.json"), JSON.stringify({
+    mkdirSync(join(root, "server"), { recursive: true });
+    cpSync(new URL("../server/privacy-scanner.mjs", import.meta.url), join(root, "server/privacy-scanner.mjs"));
+    writeFileSync(join(root, "shared/privacy-rules.mjs"), `export default ${JSON.stringify({
       publicOccurrenceLiterals: ["PublicVendor"],
       publicOccurrenceFingerprints: [occurrenceFingerprint("public.ts", line, match, "PublicVendor")],
-    }));
+    })};`);
     execFileSync("git", ["init", "-q", root]);
     const check = () => spawnSync(process.execPath, ["scripts/check-public-occurrences.mjs"], {
       cwd: root, encoding: "utf8", env: {...process.env, FLEET_PRIVATE_DENYLIST: join(root, "missing-private-list")},
@@ -56,9 +58,38 @@ test("freshness keeps an approval whose line was edited after commit while histo
 }));
 test("freshness refuses an approval that matches neither the working tree nor reachable history", () => fixture((root, check) => {
   commitAll(root);
-  const rules = join(root, "scripts/private-scan.rules.json");
-  const json = JSON.parse(readFileSync(rules, "utf8"));
+  const rules = join(root, "shared/privacy-rules.mjs");
+  const json = JSON.parse(readFileSync(rules, "utf8").replace(/^export default /, "").replace(/;$/, ""));
   json.publicOccurrenceFingerprints.push(occurrenceFingerprint("public.ts", "// PublicVendor", { index: 3, 0: "PublicVendor" }, "PublicVendor"));
-  writeFileSync(rules, JSON.stringify(json));
+  writeFileSync(rules, `export default ${JSON.stringify(json)};`);
   assert.equal(check().status, 1);
+}));
+
+function reviewedSpan(root) {
+  const path = "public.ts";
+  const line = readFileSync(join(root, path), "utf8").trimEnd();
+  const match = [...line.matchAll(/PublicVendor/g)][0];
+  const rulesPath = join(root, "shared/privacy-rules.mjs");
+  writeFileSync(rulesPath, `export default ${JSON.stringify({
+    ignorePaths: ["^public\\.ts$"],
+    reviewedOccurrences: [{ path, rule: "private", index: match.index, length: match[0].length,
+      fingerprint: occurrenceFingerprint(path, line, match, "private") }],
+  })};`);
+}
+
+test("freshness checks reviewed private spans in ignored files without reading the denylist", () => fixture((root, check) => {
+  reviewedSpan(root);
+  assert.equal(check().status, 0);
+  writeFileSync(join(root, "public.ts"), readFileSync(join(root, "public.ts"), "utf8").trimEnd() + " // edited\n");
+  assert.equal(check().status, 1);
+}));
+
+test("reviewed span freshness retains reachable history but rejects a renamed-only approval", () => fixture((root, check) => {
+  reviewedSpan(root);
+  renameSync(join(root, "public.ts"), join(root, "renamed.ts"));
+  assert.equal(check().status, 1);
+  renameSync(join(root, "renamed.ts"), join(root, "public.ts"));
+  commitAll(root);
+  rmSync(join(root, "public.ts"));
+  assert.equal(check().status, 0);
 }));

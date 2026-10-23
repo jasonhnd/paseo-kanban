@@ -73,7 +73,9 @@ afterEach(() => assert.equal(currentWriteSource(), null, "no call provenance may
 
 function send(name: string, args: Record<string, unknown>, token: string, claimedThread?: string): Promise<{ result: { isError: boolean } }> {
   return new Promise((resolveReply, reject) => {
-    const req = request({ host: "127.0.0.1", port: mcp.port, method: "POST", headers: {
+    // Synchronous CLI children can outlive idle keep-alive timers in this same process.
+    // Give each assertion a fresh socket rather than reusing an expired fixture connection.
+    const req = request({ agent: false, host: "127.0.0.1", port: mcp.port, method: "POST", headers: {
       authorization: `Bearer ${token}`,
       // These attacker-controlled fields must never become trusted or audited provenance.
       ...(claimedThread ? { "x-paseo-thread-id": claimedThread, "mcp-session-id": claimedThread } : {}),

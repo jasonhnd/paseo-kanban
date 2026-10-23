@@ -20,7 +20,7 @@ process.env.KANBAN_DATA_DIR = dir;
 process.env.KANBAN_AGENTS_DIR = join(dir, "agents");
 mkdirSync(process.env.KANBAN_AGENTS_DIR, { recursive: true });
 
-const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" };
+const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" };
 const reviewer: Profile = { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" };
 
 function room(name: string): string {

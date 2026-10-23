@@ -7,7 +7,7 @@ export const PROTOCOL_VERSION = "kanban/v1";
 
 // The texts live in server/protocol/<language>/*.md. Notes kept with them:
 // - progress-note: the leader is woken by the board, so ending its turn to wait is normal for it.
-// - no-wait-rule: long commands register wait-bg and end the turn; only the board polls the marker.
+// - no-wait-rule: long commands register wait-bg and end the turn; only the board checks the marker, process identity and deadline.
 // - tmp-home: dispatch sets TMPDIR and KANBAN_TMP to the project’s .kanban-work/<card>/; the cleanup deletes that directory once the card is done or archived.
 // - db-readonly: open the production database in place with ro+immutable, never copy the whole database.
 
@@ -31,11 +31,11 @@ function workerParts(language?: Language): Record<string, string> {
   };
 }
 
-export function protocolFor(role: string, options?: { worktree?: boolean; language?: Language }): string {
+export function protocolFor(role: string, options?: { worktree?: boolean; language?: Language; qa?: boolean }): string {
   const language = options?.language;
   const fallback = cliFallback(language);
   const parts = workerParts(language);
-  if (role === "reviewer") return protocolText("reviewer", { ...parts, cliFallback: fallback }, language);
+  if (role === "reviewer") return protocolText(options?.qa ? "qa" : "reviewer", { ...parts, cliFallback: fallback }, language);
   if (role === "supervisor") {
     return protocolText("supervisor", { leaderActionNote: leaderActionNote(language), progressNote: protocolText("progress-note", undefined, language), longTaskWait: protocolText("long-task-wait", undefined, language), modelDepth: parts.modelDepth!, cliFallback: fallback }, language);
   }

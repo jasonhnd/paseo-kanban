@@ -27,7 +27,7 @@ process.env.KANBAN_DATA_DIR = dir;
 mkdirSync(dir, { recursive: true });
 saveConfig({ ...loadConfig(), supervisorAgentId: "kanban-leader", supervisors: { round2: "project-leader" } });
 
-const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "grok-4.7", pool: "cursor" };
+const executor: Profile = { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "grok-4.7", pool: "alternate" };
 
 function room(name: string): string {
   const path = join(dir, name);
@@ -307,7 +307,7 @@ describe("round-2 leader hold", () => {
       matrix: { state: "missing" },
       config: {
         ...loadConfig(),
-        concurrency: { global: 20, roles: { executor: 20, reviewer: 20 }, pools: { cursor: 20 } },
+        concurrency: { global: 20, roles: { executor: 20, reviewer: 20 }, pools: { alternate: 20 } },
       },
       launcher: {
         async create() {
@@ -349,7 +349,7 @@ describe("round-2 leader hold", () => {
       matrix: { state: "missing" },
       config: {
         ...loadConfig(),
-        concurrency: { global: 20, roles: { executor: 20, reviewer: 20 }, pools: { cursor: 20 } },
+        concurrency: { global: 20, roles: { executor: 20, reviewer: 20 }, pools: { alternate: 20 } },
       },
       launcher: {
         async create(options) {

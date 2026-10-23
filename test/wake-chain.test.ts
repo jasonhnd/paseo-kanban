@@ -237,7 +237,7 @@ describe("three-layer wake", () => {
     const saved = config("kanban-boss", { holdproj: "proj-boss" });
     setAgentAliveCheck(() => true);
     const profiles: Profile[] = [
-      { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "g", pool: "cursor" },
+      { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "g", pool: "alternate" },
       { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" },
     ];
     const pools: PoolSnapshot = {
@@ -288,7 +288,7 @@ describe("three-layer wake", () => {
     const saved = config("kanban-boss", { reload: "proj-boss" });
     setAgentAliveCheck(() => true);
     const profiles: Profile[] = [
-      { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "cursor", model: "g", pool: "cursor" },
+      { id: "ex", name: zhCN("labels.role.executor"), role: "executor", family: "xai", provider: "alternate", model: "g", pool: "alternate" },
       { id: "rv", name: zhCN("labels.role.reviewer"), role: "reviewer", family: "anthropic", provider: "claude", model: "sonnet", pool: "claude-max" },
     ];
     const pools: PoolSnapshot = {

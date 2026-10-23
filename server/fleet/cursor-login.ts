@@ -1,3 +1,4 @@
+import { X_ULTRA } from "../../shared/fleet/x-ultra";
 /// <reference types="node" />
 // Run non-interactive `cursor-agent status` and `--version` in this process's own environment.
 // Every 10 minutes while logged in or unknown; every 1 minute while logged out.
@@ -217,8 +218,9 @@ async function runOnce(statePath = CURSOR_LOGIN_STATE): Promise<void> {
     runCapture(CURSOR_STATUS_ARGS, env),
     runCapture(CURSOR_VERSION_ARGS, env),
   ]);
-  const plan = (await readPlanSources()).find((p) => baseAdapterOf(p) === CURSOR_API) as { dispatch?: unknown } | undefined;
-  const poolDispatch = plan?.dispatch !== false;
+  const plans = await readPlanSources();
+  const plan = plans.find((p) => baseAdapterOf(p) === CURSOR_API) as { dispatch?: unknown } | undefined;
+  const poolDispatch = !plans.some(p => p.id === X_ULTRA) && plan?.dispatch !== false;
   await publishCursorLoginTick(prev, sampleFromCommands(status, version), Date.now(), {
     writeState: (state) => writeJson(statePath, state),
     refreshPools: requestPoolRefreshNow,

@@ -1,3 +1,4 @@
+import { canonicalPoolId } from "../../shared/fleet/x-ultra";
 /// <reference types="node" />
 import { providerBanned } from "../../shared/fleet/provider-policy";
 import { readBannedProviders } from "./adapters/config";
@@ -64,7 +65,7 @@ export async function readAllProfiles(): Promise<Profile[]> {
   const cfg = await readJson<Json>(CONFIG, {});
   const raw = cfg?.daemon?.agentProfiles;
   const profiles: Profile[] = Array.isArray(raw) ? raw : [];
-  return profiles.filter((p) => p && typeof p === "object" && typeof p.name === "string" && !providerBanned(p, readBannedProviders()));
+  return profiles.filter((p) => p && typeof p === "object" && typeof p.name === "string" && !providerBanned(p, readBannedProviders())).map(p => ({ ...p, ...(p.pool ? { pool: canonicalPoolId(p.pool)! } : {}) }));
 }
 
 export function nameToRoleKey(profiles: Profile[]): Map<string, string> {
