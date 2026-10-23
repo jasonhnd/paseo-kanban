@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { after, afterEach, describe, it } from "node:test";
 import { createTask } from "../server/task-create";
 import { closeDb } from "../server/db";
+import { capacityHoldReason, refreshCapacityGuard, resetCapacityForTests, setCapacityProbeForTests } from "../server/capacity-guard";
+import { loadConfig, saveConfig } from "../server/config";
 import { readExampleConfig } from "../server/config-example";
 import { getLanguage, setLanguage, t } from "../shared/i18n";
 import { newProjectSettings, type SettingsDocument } from "../shared/settings";
@@ -42,6 +44,7 @@ function revision(dir: string): string {
 const none = async () => [];
 
 afterEach(() => {
+  resetCapacityForTests();
   closeDb();
   if (savedLanguage === undefined) delete process.env.KANBAN_LANGUAGE;
   else process.env.KANBAN_LANGUAGE = savedLanguage;
@@ -84,6 +87,33 @@ describe("settings config", () => {
     const again = bytes(dir);
     await readSettings(none);
     assert.equal(bytes(dir), again);
+  });
+
+  it("seeds automatic capacity on a 20 GiB disk and keeps explicit reserves as overrides", async () => {
+    const dir = freshDir();
+    resetCapacityForTests();
+    const gib = 1024 ** 3;
+    setCapacityProbeForTests({ roots: [dir], du: () => 0, statfs: () => ({ blocks: 20 * gib, bavail: 6 * gib, bsize: 1 }) });
+    await readSettings(none); // Real first-run example -> createConfigIfFresh -> persisted config.
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.equal(capacityHoldReason(), null, "the example seed must use the automatic 5 GiB reserve");
+    assert.equal(loadConfig().capacity?.minFreeGiB, undefined);
+
+    const config = loadConfig();
+    config.capacity = { ...config.capacity, minFreeGiB: 7 };
+    saveConfig(config);
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.match(capacityHoldReason() ?? "", /7 GiB/);
+
+    // Older examples wrote 50. Preserve it as an override until an operator removes the key.
+    config.capacity.minFreeGiB = 50;
+    saveConfig(config);
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.match(capacityHoldReason() ?? "", /50 GiB/);
+    delete config.capacity.minFreeGiB;
+    saveConfig(config);
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.equal(capacityHoldReason(), null);
   });
 
   it("does not touch a config that is already there", async () => {

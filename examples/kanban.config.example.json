@@ -39,8 +39,7 @@
     "deletePollIntervalSec": 5
   },
   "capacity": {
-    "maxWorkGiB": 10,
-    "minFreeGiB": 50
+    "maxWorkGiB": 10
   },
   "projects": {}
 }

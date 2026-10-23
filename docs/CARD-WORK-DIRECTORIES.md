@@ -116,3 +116,5 @@ rewritten. Legacy system-temp directories without prepared-path events are not
 automatically imported into the new cleanup roots. Inventory them separately
 before any authorized cleanup. No production migration or release is performed
 by this source change.
+
+Fresh installations seed only `capacity.maxWorkGiB` from the example, leaving the disk reserve automatic. Existing configurations with `capacity.minFreeGiB: 50` (including values seeded by older examples) keep a fixed 50 GiB override. On a 20 GiB disk, remove that key in a separately authorized configuration change to use the automatic 5 GiB reserve. Upgrading code does not remove existing overrides.
