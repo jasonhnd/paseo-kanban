@@ -201,3 +201,5 @@ npm run shared:check
 插件回归默认并发运行 4 个测试文件；可用 `KANBAN_TEST_CONCURRENCY`（1–64）覆盖文件并发。全部断言和超时保留，普通回归结束后另起隔离性能阶段。测试运行器使用私有 HOME、PASEO_HOME 与数据根，并拒绝测试模式访问真实个人状态目录。
 
 cloudRunner 与 localMirror 默认都关闭，没有任何项目预设开启；须逐项目显式配置，并给云卡添加 cloud 标签。
+
+卡临时目录默认容量门槛：工作量超过 10 GiB，或剩余空间低于 min(50 GiB, max(3 GiB, 磁盘容量的 25%)) 时，暂停全新卡首次开工。正数 `capacity.minFreeGiB` 可覆盖自动保留量；审查、返工和恢复继续。详见[卡临时目录](CARD-WORK-DIRECTORIES.md)。
