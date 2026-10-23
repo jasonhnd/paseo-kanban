@@ -38,7 +38,7 @@ rc.22 adds existing-leader MCP credentials, current-installation compatibility e
 
 The combined plugin has one package/version/CHANGELOG and runtime id `paseo-kanban`. This Git-only candidate uses four-component package metadata `0.12.0.1`, matching Paseo 0.12.0 plus a plugin revision. Edit package and lock directly; do not use npm version. The plugin manifest has no version field. Contract/schema versions remain separate.
 
-A Git branch is mutable. This RC plan requires an immutable tag and GitHub prerelease, aligned with package/lock/CHANGELOG. Save the full reviewed commit and tree as well as the tag object/metadata; review and scan annotated tag identity/content. Never move, overwrite or reuse a tag, even to correct a release. Local `v0.1.0-rc.1` already names `22958ff54c955c1a90683f786d3ebb8b9ae88470` and is not moved. The next unused number chosen for this candidate is `0.12.0.1`. Confirm rc.22 is unused both locally and remotely before creating its annotated tag; frozen rc.1 through rc.20 objects remain unchanged. Public prerelease rc.20 was published on 2026-10-18. The publishing owner must check the remote refs and GitHub Release record again. Preserve c106 as the previous verified public code baseline, not a previous versioned release.
+A Git branch is mutable. Publish only an immutable v0.12.0.1 tag and GitHub prerelease after independent review and authorization. Confirm v0.12.0.1 is unused locally and remotely; never move or overwrite an existing tag. The rollback baseline is public v0.1.0-rc.23 at `c6e740bedfd64691bd20270244efb1f803109b0f`. Preserve the reviewed full commit/tree and annotated tag identity/content.
 
 Prepared RC notes may use a version heading marked **pending publication**; never add a release date or claim an available tag until verified. Notes must state host range, data/contract changes, existing dependency alerts and real test limits. Official 0.11.2 Git acquisition uses revision/`--ref`; its manifest schema has no consumed plugin version field. Keep package.json, package-lock.json's top level and root package version aligned; do not invent a manifest field. Do not turn source-only checks into app/provider certification.
 
@@ -58,11 +58,11 @@ paseo plugin update paseo-kanban --ref v0.12.0.1 --json
 paseo plugin ls paseo-kanban --json
 ```
 
-Use separate fresh isolated homes/caches for cold tag and full-RC-SHA installs. On another fresh host install c106 first, then preview/update to the RC; assert preview leaves revision/path/settings/data unchanged, update matches exact RC revision/version, all eight installed bundles/Node commands work, and the data root/settings/RPC remain valid. Record the actual UI separately. Test code downgrade to the prior public c106 baseline, then repeat the explicit RC upgrade:
+Use separate fresh isolated homes for tag and full-SHA checks. Start the upgrade rehearsal from public rc.23, preview/apply the candidate, explicitly reload, require its exact revision and running status, preserve the four configurations and cards/events, then roll back to rc.23 and reload. Real desktop and authenticated-provider checks remain separate.
 
 ```sh
-paseo plugin update paseo-kanban --check --ref c106efb88a659931d01f40a236001823473561a8 --json
-paseo plugin update paseo-kanban --ref c106efb88a659931d01f40a236001823473561a8 --json
+paseo plugin update paseo-kanban --check --ref v0.1.0-rc.23 --json
+paseo plugin update paseo-kanban --ref v0.1.0-rc.23 --json
 paseo plugin reload paseo-kanban --json
 paseo plugin ls paseo-kanban --json
 ```
