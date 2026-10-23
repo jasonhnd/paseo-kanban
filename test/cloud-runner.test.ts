@@ -9,6 +9,7 @@ import { after, beforeEach, test } from "node:test";
 import { processArguments } from "./helpers/process-arguments";
 import { resetWakeSender, setWakeSender } from "../server/bus";
 import { forgetBoardWakesInMemoryForTests, noteTickFailure, noteTickSuccess, resetAgentAliveCheck, setAgentAliveCheck } from "../server/wake";
+import { capacityHoldReason, refreshCapacityGuard, resetCapacityForTests, setCapacityProbeForTests } from "../server/capacity-guard";
 import { hasBoardWakeMark } from "../server/board-wake-marks";
 import { configPath } from "../server/config-file";
 import { closeDb, getDb } from "../server/db";
@@ -79,6 +80,8 @@ function workspaceFreeTask() {
 
 beforeEach(async () => {
   await stopCloudRuns(); closeDb(); resetWakeSender(); resetAgentAliveCheck();
+  resetCapacityForTests();
+  setCapacityProbeForTests({ statfs: () => ({ blocks: 1024 ** 4, bavail: 100 * 1024 ** 3, bsize: 1 }) });
   setLanguage("en");
   dir = mkdtempSync(join(root, "case-"));
   repo = join(dir, "paseo-clear-chat"); remote = join(dir, "remote.git");
@@ -1632,4 +1635,27 @@ test("bun optional existing directory rejects an npm-only lock before the agent"
   assert.equal(getTask(card.id).status, "blocked");
   assert.equal(log().some(x => x.command === "codex"), false);
   assert.equal(log().some(x => x.command === "bun" && x.args[0] === "install"), false);
+});
+
+for (const source of ["publicGithub", "localMirror"] as const) test(`20 GiB fake cloud board delivers ${source} to independent review`, async () => {
+  const card = source === "localMirror" ? localTask() : task();
+  const gib = 1024 ** 3;
+  // This is the board process's filesystem, including when that board runs on a small cloud VM.
+  // Provider admission is a separate fake CLI boundary; no real machine or remote is contacted.
+  setCapacityProbeForTests({ du: () => gib, statfs: () => ({ blocks: 20 * gib, bavail: 6 * gib, bsize: 1 }) });
+  await refreshCapacityGuard({ config: loadConfig(), notify: false });
+  assert.equal(capacityHoldReason(), null);
+  await start(card.id); await settled();
+  const done = getTask(card.id);
+  assert.equal(done.status, "in_review", done.blocked_reason ?? done.hold_reason ?? "");
+  assert.equal(done.hold_reason, null);
+  assert.equal(done.fail_count, 0);
+  assert.equal(getDb().prepare("SELECT id FROM events WHERE task_id = ? AND kind = 'cloud_capacity_wait'").get(card.id), undefined);
+  assert.ok(log().some(x => x.command === "npm" && x.args[0] === "test"));
+  assert.ok(log().some(x => x.command === "instabox" && x.args[0] === "rm"));
+  const target = resolveReviewTarget(done, true); assert.ok(target?.ok);
+  assert.equal(reviewFamilyBlock(reviewer, target), null);
+  if (source === "localMirror") { assert.ok(localCloudReceipt(card.id)); noGithub(); }
+  else assert.match(done.handoff_json!, /https:\/\/github.com\/example\/paseo-clear-chat\/pull\/1/);
+  console.log(JSON.stringify({ scenario: "20GiB-cloud-board", source, totalGiB: 20, freeGiB: 6, reserveGiB: 5, status: done.status, executorModel: codex.model, reviewerModel: reviewer.model, machinesRemaining: machines().length }));
 });

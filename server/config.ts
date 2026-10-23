@@ -218,14 +218,14 @@ export interface KanbanConfig {
   doctor?: DoctorSettings;
   /**
    * Card-work capacity brake. Present only when the file has a `capacity` object.
-   * Non-positive numbers fall back to the defaults (10 GiB of card work, 50 GiB free).
+   * Non-positive numbers fall back to the defaults (10 GiB of card work, adaptive disk reserve).
    */
-  capacity?: { maxWorkGiB: number; minFreeGiB: number };
+  capacity?: { maxWorkGiB?: number; minFreeGiB?: number };
 }
 
 /** Card-work total above this many GiB pauses a new card's first work start. */
 export const DEFAULT_MAX_WORK_GIB = 10;
-/** Disk free below this many GiB pauses a new card's first work start. */
+/** Maximum automatic disk reserve; small disks use max(3 GiB, 25% of capacity). */
 export const DEFAULT_MIN_FREE_GIB = 50;
 
 /** A config file without a `language` field predates the setting: that board has always been in Chinese. */
@@ -297,12 +297,12 @@ function positiveNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-/** Undefined means the file has no capacity key. A present key always stores both limits. */
-function readCapacity(value: unknown): { maxWorkGiB: number; minFreeGiB: number } {
+/** Preserve an absent/invalid reserve as automatic, even in a partial capacity object. */
+function readCapacity(value: unknown): NonNullable<KanbanConfig["capacity"]> {
   const raw = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
     maxWorkGiB: positiveNumber(raw.maxWorkGiB, DEFAULT_MAX_WORK_GIB),
-    minFreeGiB: positiveNumber(raw.minFreeGiB, DEFAULT_MIN_FREE_GIB),
+    ...(positiveNumber(raw.minFreeGiB, 0) > 0 ? { minFreeGiB: positiveNumber(raw.minFreeGiB, 0) } : {}),
   };
 }
 

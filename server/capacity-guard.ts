@@ -30,6 +30,7 @@ export interface CapacityProbe {
   roots?: string[];
   du?: (path: string) => number;
   free?: (path: string) => number;
+  statfs?: (path: string) => { blocks: number; bavail: number; bsize: number };
   fresh?: boolean;
 }
 
@@ -58,6 +59,7 @@ interface Sample {
   at: string;
   workBytes: number;
   freeBytes: number;
+  disks?: Array<{ freeBytes: number; totalBytes: number }>;
   top: TopEntry[];
 }
 
@@ -109,9 +111,12 @@ export function resetCapacityForTests(): void {
   }
 }
 
-export function capacityLimits(config: KanbanConfig = loadConfig()): Limits {
+export function capacityLimits(config: KanbanConfig = loadConfig(), totalBytes?: number): Limits {
   const maxWorkGiB = config.capacity?.maxWorkGiB ?? DEFAULT_MAX_WORK_GIB;
-  const minFreeGiB = config.capacity?.minFreeGiB ?? DEFAULT_MIN_FREE_GIB;
+  const configured = config.capacity?.minFreeGiB;
+  const automatic = totalBytes === undefined ? DEFAULT_MIN_FREE_GIB
+    : Math.min(DEFAULT_MIN_FREE_GIB, Math.max(3, totalBytes / GIB * 0.25));
+  const minFreeGiB = configured !== undefined && Number.isFinite(configured) && configured > 0 ? configured : automatic;
   return { maxWorkGiB, minFreeGiB, maxWorkBytes: maxWorkGiB * GIB, minFreeBytes: minFreeGiB * GIB };
 }
 
@@ -145,12 +150,12 @@ export function capacityFindings(): CapacityFinding[] {
   const state = readState();
   const findings: CapacityFinding[] = [];
   if (state.paused && state.lastGood) {
-    const limits = safeLimits();
+    const { limits, freeBytes } = sampleLimits(state.lastGood);
     const lines = [
       t("capacity.doctor.amounts", {
         work: formatBytes(state.lastGood.workBytes),
         max: formatBytes(limits.maxWorkBytes),
-        free: formatBytes(state.lastGood.freeBytes),
+        free: formatBytes(freeBytes),
         min: formatBytes(limits.minFreeBytes),
       }),
       ...state.lastGood.top.map((entry) => t("capacity.doctor.topLine", {
@@ -195,9 +200,10 @@ export function capacityFindings(): CapacityFinding[] {
 export async function refreshCapacityGuard(input: CapacityRefresh = {}): Promise<void> {
   const now = input.now ?? new Date();
   try {
-    const limits = capacityLimits(input.config ?? loadConfig());
-    const sample = measure(now, limits);
-    const judged = judge(sample.workBytes, sample.freeBytes, limits);
+    const config = input.config ?? loadConfig();
+    const sample = measure(now);
+    const { limits, freeBytes } = sampleLimits(sample, config);
+    const judged = judge(sample.workBytes, freeBytes, limits);
     const prev = readState();
     const next: GuardState = {
       version: 1,
@@ -213,8 +219,8 @@ export async function refreshCapacityGuard(input: CapacityRefresh = {}): Promise
     }
   } catch (err) {
     const prev = readState();
-    const limits = safeLimits(input.config);
-    const judged = prev.lastGood ? judge(prev.lastGood.workBytes, prev.lastGood.freeBytes, limits) : { paused: false, reason: null };
+    const reading = prev.lastGood ? sampleLimits(prev.lastGood, input.config) : null;
+    const judged = prev.lastGood && reading ? judge(prev.lastGood.workBytes, reading.freeBytes, reading.limits) : { paused: false, reason: null };
     const next: GuardState = {
       version: 1,
       paused: judged.paused,
@@ -250,7 +256,7 @@ export function recordCardWorkBytes(taskId: number): void {
   }
 }
 
-function measure(now: Date, _limits: Limits): Sample {
+function measure(now: Date): Sample {
   const nowMs = now.getTime();
   const fresh = probe?.fresh === true;
   const pending = new Map(loadUsage());
@@ -274,17 +280,22 @@ function measure(now: Date, _limits: Limits): Sample {
     }
   }
   const points = present.length > 0 ? present : [existingAncestor(roots[0] ?? dataDir())];
-  let freeBytes = Number.POSITIVE_INFINITY;
-  for (const path of points) {
-    const free = probe?.free ? probe.free(path) : statfsFree(path);
-    if (free < freeBytes) freeBytes = free;
-  }
+  const disks = points.map((path) => {
+    const stat = probe?.statfs ? probe.statfs(path) : statfsSync(path);
+    const totalBytes = Number(stat.blocks) * Number(stat.bsize);
+    const freeBytes = probe?.free ? probe.free(path) : Number(stat.bavail) * Number(stat.bsize);
+    if (!Number.isFinite(totalBytes) || totalBytes <= 0 || !Number.isFinite(freeBytes) || freeBytes < 0) {
+      throw new Error("statfs returned invalid disk space");
+    }
+    return { freeBytes, totalBytes };
+  });
+  const freeBytes = Math.min(...disks.map(disk => disk.freeBytes));
   if (!Number.isFinite(freeBytes)) throw new Error("statfs returned no free space");
   usage = pending;
   usageLoaded = true;
   saveUsage();
   top.sort((a, b) => b.bytes - a.bytes || a.code.localeCompare(b.code));
-  return { at: now.toISOString(), workBytes, freeBytes, top: top.slice(0, 5) };
+  return { at: now.toISOString(), workBytes, freeBytes, disks, top: top.slice(0, 5) };
 }
 
 function judge(workBytes: number, freeBytes: number, limits: Limits): { paused: boolean; reason: string | null } {
@@ -368,11 +379,16 @@ function takeBytes(path: string, mtimeMs: number, nowMs: number, fresh: boolean,
   return bytes;
 }
 
-function statfsFree(path: string): number {
-  const stat = statfsSync(path);
-  const free = Number(stat.bavail) * Number(stat.bsize);
-  if (!Number.isFinite(free) || free < 0) throw new Error("statfs returned no free space");
-  return free;
+/** Compare each disk with its own reserve; the lowest free count can be on a healthy small disk. */
+function sampleLimits(sample: Sample, config?: KanbanConfig): { limits: Limits; freeBytes: number } {
+  const disks = sample.disks?.length ? sample.disks : [{ freeBytes: sample.freeBytes, totalBytes: undefined }];
+  let worst: { limits: Limits; freeBytes: number } | undefined;
+  for (const disk of disks) {
+    const limits = safeLimits(config, disk.totalBytes);
+    const reading = { limits, freeBytes: disk.freeBytes };
+    if (!worst || reading.freeBytes - limits.minFreeBytes < worst.freeBytes - worst.limits.minFreeBytes) worst = reading;
+  }
+  return worst!;
 }
 
 function childName(path: string): string {
@@ -396,11 +412,11 @@ async function notifyLeader(input: CapacityRefresh, reason: string): Promise<boo
   }
 }
 
-function safeLimits(config?: KanbanConfig): Limits {
+function safeLimits(config?: KanbanConfig, totalBytes?: number): Limits {
   try {
-    return capacityLimits(config ?? loadConfig());
+    return capacityLimits(config ?? loadConfig(), totalBytes);
   } catch {
-    return capacityLimits({ capacity: undefined } as KanbanConfig);
+    return capacityLimits({ capacity: undefined } as KanbanConfig, totalBytes);
   }
 }
 

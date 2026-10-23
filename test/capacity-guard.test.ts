@@ -14,6 +14,7 @@ import { resetWakeSender, setWakeSender } from "../server/bus";
 import { cardMark } from "../server/card-ref";
 import {
   capacityHoldReason,
+  capacityLimits,
   recordCardWorkBytes,
   refreshCapacityGuard,
   resetCapacityForTests,
@@ -92,7 +93,7 @@ function launcher() {
 }
 
 function installProbe(probe: CapacityProbe): void {
-  setCapacityProbeForTests({ roots: [workRoot], fresh: true, ...probe });
+  setCapacityProbeForTests({ roots: [workRoot], fresh: true, statfs: () => ({ blocks: 1024 * GIB, bavail: 100 * GIB, bsize: 1 }), ...probe });
 }
 
 function holdFor(workBytes: number, freeBytes: number): string {
@@ -134,6 +135,59 @@ after(() => {
 });
 
 describe("capacity guard", () => {
+  it("uses a 5 GiB reserve on a 20 GiB disk, including a partial capacity config", async () => {
+    installProbe({ du: () => GIB, statfs: () => ({ blocks: 20 * GIB, bavail: 6 * GIB, bsize: 1 }) });
+    saveConfig(baseConfig({ capacity: { maxWorkGiB: 10 } }));
+    assert.equal(loadConfig().capacity?.minFreeGiB, undefined);
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.equal(capacityHoldReason(), null);
+    const card = createTask({ project: "gauge", title: "small disk", role: "executor", workspacePath: workspace("small-disk") });
+    assert.equal((await tick()).started.includes(card.id), true);
+    installProbe({ du: () => GIB, statfs: () => ({ blocks: 20 * GIB, bavail: 4 * GIB, bsize: 1 }) });
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.match(capacityHoldReason() ?? "", new RegExp(formatBytes(5 * GIB)));
+  });
+
+  it("retains the 50 GiB large-disk reserve and honors explicit small-disk overrides", async () => {
+    assert.equal(capacityLimits(loadConfig(), 200 * GIB).minFreeGiB, 50);
+    assert.equal(capacityLimits(loadConfig(), 100 * GIB).minFreeGiB, 25);
+    installProbe({ du: () => GIB, statfs: () => ({ blocks: 1024 * GIB, bavail: 49 * GIB, bsize: 1 }) });
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.match(capacityHoldReason() ?? "", new RegExp(formatBytes(50 * GIB)));
+    installProbe({ du: () => GIB, statfs: () => ({ blocks: 20 * GIB, bavail: 6 * GIB, bsize: 1 }) });
+    saveConfig(baseConfig({ capacity: { minFreeGiB: 7 } }));
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.match(capacityHoldReason() ?? "", new RegExp(formatBytes(7 * GIB)));
+    saveConfig(baseConfig({ capacity: { minFreeGiB: 2 } }));
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.equal(capacityHoldReason(), null);
+  });
+
+  it("keeps the disk and its reserve paired across multiple roots and read failures", async () => {
+    const other = workspace("large-disk");
+    setCapacityProbeForTests({ roots: [workRoot, other], du: () => 0, statfs: path => ({
+      blocks: (path === other ? 1024 : 20) * GIB,
+      bavail: (path === other ? 40 : 6) * GIB, bsize: 1,
+    }) });
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.match(capacityHoldReason() ?? "", new RegExp(formatBytes(50 * GIB)));
+    installProbe({ du: () => { throw new Error("du failed"); } });
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.match(capacityHoldReason() ?? "", new RegExp(formatBytes(50 * GIB)));
+  });
+
+  it("uses a 3 GiB floor, accepts equality and reuses small-disk readings after failure", async () => {
+    installProbe({ du: () => 0, statfs: () => ({ blocks: 8 * GIB, bavail: 3 * GIB, bsize: 1 }) });
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.equal(capacityHoldReason(), null);
+    installProbe({ du: () => { throw new Error("du failed"); } });
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.equal(capacityHoldReason(), null);
+    installProbe({ du: () => 0, statfs: () => ({ blocks: 8 * GIB, bavail: 3 * GIB - 1, bsize: 1 }) });
+    await refreshCapacityGuard({ config: loadConfig(), notify: false });
+    assert.match(capacityHoldReason() ?? "", new RegExp(formatBytes(3 * GIB)));
+  });
+
   it("pauses new starts and reports red when card work is above 10 GiB, and leaves a running card running", async () => {
     installProbe({ du: () => 11 * GIB, free: () => 80 * GIB });
     const ready = createTask({ project: "gauge", title: "queued", role: "executor", workspacePath: workspace("queued") });

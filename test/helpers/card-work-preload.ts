@@ -20,3 +20,8 @@ process.env.GIT_CEILING_DIRECTORIES = [...new Set([
   tmpdir(), dirname(homedir()),
 ])].join(delimiter);
 after(() => rmSync(root, { recursive: true, force: true }));
+
+// Admission fixtures must not depend on the machine's current disk size or free space.
+// Capacity suites can replace this injected statfs with their own small/low-disk cases.
+const { setCapacityProbeForTests } = await import("../../server/capacity-guard");
+setCapacityProbeForTests({ statfs: () => ({ blocks: 1024 ** 4, bavail: 100 * 1024 ** 3, bsize: 1 }) });

@@ -73,15 +73,17 @@ before completion.
 
 Each scheduler round measures the allocated size of the card-work roots with `du -sk` (allocated blocks, not apparent size; a symlink at the measured path is not followed). A successful reading is cached for about 10 minutes, or until that directory's mtime changes. Files that grow inside a card directory without changing that directory's mtime can lag until the cache expires. Free space is read with `statfs` on every round and is not cached.
 
-The measured roots are each project's `.kanban-work` directory and the plugin-data fallback root. When `KANBAN_TMP_ROOT` is set, only that root is measured. The total is the `du` of each root, not a second sum of its children. If roots sit on more than one disk, the free-space figure is the smallest, and any disk under the free-space limit pauses a new card's first work start.
+The measured roots are each project's `.kanban-work` directory and the plugin-data fallback root. When `KANBAN_TMP_ROOT` is set, only that root is measured. The total is the `du` of each root, not a second sum of its children. If roots sit on more than one disk, each disk is compared with its own reserve; any disk below that reserve pauses a new card's first work start. Doctor reports the disk with the smallest margin above its reserve.
 
-Defaults: pause when card-work usage is greater than 10 GiB, or when free space is less than 50 GiB. Either limit is enough. Configure both in `kanban.config.json`:
+Defaults: pause when card-work usage is greater than 10 GiB, or when free space is below min(50 GiB, max(3 GiB, 25% of disk capacity)). Disks at least 200 GiB retain the 50 GiB reserve; a 20 GiB cloud disk reserves 5 GiB. Either limit is enough. A positive `capacity.minFreeGiB` overrides the automatic reserve on every disk, even above or below it. Configure overrides in `kanban.config.json`:
 
 ```json
 "capacity": { "maxWorkGiB": 10, "minFreeGiB": 50 }
 ```
 
-A missing `capacity` key uses those defaults and is not written back by a save. `0` and any other non-positive number falls back to the same defaults. Exactly 10 GiB of card work, or exactly 50 GiB free, does not pause.
+A missing `capacity` key uses those defaults and is not written back by a save. A missing, invalid or non-positive `minFreeGiB` keeps the automatic reserve, including when only `maxWorkGiB` is set. Exactly at either limit does not pause.
+
+The board process measures its own card-work filesystems, before dispatching local or cloud work; it does not measure a remote cloud machine through the provider CLI. A board running on a cloud VM measures that VM. Provider `no_capacity` admission remains a separate check.
 
 While the brake is on, `start` and automatic start return the reason for a brand-new executor, batch, reader, or decision card that has never run, and that card stays queued. Review cards, rework (a resume of the original agent, a new executor for the same card, and a reopened ready card), and `in_review` / `reviewing` progress still start. Cards already running or reviewing are not interrupted. The next round that is back under both limits clears the pause by itself. Cleanup after acceptance can drop usage under the limit; the following round then lets the queued cards start.
 
