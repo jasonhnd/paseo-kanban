@@ -19,6 +19,7 @@ test("test environments reject inherited identities, provider routes, Python and
     for (const name of ["python", "python3", "paseo", "claude", "codex", "grok", "gh"]) assert.throws(() => executable(name, env.PATH), /unavailable/);
     assert.equal(executable("node", env.PATH), join(root, "tools/node"));
     assert.equal(executable("lsof", env.PATH), join(root, "tools/lsof"));
+    assert.equal(executable("sha256sum", env.PATH), join(root, "tools/sha256sum"));
     assert.equal(env.PASEO_VOICE_MODE_ENABLED, "0");
     assert.equal(env.PASEO_DICTATION_ENABLED, "0");
     assert.equal(env.npm_config_cache, join(homedir(), ".kanban-cache", "npm"));
