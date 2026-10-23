@@ -2,20 +2,20 @@
 
 [README](../README.md) is the user quickstart. This guide separates managed Git installation from a developer's directory source. Command syntax is based on the public Paseo **0.11.2** CLI help and [fixed reference](https://github.com/getpaseo/paseo/blob/75953250959979b8f088bbca8dbd6ee61d0151b1/public-docs/plugins/reference.md#cli-reference). Local Git lifecycle and official web-app checks also ran on an isolated macOS host; their scope and remaining GitHub/provider/device checks are in the [replay checklist](RELEASE.md#command-replay-checklist). Help alone does not prove runtime behavior.
 
-## Select the host and source
+Install to the intended daemon. Candidate `0.12.0.1` is unpublished until the matching GitHub prerelease exists and points to the reviewed full commit. The previous public tag is v0.1.0-rc.23 at `c6e740bedfd64691bd20270244efb1f803109b0f`. Do not install an unpublished candidate from GitHub; use a local file source in a disposable home.
 
-Install to the intended daemon. **RC `0.1.0-rc.20` is unpublished until the GitHub Release record for `v0.1.0-rc.20` exists, is a prerelease, and its target commit equals the reviewed full commit. While that record is absent, do not run the tag commands as a GitHub install.** Public prerelease rc.19 was published on 2026-10-17 and its GitHub Release exists, frozen at `d63cdc419f6f99300342bda5716d68e37a3e4c97` (annotated object `65df87c70bb68bb5630f7cb5705ad33dc3b3a916`). The earlier public rc.8 remains frozen at `0af33ec7e49891bf3dba2549cb8b6b83487bba4c` (annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`). `v0.1.0-rc.1` remains the unpublished local preparation and is not moved. `v0.1.0-rc.2` remains frozen at `8be11b6144b6cc7b81bcf741a360acf18111001f` (annotated object `0e16a0c43de421db583a31b3dee7b6e6b67e6b82`), unpublished. `v0.1.0-rc.3` remains frozen at `61cce0d8ba07e8bf01fe7239ddf0ceeaf5983df4` (tree `633c99456b05cdbf7156f5c3ab1149451a767738`, annotated object `7e288e22f42598a651edef407dcdb82871c3d9de`), unpublished and rejected for publication because stale default policy could reopen a stopped pool or ignore a matrix pause. This candidate retains the prior fixes and corrects those default admission paths; explicit legacy compatibility behavior is unchanged. With the default local home, after the Release record matches:
+Install to the intended daemon. **RC `0.12.0.1` is unpublished until the GitHub Release record for `v0.12.0.1` exists, is a prerelease, and its target commit equals the reviewed full commit. While that record is absent, do not run the tag commands as a GitHub install.** Public prerelease rc.19 was published on 2026-10-17 and its GitHub Release exists, frozen at `d63cdc419f6f99300342bda5716d68e37a3e4c97` (annotated object `65df87c70bb68bb5630f7cb5705ad33dc3b3a916`). The earlier public rc.8 remains frozen at `0af33ec7e49891bf3dba2549cb8b6b83487bba4c` (annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`). `v0.1.0-rc.1` remains the unpublished local preparation and is not moved. `v0.1.0-rc.2` remains frozen at `8be11b6144b6cc7b81bcf741a360acf18111001f` (annotated object `0e16a0c43de421db583a31b3dee7b6e6b67e6b82`), unpublished. `v0.1.0-rc.3` remains frozen at `61cce0d8ba07e8bf01fe7239ddf0ceeaf5983df4` (tree `633c99456b05cdbf7156f5c3ab1149451a767738`, annotated object `7e288e22f42598a651edef407dcdb82871c3d9de`), unpublished and rejected for publication because stale default policy could reopen a stopped pool or ignore a matrix pause. This candidate retains the prior fixes and corrects those default admission paths; explicit legacy compatibility behavior is unchanged. With the default local home, after the Release record matches:
 
 ```sh
 paseo --version
 node --version
 git --version
 npm --version
-paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.20 --json
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.12.0.1 --json
 paseo plugin ls paseo-kanban --json
 ```
 
-The current public source is `https://github.com/jasonhnd/paseo-kanban`, branch `integration/single-plugin-reviewed`, at preparation baseline `c106efb88a659931d01f40a236001823473561a8`. That pre-RC source has metadata `0.1.0` and passed the prior isolated official 0.11.2 GitHub replay. It can be installed now with `--ref c106efb88a659931d01f40a236001823473561a8`. A branch can move; the planned RC tag must never move. For an exact repeatable RC install, choose the reviewed full SHA once available remotely:
+The public source is `https://github.com/jasonhnd/paseo-kanban`, branch `integration/single-plugin-reviewed`. The published baseline is v0.1.0-rc.23 at `c6e740bedfd64691bd20270244efb1f803109b0f`; the branch can move. Use the reviewed full SHA for an exact candidate after it is separately published:
 
 ```sh
 paseo plugin install github:jasonhnd/paseo-kanban --ref "$REVIEWED_COMMIT" --json
@@ -26,7 +26,7 @@ paseo plugin install github:jasonhnd/paseo-kanban --ref "$REVIEWED_COMMIT" --jso
 For another daemon, select its endpoint explicitly for **every** operation:
 
 ```sh
-paseo --host "$PASEO_TARGET" plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.20 --json
+paseo --host "$PASEO_TARGET" plugin install github:jasonhnd/paseo-kanban --ref v0.12.0.1 --json
 paseo --host "$PASEO_TARGET" plugin ls paseo-kanban --json
 ```
 
@@ -44,7 +44,7 @@ paseo plugin ls paseo-kanban --json
 paseo plugin logs paseo-kanban --json
 ```
 
-Require `running` without a load error. Record the returned source kind, full installed revision, enabled state and actual path. Confirm the managed package/lock version is `0.1.0-rc.20` and the installed full revision matches the RC release record; version metadata alone cannot distinguish source commits. Official 0.11.2's Git identity is the revision, not a manifest version field. Do not guess the managed cache path. Open the real sidebar entry and test the board/Fleet page on the same host.
+Require `running` without a load error. Record the returned source kind, full installed revision, enabled state and actual path. Confirm the managed package/lock version is `0.12.0.1` and the installed full revision matches the RC release record; version metadata alone cannot distinguish source commits. Official 0.11.2's Git identity is the revision, not a manifest version field. Do not guess the managed cache path. Open the real sidebar entry and test the board/Fleet page on the same host.
 
 The install does not put plugin commands on PATH. Set `BOARD_INSTALL` to the path from `ls`, then use the generated launchers with the same home/data-root environment as the daemon:
 
@@ -61,8 +61,8 @@ No end-user build is needed after successful Git preparation. Authentication/rol
 Save current revision/path/enabled state, pause dispatch and other writers, and take consistent [data/settings backups](DATA.md#backup-and-data-restore). After publication confirmation, use the immutable RC tag or its full reviewed public SHA on **both** commands:
 
 ```sh
-paseo plugin update paseo-kanban --check --ref v0.1.0-rc.20 --json
-paseo plugin update paseo-kanban --ref v0.1.0-rc.20 --json
+paseo plugin update paseo-kanban --check --ref v0.12.0.1 --json
+paseo plugin update paseo-kanban --ref v0.12.0.1 --json
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -96,7 +96,7 @@ paseo plugin reload paseo-kanban --json
 paseo plugin ls paseo-kanban --json
 ```
 
-For `0.1.0-rc.20`, the previous public prerelease is `v0.1.0-rc.19` at `d63cdc419f6f99300342bda5716d68e37a3e4c97`. `PREVIOUS_COMMIT=c106efb88a659931d01f40a236001823473561a8` remains the older verified public code baseline, not a versioned release. Do not roll a GitHub install back to unpublished `v0.1.0-rc.1`. After code rollback or upgrade, exports can keep a removed checkout's command path for about 600 seconds. Use the current installed path and wait for both exports to match it, then complete the required reload (for older code) and real write/Undo checks above before resuming dispatch. The export delay is unchanged. Otherwise take it from the saved release record, not from package version alone. Code downgrade does not undo data writes. Data restore needs a separate consistent, compatible backup and can discard newer writes. A directory-to-Git switch needs remove/install rather than Git update; see the [prepared runbook](RELEASE.md#directory-to-git-switch-runbook), which does not declare a production switch complete.
+For `0.12.0.1`, roll code back to v0.1.0-rc.23 at `c6e740bedfd64691bd20270244efb1f803109b0f`, then explicitly reload and verify running status, installed CLI and preserved data. Code rollback does not undo data writes or new configuration. Take any data restore from a separate compatible, consistent backup. A source-kind switch requires the separately authorized remove/install runbook.
 
 ## Git preparation and local development
 
@@ -116,3 +116,5 @@ paseo plugin reload paseo-kanban --json
 `PLUGIN_CHECKOUT` is the absolute path to your clean clone, on a disposable development host with no existing same-id installation. Directory sources reference that directory; `plugin update` skips them. Reload source without restarting the daemon. Local `npm pack`/prepack checks verify generated bytes for release gates; they do not establish a supported npm distribution channel.
 
 A disposable verification environment needs a separate home, private temp/data roots, an unused loopback listener and explicit CLI host. Use a whitelist environment, no inherited agent identities/tokens, no personal provider configuration, disabled relay/providers, and explicit `false` optional adapters. Turn voice mode and dictation off with `PASEO_VOICE_MODE_ENABLED=0`, `PASEO_DICTATION_ENABLED=0`, and `features.voiceMode.enabled` / `features.dictation.enabled` set to false. Point `PASEO_SERVER_DIR` at the shared read-only runtime from `scripts/shared-runtime.mjs`, and point `npm_config_cache` at the shared npm cache, instead of installing another copy in the card root. Test a local Git source with `file://` and a full ref before remote replay. Keep failures local, stop test processes, and never use production databases or credentials. Put receipts in the evidence directory; a successful test deletes the card-root workspace immediately.
+
+Four-component metadata is written directly in package/lock; npm version does not accept it. The managed Git revision is authoritative. After updating to v0.12.0.1, run `paseo plugin reload paseo-kanban` explicitly and require running status.

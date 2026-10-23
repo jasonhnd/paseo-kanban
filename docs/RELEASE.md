@@ -1,6 +1,6 @@
 # Git release and recovery checklist
 
-This batch prepares **Git-only prerelease `0.1.0-rc.22`** on public rc.21 commit `2740f8bed023637d1f5c15ebd19fb1fadee82d5b`, tree `f9394ef03e80788cae35a3b9d9b2a4415b80494a`. The candidate remains local until independent review and separately authorized publication. Do not create a tag or publish from these preparation instructions alone.
+This batch prepares Git-only candidate **0.12.0.1** on public v0.1.0-rc.23 commit `c6e740bedfd64691bd20270244efb1f803109b0f`. It remains unpublished until independent review and separate authorization. No new tag or Release is created by preparation.
 
 rc.6 adds bounded transient read retries and corrects host-qualified Board links, homepage Command Center scope and manifest-icon documentation. Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`, annotated object `44f501a2a6cda150b92d9fa9b5dfa48d03e7af5e`. Its observations do not certify rc.6. The 20 retained dev/build dependency alerts (5 moderate, 15 high) are installed by Git preparation; the recorded audit found no upstream patched versions for the two root advisories and non-force audit fix made no change. See the current [changelog](../CHANGELOG.md).
 
@@ -30,31 +30,31 @@ rc.18 changes board operations and release documents only. A finished card's wor
 
 rc.19 fixes [issue #10](https://github.com/jasonhnd/paseo-kanban/issues/10) and [issue #11](https://github.com/jasonhnd/paseo-kanban/issues/11). Doctor no longer raises a red for a git worktree inside a board-owned card temp directory when that card is unfinished, or done or archived and temp cleanup has not failed; a finished card waiting on cleanup is at most an info line that disappears once the worktree is gone. When a review card that borrowed another card's temporary workspace finishes, it releases that claim by deleting only its own agents and retrying the owner's cleanup at once, including a backoff that is still waiting. Public prerelease rc.18 was published on 2026-10-17 and its GitHub Release exists, frozen at `d4ca860e01fb3256c2cc787d383b5de25bd396e5` (annotated object `9943de9e2b538a60368de7ab12641357a959d084`). Its observations do not certify rc.19; only new exact rc.19 receipts count. Dependency selections, schema and contract versions are unchanged relative to rc.18. A real-browser mount of this candidate, a real cleanup on a live board, pending-wait upgrade/rollback and authenticated-provider delivery remain unverified.
 
-rc.20 fixes the reminder window for recent decisions ([issue #6](https://github.com/jasonhnd/paseo-kanban/issues/6)) and cleans up worktree registrations when a finished card's directory is removed ([issue #10](https://github.com/jasonhnd/paseo-kanban/issues/10)): a leader reminder stays quiet while the project has a decision opened within the last 60 minutes, and cleanup unregisters a nested git worktree before it deletes the directory. It also adds an optional Hermes leader integration: leader creation, handover and registration transfer for the `hermes` provider, a curated-memory bridge whose scope is a whole Hermes profile rather than one project, and host-qualified in-client navigation. Other providers do not need Hermes or Python, and loading the plugin does not start Python. Changes that apply to every provider: session buttons use the current client's navigation (reload the page after updating; the old desktop-opening call now returns an error), and leader handover keeps waiting through tool-approval prompts. Public prerelease rc.19 was published on 2026-10-17 and its GitHub Release exists, frozen at `d63cdc419f6f99300342bda5716d68e37a3e4c97` (annotated object `65df87c70bb68bb5630f7cb5705ad33dc3b3a916`). Its observations do not certify rc.20; only new exact rc.20 receipts count. Dependency selections, schema and contract versions are unchanged relative to rc.19. A real Hermes leader session, a real-browser mount of this candidate, a real cleanup on a live board, pending-wait upgrade/rollback and authenticated-provider delivery remain unverified.
+rc.20 improved recent-decision reminders, nested worktree cleanup, optional ACP leader handover, curated-memory delivery and in-client navigation. Its earlier observations do not certify the current candidate; release checks must use the exact new commit.
 
 rc.22 adds existing-leader MCP credentials, current-installation compatibility evidence, integration-branch and recorded-placeholder cleanup, and Grok/Cursor quota-session process cleanup. It retains the rc.21 host range (`>=0.11.0 <0.13.0`), stable commands and card-work directories. Dependency selections, schema and contract versions are unchanged. Record exact candidate verification and disposable-host upgrade/rollback evidence; production switching and final acceptance are separate.
 
 ## Version and evidence policy
 
-The combined plugin has one package/version/CHANGELOG and runtime id `paseo-kanban`. In 0.x, use patches for compatible fixes and minors for new features or breaking configuration/behavior. From 1.x, use SemVer. Contract/schema versions are separate; compatible additions retain their version, while breaking changes need an explicit migration/recovery plan.
+The combined plugin has one package/version/CHANGELOG and runtime id `paseo-kanban`. This Git-only candidate uses four-component package metadata `0.12.0.1`, matching Paseo 0.12.0 plus a plugin revision. Edit package and lock directly; do not use npm version. The plugin manifest has no version field. Contract/schema versions remain separate.
 
-A Git branch is mutable. This RC plan requires an immutable tag and GitHub prerelease, aligned with package/lock/CHANGELOG. Save the full reviewed commit and tree as well as the tag object/metadata; review and scan annotated tag identity/content. Never move, overwrite or reuse a tag, even to correct a release. Local `v0.1.0-rc.1` already names `22958ff54c955c1a90683f786d3ebb8b9ae88470` and is not moved. The next unused number chosen for this candidate is `0.1.0-rc.22`. Confirm rc.22 is unused both locally and remotely before creating its annotated tag; frozen rc.1 through rc.20 objects remain unchanged. Public prerelease rc.20 was published on 2026-10-18. The publishing owner must check the remote refs and GitHub Release record again. Preserve c106 as the previous verified public code baseline, not a previous versioned release.
+A Git branch is mutable. This RC plan requires an immutable tag and GitHub prerelease, aligned with package/lock/CHANGELOG. Save the full reviewed commit and tree as well as the tag object/metadata; review and scan annotated tag identity/content. Never move, overwrite or reuse a tag, even to correct a release. Local `v0.1.0-rc.1` already names `22958ff54c955c1a90683f786d3ebb8b9ae88470` and is not moved. The next unused number chosen for this candidate is `0.12.0.1`. Confirm rc.22 is unused both locally and remotely before creating its annotated tag; frozen rc.1 through rc.20 objects remain unchanged. Public prerelease rc.20 was published on 2026-10-18. The publishing owner must check the remote refs and GitHub Release record again. Preserve c106 as the previous verified public code baseline, not a previous versioned release.
 
 Prepared RC notes may use a version heading marked **pending publication**; never add a release date or claim an available tag until verified. Notes must state host range, data/contract changes, existing dependency alerts and real test limits. Official 0.11.2 Git acquisition uses revision/`--ref`; its manifest schema has no consumed plugin version field. Keep package.json, package-lock.json's top level and root package version aligned; do not invent a manifest field. Do not turn source-only checks into app/provider certification.
 
 ## RC publication plan — pending
 
-The release title is **Paseo Kanban v0.1.0-rc.22** and the GitHub Release must be a **prerelease**. Its body must identify the exact reviewed public RC commit/tree, link the English/Chinese changelogs, state compatibility/access/data risks and distinguish prior c106 evidence from RC verification. Prepare the body for review before publishing; never include private paths, identities, configuration, credentials or evidence repositories.
+The release title is **Paseo Kanban v0.12.0.1** and the GitHub Release must be a **prerelease**. Its body must identify the exact reviewed public RC commit/tree, link the English/Chinese changelogs, state compatibility/access/data risks and distinguish prior c106 evidence from RC verification. Prepare the body for review before publishing; never include private paths, identities, configuration, credentials or evidence repositories.
 
 Only the separately authorized publishing owner may publish the approved commit/tag and create the prerelease after different-model review and leader acceptance. That owner must rerun the exact outgoing branch/tag privacy/history/identity gates, confirm the remote peeled tag equals the reviewed commit, and verify the GitHub Release uses that tag with prerelease=true. No force, tag replacement, npm publication or registry submission is part of this plan.
 
 **These commands are planned for after that remote confirmation, not evidence that the pending tag exists:**
 
 ```sh
-paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.22 --json
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.12.0.1 --json
 paseo plugin ls paseo-kanban --json
-paseo plugin update paseo-kanban --check --ref v0.1.0-rc.22 --json
-paseo plugin update paseo-kanban --ref v0.1.0-rc.22 --json
+paseo plugin update paseo-kanban --check --ref v0.12.0.1 --json
+paseo plugin update paseo-kanban --ref v0.12.0.1 --json
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -73,7 +73,7 @@ Relative to c106, this RC retains reviewed artifact acceptance, decision-panel b
 
 ## Retained limits
 
-These limits stay in force for `0.1.0-rc.22`:
+These limits stay in force for `0.12.0.1`:
 
 - Information exports can lag a removed checkout by about 600 seconds. Use the current installed path and wait for both exports. Their agreement is necessary but does not prove command writes work; the action checks in [updating and recovery](#updating-and-recovery) are mandatory.
 - Undo for a closed decision exists only in the mounted panel. Navigation or reload removes Undo. The stored done state and zero count remain.
@@ -89,21 +89,21 @@ Prepare the GitHub Release body in English only for review. Chinese release docu
 
 | Token | Replacement |
 |---|---|
-| `{{RC_VERSION}}` | `0.1.0-rc.22` |
-| `{{RC_TAG}}` | `v0.1.0-rc.22` |
+| `{{RC_VERSION}}` | `0.12.0.1` |
+| `{{RC_TAG}}` | `v0.12.0.1` |
 | `{{RC_COMMIT}}` | full reviewed commit |
 | `{{RC_TREE}}` | that commit's tree |
 | `{{UTC_DATE}}` | UTC calendar date `YYYY-MM-DD` of the body being prepared |
 
 `{{INSTALL_STATUS}}` is exactly one of these two paragraphs.
 
-Published, only when the GitHub Release for `v0.1.0-rc.22` exists, is a prerelease, and its target commit equals `{{RC_COMMIT}}`:
+Published, only when the GitHub Release for `v0.12.0.1` exists, is a prerelease, and its target commit equals `{{RC_COMMIT}}`:
 
-`The GitHub Release record for v0.1.0-rc.22 on {{UTC_DATE}} targets {{RC_COMMIT}}. Install with --ref v0.1.0-rc.22.`
+`The GitHub Release record for v0.12.0.1 on {{UTC_DATE}} targets {{RC_COMMIT}}. Install with --ref v0.12.0.1.`
 
 Unpublished, while that Release record is absent:
 
-`No GitHub Release record for v0.1.0-rc.22 exists as of {{UTC_DATE}}. The candidate is unpublished. Do not install v0.1.0-rc.22 from GitHub. v0.1.0-rc.1 was local preparation only; rc.1 and rc.2 were not published.`
+`No GitHub Release record for v0.12.0.1 exists as of {{UTC_DATE}}. The candidate is unpublished. Do not install v0.12.0.1 from GitHub. v0.1.0-rc.1 was local preparation only; rc.1 and rc.2 were not published.`
 
 The prepared draft uses the unpublished paragraph. A later publisher replaces that whole paragraph with the published paragraph. The UTC date is the body preparation date until a published Release record supplies its own date. The body must not include private paths, identities, configuration, credentials or evidence repositories.
 

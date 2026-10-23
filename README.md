@@ -4,7 +4,7 @@ A [Paseo](https://github.com/getpaseo/paseo) plugin that combines a cross-projec
 
 [Simplified Chinese](docs/zh-CN/README.md)
 
-> **Experimental RC `0.1.0-rc.23`, unpublished.** Public prerelease rc.20 was published on 2026-10-18 and its GitHub Release exists, frozen at `bec4af0626d7f75e94dfdef9a577a5caa2cbd65e` (annotated object `e0e9cc3ae464c2200318f85042c982c3076d8aa7`). Install the rc.23 tag only after the matching GitHub prerelease targets the independently reviewed commit in the [release record](docs/RELEASE.md). Isolated official **0.11.2 Web UI** has been checked in Microsoft Edge on macOS; native app, physical phones and an authenticated provider first-card cycle remain unverified. No stable release, npm publication, official registry listing or response-time commitment is declared.
+> **Experimental candidate `0.12.0.1`, unpublished.** The public baseline is v0.1.0-rc.23 (`c6e740bedfd64691bd20270244efb1f803109b0f`). Install the new tag only after its GitHub prerelease points to the independently reviewed commit. Native clients, physical phones and an authenticated provider first-card cycle still require separate validation. No stable release, npm publication or registry listing is declared.
 
 One plugin id, `paseo-kanban`, opens Board, Fleet and Settings from one sidebar entry. The board uses host-qualified deep links and retains workspace project filtering.
 
@@ -45,12 +45,12 @@ Paseo plugins are **trusted, unsandboxed code**. Server and preparation code can
 
 ## Install from GitHub
 
-Check the CLI, daemon and app versions, and the daemon's Node environment first. `paseo --version` reports the CLI version, not proof of the app/daemon versions. **Run the following tag command only when the GitHub Release record for `v0.1.0-rc.23` exists and its target commit equals the reviewed full SHA in the [release record](docs/RELEASE.md). While that record is absent, the candidate is unpublished and the tag is not a GitHub install target.**
+Check the CLI, daemon and app versions, and the daemon's Node environment first. `paseo --version` reports the CLI version, not proof of the app/daemon versions. **Run the following tag command only when the GitHub Release record for `v0.12.0.1` exists and its target commit equals the reviewed full SHA in the [release record](docs/RELEASE.md). While that record is absent, the candidate is unpublished and the tag is not a GitHub install target.**
 
 ```sh
 paseo --version
 node --version
-paseo plugin install github:jasonhnd/paseo-kanban --ref v0.1.0-rc.23
+paseo plugin install github:jasonhnd/paseo-kanban --ref v0.12.0.1
 paseo plugin ls paseo-kanban --json
 ```
 
@@ -100,12 +100,12 @@ Card scratch uses the project’s `.kanban-work/<card code>/`; see [card work di
 Back up state and record the current full revision, source, installed path and enabled state first. After RC publication is confirmed, preview and apply an **explicit ref each time**:
 
 ```sh
-paseo plugin update paseo-kanban --check --ref v0.1.0-rc.23 --json
-paseo plugin update paseo-kanban --ref v0.1.0-rc.23 --json
+paseo plugin update paseo-kanban --check --ref v0.12.0.1 --json
+paseo plugin update paseo-kanban --ref v0.12.0.1 --json
 paseo plugin ls paseo-kanban --json
 ```
 
-Use those two update commands only when the GitHub Release record authorizes `v0.1.0-rc.23`, as in [Install from GitHub](#install-from-github). After a managed update, board and Fleet information exports can still name a removed checkout for about 600 seconds. That is their existing export period. The new command handlers resolve the current managed path when an action runs; the export delay remains unchanged.
+Use those two update commands only when the GitHub Release record authorizes `v0.12.0.1`, as in [Install from GitHub](#install-from-github). After a managed update, board and Fleet information exports can still name a removed checkout for about 600 seconds. That is their existing export period. The new command handlers resolve the current managed path when an action runs; the export delay remains unchanged.
 
 During an update or reload, mounted panels keep their last data and show “Plugin is updating…” for temporary “Plugin not available” read failures. Audited reads retry up to five times with backoff (a 15-second retry window); other errors remain visible. Saves and actions are never automatically retried: check the result before trying again. If the plugin stays unavailable, the panel asks you to refresh later.
 
@@ -233,3 +233,5 @@ A new card's first start pauses above 10 GiB of card-work usage or below 50 GiB 
 During reloads, audited reads retain the last data and retry transient unavailability for a bounded window. Saves and actions remain single-attempt. Cross-panel decision updates and recent-decision reminders share consistent state. Cursor monitoring is separate from dispatch eligibility, and dispatch statistics preserve unknown or incomplete provider usage.
 
 Leader handover supports persistent sessions and complete visible protocol delivery. The optional [curated-memory integration](integrations/) is profile-wide; isolate profiles when project memory must stay separate. Server-side agent opening returns a compatibility response; the client navigates on its connected host. These source changes do not publish a release or certify a production installation.
+
+Cloud execution and localMirror are disabled by default, with no project preconfigured enabled. Configure each project explicitly before opting a cloud-tagged card into the documented source mode.

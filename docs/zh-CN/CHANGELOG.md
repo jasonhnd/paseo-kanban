@@ -1,6 +1,37 @@
 # 变更记录
 
-单插件使用一个版本与 CHANGELOG，通过 Git 分发。`0.1.0-rc.23` 是基于公开 rc.22 的本地候选，待独立审查及发布。公开 rc.22 基线为 `c19e3ec020575fe8332ba63a7e830b1d01892c41`，已公开的 tag 不移动。已公开预发布 rc.20 于 2026-10-18 发布，冻结在 `bec4af0626d7f75e94dfdef9a577a5caa2cbd65e`（annotated object `e0e9cc3ae464c2200318f85042c982c3076d8aa7`）。已公开预发布 rc.19 于 2026-10-17 发布，GitHub Release 存在，冻结在 `d63cdc419f6f99300342bda5716d68e37a3e4c97`（annotated object `65df87c70bb68bb5630f7cb5705ad33dc3b3a916`）。已公开预发布 rc.18 于 2026-10-17 发布，GitHub Release 存在，冻结在 `d4ca860e01fb3256c2cc787d383b5de25bd396e5`（annotated object `9943de9e2b538a60368de7ab12641357a959d084`）。已公开预发布 rc.17 于 2026-10-16 发布，GitHub Release 存在，冻结在 `d7eec4188a108eb660c77f806b6ce91f85e5c26f`（annotated object `077ca0f5a83d2f827b1169c82ccfb0ece9307c8c`）。已公开预发布 rc.16 于 2026-10-16 发布，GitHub Release 存在，冻结在 `6ed3be48e5e002351668a2d2d8765c2cca67413a`（annotated object `9747d649314d270b581d95ba5aebb37c0e4276b7`）。已公开预发布 rc.12 于 2026-10-16 发布，GitHub Release 存在，冻结在 `4162cbca1acb2aa70ad1d5fb77c0c78f25c68ab2`（annotated object `a5d68644e9d02206e2cf07ee7d32005f59801ee9`）。已公开预发布 rc.11 于 2026-10-15 发布，GitHub Release 存在，冻结在 `09963b85e0d7c9c5d881aa39e3c65ebbb719b7a0`（annotated object `042413d64aeee4f41c34120b4b3af4003c685741`）。已公开预发布 rc.10 于 2026-10-15 发布，GitHub Release 存在，冻结在 `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129`（annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`）。已公开预发布 rc.9 于 2026-10-15 发布，GitHub Release 存在，冻结在 `701594d452f24dcbf115aabcedd4e9be9f5f6bcb`（annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`）。已公开预发布 rc.8 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `0af33ec7e49891bf3dba2549cb8b6b83487bba4c`（annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`）。已公开预发布 rc.7 于 2026-10-14 发布，GitHub Release 存在，仍冻结在 `2d6942643edb977072f8818b3d0c764b2ce1a057`（annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`）。已公开预发布 rc.6 于 2026-10-13 发布，仍冻结在 `c70df59d8516b7ecc9350ce5833fb177bafc335b`（annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`）。已公开 rc.5 仍冻结在 `db1ef026c2f528ac952e95d2bb7170f87fa3800b`，下文保留其早先准备记录。rc.4 原 commit 与 tag 不变；rc.3 仍不得发布，rc.1 和 rc.2 仍为本地未公开候选。没有 npm 发布或官方目录收录。
+当前 Git 候选尚未发布；下方保留历史条目。
+
+## 0.12.0.1 — 待审查及发布
+
+本地候选基于公开 v0.1.0-rc.23（`c6e740bedfd64691bd20270244efb1f803109b0f`）。第四段表示 Paseo 0.12.0 对应的插件修订；Git 发布须另行授权。
+
+### 新增
+
+- 显式支持项目的 localMirror 云执行：匿名快照、上传前扫描、有界回传、重放到本地卡分支，经独立审查后才能本地验收合回；不调用 GitHub 或远端推送。
+- 公开云项目使用 `cloud.allowedProjects` 名单；名单外项目只暂停自己的云卡并持久去重告警，不令整份配置拒读。
+- 固定 Node/Bun 版本、模板 Bun 版本、可选包目录及逐目录测试命令。目录只有缺失才跳过，主动不测会写入交接；显式安装 Bun 时先核对固定发布包的 SHA-256。
+- 按资格、父子占用、留量、重置时间和观测成本进行额度路由，卡上显示本次派活原因；`quotaRouting.enabled=false` 可回退路由。
+- 按规格逐项验证的 QA 卡，以及可选联系人文件中的项目 Product 签核路由。
+
+### 变更
+
+- Grok/Cursor 共享周额度合为一口 X Ultra 池；Cursor 派活继续硬拒绝，读共享额度或设置本人/Bot 留量都不开放经 Cursor 启动付费第三方模型。
+- 全局机器上限覆盖所有项目，项目并发独立计算；必须确认删机完成，默认关闭及匿名公开仓检查继续保守拒绝。
+- 每个测试运行器和 worker 都隔离 HOME、PASEO_HOME、配置与数据目录，测试模式拒绝真实个人状态路径。
+
+### 修复
+
+- wait-bg 持久记录写入进程身份，杀进程及跨重启超时都带有界日志，只唤醒原 agent 一次；无法确认进程状态时保守处理。
+- 保留空项目等待、调度生命周期夹具、缺省可选字段的额度元数据及翻译排序的既有契约。
+
+### 注意
+
+- `cloudRunner` 与 `localMirror` 默认都关闭，没有任何项目预设开启；须逐项目显式配置，云卡另需 cloud 标签。
+- daemon/app 范围仍为 `>=0.11.0 <0.13.0`，Node `>=24.21.0`。package/lock 为 `0.12.0.1`，插件 manifest 不写 version。
+- 四段号直接编辑元数据；npm version 命令不接受此写法。Git 装/更新、包构建与精确发布门另行实测，本次不含 npm registry 发布。
+- 云、额度及预算记录为兼容新增；代码回退不撤销新事件、配置及已完成动作。换装前检查已有超预算在跑卡并保留数据。
+- 原生客户端、真实 provider 认证及真实云机器仍须单独授权验证。本地候选不代表生产换装或最终验收。
 
 ## 0.1.0-rc.23 — 待审查及发布
 

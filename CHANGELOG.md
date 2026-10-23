@@ -1,7 +1,39 @@
 # Changelog
 
-The single plugin has one version and CHANGELOG. Distribution is through Git.
-`0.1.0-rc.23` is a local candidate built on public rc.22 (`c19e3ec020575fe8332ba63a7e830b1d01892c41`), pending independent review and publication. Public prerelease rc.20 was published on 2026-10-18, frozen at `bec4af0626d7f75e94dfdef9a577a5caa2cbd65e` (annotated object `e0e9cc3ae464c2200318f85042c982c3076d8aa7`). Public prerelease rc.19 was published on 2026-10-17 and its GitHub Release exists, frozen at `d63cdc419f6f99300342bda5716d68e37a3e4c97` (annotated object `65df87c70bb68bb5630f7cb5705ad33dc3b3a916`). Public prerelease rc.18 was published on 2026-10-17 and its GitHub Release exists, frozen at `d4ca860e01fb3256c2cc787d383b5de25bd396e5` (annotated object `9943de9e2b538a60368de7ab12641357a959d084`). Public prerelease rc.17 was published on 2026-10-16 and its GitHub Release exists, frozen at `d7eec4188a108eb660c77f806b6ce91f85e5c26f` (annotated object `077ca0f5a83d2f827b1169c82ccfb0ece9307c8c`). Public prerelease rc.16 was published on 2026-10-16 and its GitHub Release exists, frozen at `6ed3be48e5e002351668a2d2d8765c2cca67413a` (annotated object `9747d649314d270b581d95ba5aebb37c0e4276b7`). Public prerelease rc.12 was published on 2026-10-16 and its GitHub Release exists, frozen at `4162cbca1acb2aa70ad1d5fb77c0c78f25c68ab2` (annotated object `a5d68644e9d02206e2cf07ee7d32005f59801ee9`). Public prerelease rc.11 was published on 2026-10-15 and its GitHub Release exists, frozen at `09963b85e0d7c9c5d881aa39e3c65ebbb719b7a0` (annotated object `042413d64aeee4f41c34120b4b3af4003c685741`). Public prerelease rc.10 was published on 2026-10-15 and its GitHub Release exists, frozen at `e4e070e8bdc8a41a8f8bc61e66ded8e1950b0129` (annotated object `48c4c9feab7d0f02c0010d5754e00ed2a1ddf7aa`). Public prerelease rc.9 was published on 2026-10-15 and its GitHub Release exists, frozen at `701594d452f24dcbf115aabcedd4e9be9f5f6bcb` (annotated object `dda2f0044ec08e25979f35787b42a08f4687104e`). Public prerelease rc.8 was published on 2026-10-14 and its GitHub Release exists. It remains frozen at `0af33ec7e49891bf3dba2549cb8b6b83487bba4c` (annotated object `303e4c27dd65f829743bc44c7242c1abd452c176`). Public prerelease rc.7 was published on 2026-10-14 and its GitHub Release exists. It remains frozen at `2d6942643edb977072f8818b3d0c764b2ce1a057` (annotated object `be783dd6a6efcaeff7be6e4401fc23a026d43a76`). Public prerelease rc.6 was published on 2026-10-13 and remains frozen at `c70df59d8516b7ecc9350ce5833fb177bafc335b` (annotated object `e9a630ffa6a3e1d71935305e6e1c9e05445b8364`). Public rc.5 remains frozen at `db1ef026c2f528ac952e95d2bb7170f87fa3800b`; its earlier preparation notes are retained below. rc.4 retains its original commit and tag. rc.3 remains rejected for publication; rc.1 and rc.2 remain local and unpublished. There is no npm publication or official registry listing.
+The current Git-only candidate remains unpublished. Earlier release entries are retained below.
+
+## 0.12.0.1 — pending review and publication
+
+Local candidate based on public v0.1.0-rc.23 (`c6e740bedfd64691bd20270244efb1f803109b0f`). The fourth version component identifies the plugin revision alongside Paseo 0.12.0; Git publication remains a separate approval.
+
+### Added
+
+- Opt-in local mirror execution for the explicitly supported project, with anonymous source snapshots, scanning before upload, bounded result transfer, replay onto an owned local card branch and independent review before local acceptance. Local mirror delivery makes no GitHub or remote push calls.
+- Configurable public cloud project admission through `cloud.allowedProjects`. An unlisted enabled project holds only its own cloud cards and produces a deduplicated warning without making the whole configuration unreadable.
+- Pinned Node/Bun runtimes, exact Bun template versions, optional package directories and per-directory test commands. Optional directories are skipped only when absent; intentionally skipped checks remain explicit in delivery receipts. Opt-in Bun installation verifies the exact release archive digest before extraction.
+- Qualification-aware quota routing, parent/child occupancy, shared reserves, reset urgency and observed cost. Cards retain the current dispatch reason; `quotaRouting.enabled=false` provides the documented routing rollback.
+- Specification-based QA cards with project-specific Product signoff routing through an optional operator-owned contacts file.
+
+### Changed
+
+- The shared Grok/Cursor weekly quota is one X Ultra pool. Cursor dispatch remains refused; shared usage collection and configurable personal/Bot reserves do not enable paid third-party model launches through Cursor.
+- Account-wide cloud machine limits and confirmed deletion constrain every project; per-project parallel limits remain independent. Disabled defaults and anonymous-public repository checks remain fail-closed.
+- Test runners isolate HOME, Paseo home, configuration and data paths in every worker and reject personal state paths in test mode.
+
+### Fixed
+
+- Background waits persist process identity, detect killed writers and durable timeouts, retain bounded logs and wake the original agent once. Unknown process observations remain conservative across restarts.
+- Default empty-project waits, scheduler lifecycle compatibility fixtures, provider metadata without optional fields and translation ordering preserve their existing contracts.
+
+### Notes
+
+- `cloudRunner` and `localMirror` are off by default. No project is preconfigured enabled; each project requires explicit operator configuration, and cloud execution also requires the card's cloud tag.
+- Paseo daemon/app range remains `>=0.11.0 <0.13.0`; Node requires `>=24.21.0`. The package and lock use `0.12.0.1`; the plugin manifest has no version field.
+- Four-component metadata is edited directly. The npm version command rejects this spelling; Git installation/update, package construction and exact release gates are verified separately. No npm registry publication is included.
+- New cloud, quota and budget records are additive. Code rollback does not undo new events, configuration changes or completed actions. Existing over-limit runs may brake after reload; preserve data and inspect running cards before switching.
+- Physical clients, real provider credentials and real cloud machines require their own authorized validation. This local candidate does not declare production installation or final acceptance.
+
+## Unreleased
 
 ## Unreleased
 
