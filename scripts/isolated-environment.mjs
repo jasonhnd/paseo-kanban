@@ -4,7 +4,7 @@ import { delimiter, join, resolve } from "node:path";
 import { sharedNpmCache } from "./shared-runtime.mjs";
 
 // POSIX tools used by real Git/shell/filesystem fixture tests, not provider executables.
-export const TEST_TOOLS = ["npm", "git", "env", "sh", "dirname", "cat", "uniq", "find", "file", "true", "du", "tar", "lsof", "sha256sum"];
+export const TEST_TOOLS = ["npm", "git", "env", "sh", "dirname", "cat", "uniq", "find", "file", "true", "du", "tar", "lsof", "sha256sum", "bash", "zip", "which"];
 
 export function executable(name, path = process.env.PATH ?? "") {
   for (const directory of path.split(delimiter).filter(Boolean)) {
