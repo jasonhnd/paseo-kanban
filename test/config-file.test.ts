@@ -6,7 +6,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
 import { runKanban } from "../server/cli";
-import { ConfigFileError, DEFAULT_CONCURRENCY, loadConfig, saveConfig, setProjectWorkspace } from "../server/config";
+import { ConfigFileError, DEFAULT_CONCURRENCY, loadConfig, parseConfig, saveConfig, setProjectCode, setProjectWorkspace } from "../server/config";
+import { projectRepository } from "../server/project-repo";
+import { readSettings, writeSettings } from "../server/settings";
 import { cardMark, takeCodeSeq } from "../server/card-ref";
 import { closeDb, getDb } from "../server/db";
 import { ensureProjectCode, syncProjectCodes } from "../server/project-codes";
@@ -52,6 +54,55 @@ function captureError(run: () => void): string[] {
 }
 
 describe("config file writes", () => {
+  for (const field of ["repo", "repository"]) for (const viaCli of [false, true]) it(`preserves project ${field} without a workspace through ${viaCli ? "CLI project --base --code" : "setProjectCode"}`, async () => {
+    const dir = useDir();
+    writeFileSync(configPath(dir), JSON.stringify({ projects: { demo: { defaultWorkspace: "dir", [field]: "https://github.com/example/demo.git" } } }));
+    assert.equal(projectRepository({ project: "demo", workspacePath: null }), "example/demo");
+    if (viaCli) {
+      await runKanban(["project", "--project", "demo", "--base", "develop", "--code", "DEMO"], { PASEO_AGENT_ID: "" });
+    } else {
+      setProjectCode("demo", "DEMO");
+    }
+    const saved = JSON.parse(readFileSync(configPath(dir), "utf8")).projects.demo;
+    assert.equal(saved.repo, "example/demo");
+    assert.equal(saved.code, "DEMO");
+    assert.equal(saved.workspacePath, undefined);
+    if (viaCli) assert.equal(saved.baseBranch, "develop");
+    assert.equal(projectRepository({ project: "demo", workspacePath: null }), "example/demo");
+  });
+
+  for (const field of ["repo", "repository"]) it(`preserves and normalizes project ${field} through config, workspace and settings saves`, async () => {
+    const dir = useDir();
+    writeFileSync(configPath(dir), JSON.stringify({ projects: { demo: { defaultWorkspace: "dir", [field]: " https://github.com/example/demo.git " } } }));
+    const assertRepo = () => {
+      assert.equal(projectRepository({ project: "demo", workspacePath: null }), "example/demo");
+      assert.equal(JSON.parse(JSON.stringify(loadConfig())).projects.demo.repo, "example/demo");
+    };
+    assertRepo();
+    saveConfig(loadConfig());
+    assertRepo();
+    setProjectWorkspace("demo", { baseBranch: "develop" });
+    assertRepo();
+    const view = await readSettings(async () => []);
+    const result = await writeSettings({ revision: view.revision, document: view.document! }, async () => []);
+    assert.equal(result.ok, true, result.message);
+    assertRepo();
+    saveConfig(loadConfig());
+    assert.equal(JSON.parse(readFileSync(configPath(dir), "utf8")).projects.demo.repo, "example/demo");
+  });
+
+  it("rejects invalid configured repository identities instead of silently losing them", () => {
+    for (const field of ["repo", "repository"]) for (const value of ["example", "example/demo/extra", "../demo", "example/..", "https://example.invalid/demo/repo", "", 42]) {
+      assert.throws(() => parseConfig({ projects: { demo: { defaultWorkspace: "dir", [field]: value } } }), ConfigFileError);
+    }
+  });
+
+  it("accepts repository-only projects and gives repo precedence over its legacy alias", () => {
+    const config = parseConfig({ projects: { demo: { repo: ["git", "github.com:example/demo.git"].join("@"), repository: "example/legacy" } } });
+    assert.equal(config.projects?.demo.repo, "example/demo");
+    assert.equal(config.projects?.demo.defaultWorkspace, "dir");
+  });
+
   it("preserves cloud budgets, qualification and background limits through workspace edits", () => {
     const dir = useDir();
     const source = {

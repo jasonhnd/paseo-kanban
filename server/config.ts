@@ -20,6 +20,7 @@ import { revokeLeaderMcpTokens } from "./tokens";
 import { doctorSettings, type DoctorSettings } from "./config-doctor";
 import { KanbanError } from "./errors";
 import { dataDir } from "./paths";
+import { githubRepository } from "./project-repo";
 import { parseProfileRuleOverrides, type ProfileRule } from "./profile-rules";
 import { parseBanned, parseFamilies, type BannedProfiles, type FamilyRule } from "./fleet-rules";
 import { isLanguageSetting, t, type LanguageSetting } from "../shared/i18n";
@@ -54,6 +55,8 @@ export interface ProjectWorkspace {
   cloudRunner?: CloudRunnerConfig;
   /** Project directory used for card scratch, independent of a card's temporary worktree. */
   workspacePath?: string;
+  /** Canonical GitHub owner/name, also usable without a local workspace. */
+  repo?: string;
   defaultWorkspace: WorkspaceMode;
   baseBranch: string;
   /** Additional local or remote-tracking branches whose ancestry proves card work has landed. */
@@ -376,14 +379,19 @@ function projectMap(value: unknown): Record<string, ProjectWorkspace> {
       permissionReadRoots?: unknown;
       workspacePath?: unknown;
       workspace?: unknown;
+      repo?: unknown;
+      repository?: unknown;
       cloudRunner?: unknown;
       runBudget?: unknown;
       backgroundWaitMaxMs?: unknown;
       qualification?: unknown;
     };
     const integrations = integrationBranches(row.integrationBranches, key);
+    const configuredRepo = row.repo ?? row.repository;
+    const repo = configuredRepo === undefined ? undefined : githubRepository(configuredRepo);
+    if (repo === null) throw new ConfigFileError(`projects.${key}.repo must be a GitHub owner/name or repository URL`);
     const mode = row.defaultWorkspace === "worktree" || row.defaultWorkspace === "dir" ? row.defaultWorkspace :
-      row.defaultWorkspace === undefined && (integrations !== undefined || row.qualification !== undefined) ? "dir" : null;
+      row.defaultWorkspace === undefined && (integrations !== undefined || row.qualification !== undefined || repo !== undefined) ? "dir" : null;
     if (!mode) continue;
     const base = typeof row.baseBranch === "string" ? row.baseBranch.trim() : "";
     const code = typeof row.code === "string" ? row.code.trim().toUpperCase() : "";
@@ -403,6 +411,7 @@ function projectMap(value: unknown): Record<string, ProjectWorkspace> {
       ...(row.waitParentPr === false ? { waitParentPr: false } : {}),
       ...(code && isProjectCode(code) ? { code } : {}),
       ...(typeof workspace === "string" && workspace.trim() ? { workspacePath: workspace.trim() } : {}),
+      ...(repo !== undefined ? { repo } : {}),
       ...(Array.isArray(row.permissionReadRoots) ? { permissionReadRoots: row.permissionReadRoots.filter((root): root is string => typeof root === "string" && root.startsWith("/")) } : {}),
     };
   }
@@ -904,6 +913,7 @@ export function setProjectWorkspace(
     if (integrations !== undefined) next.integrationBranches = integrations;
     if (stored?.code) next.code = stored.code;
     if (stored?.workspacePath) next.workspacePath = stored.workspacePath;
+    if (stored?.repo) next.repo = stored.repo;
     if (stored?.backgroundWaitMaxMs !== undefined) next.backgroundWaitMaxMs = stored.backgroundWaitMaxMs;
     if (stored?.cloudRunner) next.cloudRunner = structuredClone(stored.cloudRunner);
     if (stored?.qualification) next.qualification = structuredClone(stored.qualification);
@@ -937,6 +947,7 @@ export function setProjectCode(project: string, code: string): KanbanConfig {
         defaultWorkspace: stored?.defaultWorkspace ?? "dir",
         ...(stored?.backgroundWaitMaxMs !== undefined ? { backgroundWaitMaxMs: stored.backgroundWaitMaxMs } : {}),
         ...(stored?.workspacePath ? { workspacePath: stored.workspacePath } : {}),
+        ...(stored?.repo ? { repo: stored.repo } : {}),
         ...(stored?.cloudRunner ? { cloudRunner: structuredClone(stored.cloudRunner) } : {}),
         baseBranch: current.baseBranch,
         ...(current.integrationBranches !== undefined ? { integrationBranches: [...current.integrationBranches] } : {}),

@@ -129,7 +129,18 @@ Public branch names use an opaque identifier instead of an internal card code.
 | `retryIntervalSec`, `maxCreateAttempts` | Retry delay and bounded capacity attempt budget. Increase the attempt limit to release an exhausted hold. |
 | `machineTimeoutSec`, `taskTimeoutSec` | Default `5400` / `2400` seconds (each 1–86400); task deadline must be shorter than machine lifetime. The host deadline covers export, creation, upload, agent/tests, download and import together. Cancellation and timeout abort active work; cleanup uses fresh signals and its own bounded calls. Creation always requests `--on-timeout kill`. |
 | `templateRefreshedAt` | Optional ISO template refresh timestamp. Grok warns at `templateWarnAgeDays` and refuses at `templateMaxAgeDays` (at most seven days). Runtime login errors are recognized even without this field. |
-| `mirrorRoot` | Public mode only: optional absolute host directory, default `_mirrors` beside the configured project directory. One bare, blobless mirror per repository. |
+| `mirrorRoot` | Public mode only: optional absolute host directory, default `mirrors/` under the board data directory (`KANBAN_DATA_DIR` when set). One bare, blobless mirror per project. Independent of any local workspace; existing explicit overrides keep their location. |
+
+Public GitHub projects do not need `workspacePath`. Set `projects.<project>.repo` to
+`owner/name` or a GitHub HTTPS/SSH repository URL. The legacy `repository` alias is
+also accepted; `repo` takes precedence. Config reads normalize the identity to
+`owner/name`, reject invalid identities, and retain it through config, workspace,
+project-code (`setProjectCode` or CLI `project --code`) and settings saves,
+including a combined CLI workspace/code edit. Without a local workspace, failed/cancelled runs restore the
+absent workspace; successful runs provide the mirror for independent review.
+Rework retains that original absence. Local mirror mode still requires and uses
+its registered repository root. Existing implicit sibling `_mirrors` directories
+are not migrated; set `mirrorRoot` explicitly to keep using one.
 
 The cloud task explicitly exports `BUN_INSTALL="$HOME/.bun"` and prepends
 `$BUN_INSTALL/bin` to `PATH` for installation, the agent and tests. Optional Bun

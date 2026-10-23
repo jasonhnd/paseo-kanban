@@ -10,7 +10,7 @@ import { resetWakeSender, setWakeSender } from "../server/bus";
 import { forgetBoardWakesInMemoryForTests, noteTickFailure, noteTickSuccess, resetAgentAliveCheck, setAgentAliveCheck } from "../server/wake";
 import { hasBoardWakeMark } from "../server/board-wake-marks";
 import { closeDb, getDb } from "../server/db";
-import { loadConfig, parseConfig, saveConfig, setProjectCode, setProjectWorkspace } from "../server/config";
+import { configPath, loadConfig, parseConfig, saveConfig, setProjectCode, setProjectWorkspace } from "../server/config";
 import { createTask, getTask, archiveTask, appendEvent } from "../server/store";
 import { startTask } from "./helpers/compat-dispatch";
 import { runTick } from "./helpers/compat-schedule";
@@ -63,6 +63,17 @@ function config(patch: Record<string, unknown> = {}) {
 }
 async function start(id: number, profile = codex) { return startTask(id, launcher, "test", { profiles: [profile, profile.model === reviewer.model ? { ...reviewer, provider: "codex", family: "openai", model: codex.model } : reviewer], chosen: profile }); }
 async function settled() { await waitForCloudRuns(); assert.deepEqual(machines(), []); }
+
+function workspaceFreeTask() {
+  // Write the input as an operator would, without requiring config normalization to work first.
+  const raw = JSON.parse(readFileSync(configPath(), "utf8"));
+  const project = raw.projects["paseo-clear-chat"];
+  delete project.workspacePath;
+  delete project.cloudRunner.mirrorRoot;
+  project.repo = "example/paseo-clear-chat";
+  writeFileSync(configPath(), JSON.stringify(raw));
+  return createTask({ project: "paseo-clear-chat", title: "Improve fixture", brief: "Update the fixture and run tests.", role: "executor", contract: "github:example/paseo-clear-chat", tags: ["cloud"] });
+}
 
 beforeEach(async () => {
   await stopCloudRuns(); closeDb(); resetWakeSender(); resetAgentAliveCheck();
@@ -213,6 +224,66 @@ test("cloud success pushes a task branch, creates a draft PR, enters review and 
   assert.equal(cloudRunRecord(card.id)!.source, undefined);
   assert.equal(localCloudReceipt(card.id), null);
   assert.equal(log().some(x => x.command === "instabox" && x.args.at(-1)?.startsWith("node -e ")), false);
+});
+
+test("public cloud without a host workspace completes execution, bundle import, cleanup and review", async () => {
+  const card = workspaceFreeTask();
+  assert.equal(card.workspace_path, null);
+  await start(card.id); await settled();
+  const record = cloudRunRecord(card.id)!;
+  const mirror = join(process.env.KANBAN_DATA_DIR!, "mirrors", "paseo-clear-chat.git");
+  assert.equal(record.originalPath, null); assert.equal(record.originalKind, card.workspace_kind);
+  assert.equal(record.mirror, mirror);
+  assert.equal(getTask(card.id).status, "in_review");
+  assert.equal(getTask(card.id).workspace_path, mirror);
+  assert.equal(git(mirror, "show", `${record.branch}:fixture.txt`), "After");
+  assert.ok(log().some(x => x.command === "codex"));
+  assert.ok(log().some(x => x.command === "npm" && x.args[0] === "test"));
+  assert.ok(log().some(x => x.command === "instabox" && x.args[0] === "rm"));
+  assert.ok(log().some(x => x.command === "gh"));
+  assert.equal(localCreates, 0);
+  const target = resolveReviewTarget(getTask(card.id), true); assert.ok(target?.ok);
+  assert.equal(reviewFamilyBlock(reviewer, target), null);
+  const reviewLauncher: AgentLauncher = { ...launcher, async createWorktree(options) {
+    const directory = join(dir, "workspace-free-review");
+    git(options.cwd, "worktree", "add", "-b", options.branchName, directory, options.baseBranch);
+    return { directory, workspaceId: "workspace-free-review", head: git(directory, "rev-parse", "HEAD") };
+  } };
+  await startTask(card.id, reviewLauncher, "test", { profiles: [codex, reviewer], chosen: reviewer });
+  requestChanges(card.id, "Refine fixture", "Add another edit."); mode("edit-again");
+  await start(card.id); await settled();
+  assert.equal(getTask(card.id).status, "in_review", getTask(card.id).blocked_reason ?? undefined);
+  assert.equal(cloudRunRecord(card.id)!.originalPath, null, "rework must preserve an explicitly absent host workspace");
+  assert.equal(cloudRunRecord(card.id)!.originalKind, card.workspace_kind);
+  assert.equal(git(mirror, "show", `${cloudRunRecord(card.id)!.branch}:fixture.txt`), "After again");
+});
+
+for (const failure of ["capacity-once", "agent-fail"]) test(`public cloud without a host workspace restores null after ${failure}`, async () => {
+  const card = workspaceFreeTask(); mode(failure);
+  await start(card.id); await settled();
+  assert.equal(getTask(card.id).workspace_path, null);
+  assert.equal(getTask(card.id).workspace_kind, card.workspace_kind);
+  assert.equal(getTask(card.id).status, failure === "capacity-once" ? "ready" : "blocked");
+  assert.equal(cloudRunRecord(card.id)!.originalPath, null);
+});
+
+test("public cloud with a host workspace uses the board mirror default", async () => {
+  const current = loadConfig(); delete current.projects!["paseo-clear-chat"].cloudRunner!.mirrorRoot; saveConfig(current);
+  const card = task(); await start(card.id); await settled();
+  assert.equal(getTask(card.id).status, "in_review");
+  assert.equal(cloudRunRecord(card.id)!.originalPath, repo);
+  assert.equal(cloudRunRecord(card.id)!.mirror, join(process.env.KANBAN_DATA_DIR!, "mirrors", "paseo-clear-chat.git"));
+});
+
+test("public cloud restart restores a persisted null host workspace after orphan cleanup", async () => {
+  const card = workspaceFreeTask(); const machine = `${cloudBoardPrefix()}demo-0001-g4`;
+  const result = getDb().prepare("INSERT INTO runs (task_id, role, started_at) VALUES (?, 'executor', ?)").run(card.id, new Date().toISOString());
+  getDb().prepare("UPDATE tasks SET status = 'running' WHERE id = ?").run(card.id);
+  appendEvent(card.id, "cloud_run_started", null, null, "scheduler", { generation: 4, machine, branch: "kanban/cloud-fixture", repo: "example/paseo-clear-chat", base: "main", mirror: join(dir, "board/mirrors/paseo-clear-chat.git"), originalPath: null, originalKind: null, runId: Number(result.lastInsertRowid) });
+  mkdirSync(join(dir, "boxes", machine)); await reconcileCloudMachines();
+  assert.deepEqual(machines(), []); assert.equal(getTask(card.id).status, "ready");
+  assert.equal(getTask(card.id).workspace_path, null); assert.equal(getTask(card.id).workspace_kind, "none");
+  assert.equal(getDb().prepare("SELECT ended_at FROM runs WHERE id = ?").get(Number(result.lastInsertRowid))?.ended_at != null, true);
 });
 
 test("no_capacity releases admission slots, retries successfully, and never increments failure count", async () => {

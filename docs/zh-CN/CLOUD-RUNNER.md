@@ -102,7 +102,16 @@ model。所有 provider 都要求标准速度，包括显式选档；带 fast/pr
 | `retryIntervalSec` / `maxCreateAttempts` | `75` 秒 / `8` 次。创建阶段 no_capacity／quota_exceeded 释放运行槽；超上限保留 ready hold，不增加失败计数。增加尝试上限可继续重试。 |
 | `machineTimeoutSec` / `taskTimeoutSec` | `5400` / `2400` 秒，各为 1～86400；任务期限必须短于机器寿命。宿主总期限包含导出、创建、上传、AI/测试、下载和导入。取消和超时终止工作，清理使用新 signal 和独立的有限时调用。开机必带 `--on-timeout kill`。 |
 | `templateRefreshedAt` | 可选带时区的 ISO 模板刷新时间。Grok 默认第 6 天提示、第 7 天拒绝；可用 `templateWarnAgeDays` / `templateMaxAgeDays` 调整，最长 7 天。未填日期也识别执行中的登录过期。 |
-| `mirrorRoot` | 仅公开模式使用：可选本机绝对目录，默认项目目录旁 `_mirrors`，每仓库一个 bare、blobless mirror。 |
+| `mirrorRoot` | 仅公开模式使用：可选本机绝对目录，默认看板数据目录下的 `mirrors/`（设置了 `KANBAN_DATA_DIR` 时使用该目录）。每项目一个 bare、blobless mirror，不依赖本机工作区；显式覆盖仍使用原位置。 |
+
+公开 GitHub 项目无需 `workspacePath`。将 `projects.<project>.repo` 配为
+`owner/name` 或 GitHub HTTPS/SSH 仓库 URL，也兼容旧别名 `repository`；
+同时存在时 `repo` 优先。读取配置时归一化为 `owner/name` 并拒绝无效格式，
+保存配置、工作区选项、项目短码（`setProjectCode` 或 CLI `project --code`）
+或设置页后仍会保留，也覆盖 CLI 同时修改工作区和短码的路径。没有本机工作区时，失败或取消会恢复
+工作区缺省状态；成功则将镜像交给独立审查，返工仍保留原工作区缺省记录。
+本地镜像模式仍要求并使用已登记的仓库根目录。旧的默认同级 `_mirrors` 不自动
+迁移；如需继续使用，请显式设置 `mirrorRoot`。
 
 公开模式的匿名克隆、任务分支祖先和草稿 PR base 沿用项目 `baseBranch`，可以是
 `preview`。只推生成的 `kanban/cloud-...` 分支，不推或合并基准分支，公开分支名

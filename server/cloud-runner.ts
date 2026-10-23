@@ -149,7 +149,7 @@ function machineNames(text: string): string[] {
   return rows.map(row => row.name as string);
 }
 function restoreWorkspace(record: CloudRunRecord, id: number): void {
-  getDb().prepare("UPDATE tasks SET workspace_path = ?, workspace_kind = ? WHERE id = ?").run(record.originalPath, record.originalKind, id);
+  getDb().prepare("UPDATE tasks SET workspace_path = ?, workspace_kind = ? WHERE id = ?").run(record.originalPath, record.originalKind ?? "none", id);
 }
 function endRun(record: CloudRunRecord, outcome: string): void {
   getDb().prepare("UPDATE runs SET ended_at = ?, end_kind = ? WHERE id = ? AND ended_at IS NULL").run(new Date().toISOString(), outcome, record.runId);
@@ -347,7 +347,8 @@ async function startCloudTask(input: CloudLaunchInput): Promise<{ message: strin
         config, role: task.role, tags: parseTags(task.tags), profile: { ...profile, family: actualFamily(profile) ?? undefined } });
     } catch { block(task.id, "needs_human", "Local mirror eligibility could not be established"); return { message: getTask(task.id).hold_reason! }; }
   }
-  const repo = local ? "" : projectRepository({ project: task.project, workspacePath: task.workspace_path });
+  const previous = cloudRunRecord(task.id);
+  const repo = local ? "" : projectRepository({ project: task.project, workspacePath: previous ? previous.originalPath : task.workspace_path });
   if (!local && !repo) {
     block(task.id, "capability", t("cloud.repositoryRequired")); return { message: getTask(task.id).hold_reason! };
   }
@@ -374,13 +375,13 @@ async function startCloudTask(input: CloudLaunchInput): Promise<{ message: strin
   catch { const reason = reconcileHold() ?? t("cloud.startupHeld"); setHold(task.id, reason); return { message: reason }; }
   const held = reconcileHold(); if (held) { setHold(task.id, held); return { message: held }; }
   if (stopping) return stopped();
-  const previous = cloudRunRecord(task.id);
   const generation = (previous?.generation ?? 0) + 1;
   const machine = `${cloudBoardPrefix()}${cardMark(task.id).toLowerCase().replaceAll("_", "-")}-g${generation}`;
   const branch = `kanban/cloud-${createHash("sha256").update(`${dataDir()}:${task.id}:${generation}`).digest("hex").slice(0, 20)}`;
-  const originalPath = settings.projects![task.project].workspacePath ?? previous?.originalPath ?? task.workspace_path;
-  const originalKind = previous?.originalKind ?? task.workspace_kind;
-  const mirror = join(config.mirrorRoot ?? join(dirname(originalPath!), "_mirrors"), `${encodeURIComponent(task.project)}.git`);
+  // A prior null is deliberate: the card may now point at its delivery/review copy.
+  const originalPath = settings.projects![task.project].workspacePath ?? (previous ? previous.originalPath : task.workspace_path);
+  const originalKind = previous ? previous.originalKind : task.workspace_kind;
+  const mirror = join(config.mirrorRoot ?? join(dataDir(), "mirrors"), `${encodeURIComponent(task.project)}.git`);
   let record: CloudRunRecord;
   const db = getDb(); db.exec("BEGIN IMMEDIATE");
   try {
