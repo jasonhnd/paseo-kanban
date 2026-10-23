@@ -1650,12 +1650,13 @@ for (const source of ["publicGithub", "localMirror"] as const) test(`20 GiB fake
   assert.equal(done.status, "in_review", done.blocked_reason ?? done.hold_reason ?? "");
   assert.equal(done.hold_reason, null);
   assert.equal(done.fail_count, 0);
-  assert.equal(getDb().prepare("SELECT id FROM events WHERE task_id = ? AND kind = 'cloud_capacity_wait'").get(card.id), undefined);
+  assert.equal(getDb().prepare("SELECT id FROM events WHERE task_id = ? AND kind = 'cloud_capacity_wait' AND json_extract(data_json, '$.attempts') > 0").get(card.id), undefined);
   assert.ok(log().some(x => x.command === "npm" && x.args[0] === "test"));
   assert.ok(log().some(x => x.command === "instabox" && x.args[0] === "rm"));
   const target = resolveReviewTarget(done, true); assert.ok(target?.ok);
   assert.equal(reviewFamilyBlock(reviewer, target), null);
   if (source === "localMirror") { assert.ok(localCloudReceipt(card.id)); noGithub(); }
   else assert.match(done.handoff_json!, /https:\/\/github.com\/example\/paseo-clear-chat\/pull\/1/);
+  assert.equal(log().filter(x => x.command === "instabox" && x.args[0] === "create").length, 1);
   console.log(JSON.stringify({ scenario: "20GiB-cloud-board", source, totalGiB: 20, freeGiB: 6, reserveGiB: 5, status: done.status, executorModel: codex.model, reviewerModel: reviewer.model, machinesRemaining: machines().length }));
 });
