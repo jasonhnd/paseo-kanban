@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { backgroundProcesses, authorizeBackgroundProcess, sameBackgroundProcess, type BackgroundProcess } from "../server/background-process";
+import { backgroundProcessStatus, backgroundProcesses, authorizeBackgroundProcess, sameBackgroundProcess, type BackgroundProcess } from "../server/background-process";
 
 const row = (pid: number, ppid: number, patch: Partial<BackgroundProcess> = {}): BackgroundProcess => ({
   pid, ppid, pgid: pid, session: "0", uid: 501, started: "Thu Oct 22 00:00:00 2026", state: "S", ...patch,
@@ -48,4 +48,16 @@ it("accepts the macOS over-soft-memory-limit STAT modifier for parsing and regis
   ].join("\n"));
   assert.equal(rows[1].state, "S>");
   assert.equal(authorizeBackgroundProcess(30, 20, 501, rows), rows[1]);
+});
+
+it("parses snapshots larger than 1 MiB and preserves unknown on buffer or read failures", () => {
+  const line = "30 20 30 0 501 Thu Oct 22 00:00:00 2026 S\n";
+  const count = 30_000;
+  assert.ok(Buffer.byteLength(line.repeat(count)) > 1024 * 1024);
+  assert.equal(backgroundProcesses(() => line.repeat(count)).length, count);
+  for (const code of ["ENOBUFS", "ETIMEDOUT", "EACCES"]) {
+    assert.equal(backgroundProcessStatus(row(30, 20), () => {
+      throw Object.assign(new Error("snapshot unavailable"), { code });
+    }), "unknown");
+  }
 });

@@ -6,6 +6,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, beforeEach, test } from "node:test";
+import { processArguments } from "./helpers/process-arguments";
 import { resetWakeSender, setWakeSender } from "../server/bus";
 import { forgetBoardWakesInMemoryForTests, noteTickFailure, noteTickSuccess, resetAgentAliveCheck, setAgentAliveCheck } from "../server/wake";
 import { hasBoardWakeMark } from "../server/board-wake-marks";
@@ -141,6 +142,7 @@ process.on('SIGTERM',()=>child.kill('SIGKILL'));
 child.on('error',()=>{clearTimeout(timer);process.exit(127);});
 child.on('close',code=>{clearTimeout(timer);process.exit(expired?124:code??130);});`);
   const agent = common + `
+fs.appendFileSync(${JSON.stringify(join(root, "agent-pids"))}, String(process.pid) + '\\n');
 if (mode === 'expired' || mode === 'expired-zero') { console.error('Authentication expired. Please run grok login.'); process.exit(mode === 'expired' ? 1 : 0); }
 if (mode === 'unauthenticated') { console.error('You are not authenticated.'); process.exit(1); }
 if (mode === 'agent-no-capacity' || mode === 'agent-quota-exceeded') { console.error(mode === 'agent-no-capacity' ? 'no_capacity' : 'quota_exceeded'); process.exit(3); }
@@ -201,7 +203,9 @@ else if (args[0] === 'exec') {
 });
 after(async () => {
   await stopCloudRuns();
-  const processes = execFileSync("/bin/ps", ["-axo", "pid=,args="], { encoding: "utf8" }).split("\n");
+  const pidFile = join(root, "agent-pids");
+  const pids = existsSync(pidFile) ? readFileSync(pidFile, "utf8").trim().split("\n").map(Number) : [];
+  const processes = processArguments(pids);
   assert.equal(processes.some(line => line.includes(`${root}/`) && /\/tools\/(?:codex|grok) /.test(line)), false, "fake cloud agents must not survive machine deletion");
   setCloudRuntimeForTests(null); closeDb(); rmSync(root, { recursive: true, force: true });
 });
